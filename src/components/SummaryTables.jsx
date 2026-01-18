@@ -12,13 +12,7 @@ const SummaryTables = ({ calculations, inputs }) => {
             <span className="font-semibold">{calculations.yearsSinceInstall} years</span>
           </div>
           <div className="flex justify-between border-b pb-2">
-            <span className="text-gray-600">Total Investment</span>
-            <span className="font-semibold">
-              ${parseFloat(calculations.totalInvestment).toLocaleString()}
-            </span>
-          </div>
-          <div className="flex justify-between border-b pb-2">
-            <span className="text-gray-600">Solar Cost Paid</span>
+            <span className="text-gray-600">Total Solar Investment So Far</span>
             <span className="font-semibold">
               ${parseFloat(calculations.cumulativeCost).toLocaleString()}
             </span>
@@ -91,16 +85,28 @@ const SummaryTables = ({ calculations, inputs }) => {
         <h3 className="text-lg font-semibold mb-4">System Metrics</h3>
         <div className="space-y-3">
           <div className="flex justify-between border-b pb-2">
-            <span className="text-gray-600">Initial Rate ({inputs.installedYear})</span>
+            <span className="text-gray-600">Utility Initial Rate ({inputs.installedYear})</span>
             <span className="font-semibold">${calculations.initialUtilityRate}/kWh</span>
           </div>
           <div className="flex justify-between border-b pb-2">
-            <span className="text-gray-600">Current Rate ({inputs.nowYear})</span>
+            <span className="text-gray-600">Utility Current Rate ({inputs.nowYear})</span>
             <span className="font-semibold">${calculations.currentUtilityRate}/kWh</span>
           </div>
           <div className="flex justify-between border-b pb-2">
             <span className="text-gray-600">Rate Increase</span>
             <span className="font-semibold text-red-600">+{calculations.rateIncrease}%</span>
+          </div>
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">Utility Bill At Time of Install</span>
+            <span className="font-semibold text-blue-600">
+              ${parseFloat(calculations.utilityBillAtInstall).toLocaleString()}/mo
+            </span>
+          </div>
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">Utility Bill Now (without solar)</span>
+            <span className="font-semibold text-red-600">
+              ${parseFloat(calculations.utilityBillNow).toLocaleString()}/mo
+            </span>
           </div>
           <div className="flex justify-between border-b pb-2">
             <span className="text-gray-600">Usage at Install</span>
