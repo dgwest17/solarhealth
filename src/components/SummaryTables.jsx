@@ -43,6 +43,30 @@ const SummaryTables = ({ calculations, inputs }) => {
               ${parseFloat(calculations.cumulativeTrueUpCharges).toLocaleString()}
             </span>
           </div>
+          {inputs.nemVersion === 'NEM2' && (
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-600">NEM 2.0 Connection Fees</span>
+              <span className="font-semibold text-red-600">
+                ${parseFloat(calculations.cumulativeNEM2Fees).toLocaleString()}
+              </span>
+            </div>
+          )}
+          {inputs.program === 'PPA' && inputs.ppaPaidOff && (
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-600">PPA Buyout Amount</span>
+              <span className="font-semibold text-purple-600">
+                ${parseFloat(calculations.ppaBuyoutAmount).toLocaleString()}
+              </span>
+            </div>
+          )}
+          {inputs.program === 'Loan' && inputs.loanPaidOff && (
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-600">Remaining Principal at Payoff</span>
+              <span className="font-semibold text-blue-600">
+                ${parseFloat(calculations.loanPrincipalAtPayoff).toLocaleString()}
+              </span>
+            </div>
+          )}
           <div className="flex justify-between border-b pb-2">
             <span className="text-gray-600">Payback Period</span>
             <span className="font-semibold">
@@ -94,6 +118,18 @@ const SummaryTables = ({ calculations, inputs }) => {
             <span className="text-gray-600">Usage Growth</span>
             <span className="font-semibold text-orange-600">
               +{calculations.usageGrowthRate}%/yr
+            </span>
+          </div>
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">Initial Production</span>
+            <span className="font-semibold">
+              {inputs.annualProduction.toLocaleString()} kWh/yr
+            </span>
+          </div>
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">Current Production (degraded)</span>
+            <span className="font-semibold text-yellow-600">
+              {calculations.currentDegradedProduction} kWh/yr
             </span>
           </div>
           <div className="flex justify-between border-b pb-2">

@@ -32,6 +32,8 @@ export const DEFAULT_INPUTS = {
   ppaInitialRate: 0.12,
   escalator: 0.9,
   ppaDownpayment: 0,
+  ppaPaidOff: false,
+  ppaPaidOffYear: currentDate.year,
   
   // Loan specific
   loanDownpayment: 0,
@@ -40,6 +42,8 @@ export const DEFAULT_INPUTS = {
   loanTerm: 20,
   taxCredit: 7200, // 30% of typical $24k system
   appliedToLoan: false,
+  loanPaidOff: false,
+  loanPaidOffYear: currentDate.year,
   
   // Cash specific
   cashNetCost: 16800, // After 30% tax credit
@@ -105,3 +109,13 @@ export const TAX_CREDIT_APPLICATION_MONTHS = 18;
  * NEM 3.0 default export rate
  */
 export const NEM3_DEFAULT_EXPORT_RATE = 0.05;
+
+/**
+ * Annual solar panel degradation rate
+ */
+export const ANNUAL_DEGRADATION_RATE = 0.0055; // 0.55% per year
+
+/**
+ * NEM 2.0 monthly connection fee
+ */
+export const NEM2_CONNECTION_FEE = 12; // $12/month

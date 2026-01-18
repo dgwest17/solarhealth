@@ -1,4 +1,5 @@
 import { UTILITY_RATES, TOU_RATES } from './rateData';
+import { ANNUAL_DEGRADATION_RATE, NEM2_CONNECTION_FEE } from '../constants/defaults';
 
 /**
  * Get utility rate for a specific year with optional CARE discount
@@ -38,6 +39,13 @@ export const getUtilityRate = (year, utility, careDiscount = false) => {
   }
   
   return rate;
+};
+
+/**
+ * Calculate degraded production for a given year
+ */
+export const getDegradedProduction = (baseProduction, yearsSinceInstall) => {
+  return baseProduction * Math.pow(1 - ANNUAL_DEGRADATION_RATE, yearsSinceInstall);
 };
 
 /**
@@ -128,44 +136,125 @@ export const calculateNEMImpact = (annualProduction, annualUsage, utilityRate, n
 };
 
 /**
- * Calculate loan payment structure when tax credit is not applied upfront
+ * Calculate loan payment structure with correct tax credit logic
  */
 export const calculateLoanPaymentImpact = (program, loanInitialPayment, taxCredit, appliedToLoan, loanPrincipal, loanTerm) => {
   if (program !== 'Loan') {
     return { 
       effectivePayment: 0, 
-      first18MonthsExtra: 0,
-      reducedPayment: 0,
-      after18Months: 0
+      first18MonthsPayment: 0,
+      after18MonthsPayment: 0,
+      description: ''
     };
   }
   
   if (appliedToLoan) {
-    // Tax credit applied to loan - payment stays the same
-    return { 
-      effectivePayment: loanInitialPayment, 
-      first18MonthsExtra: loanInitialPayment,
-      reducedPayment: loanInitialPayment,
-      after18Months: loanInitialPayment
+    // Tax credit APPLIED to loan - payment is LOWER from the start
+    const reducedPrincipal = loanPrincipal - taxCredit;
+    const monthlyRate = 0.05 / 12; // Assume 5% APR
+    const totalMonths = loanTerm * 12;
+    
+    const reducedPayment = (reducedPrincipal * monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) / 
+                           (Math.pow(1 + monthlyRate, totalMonths) - 1);
+    
+    return {
+      effectivePayment: reducedPayment,
+      first18MonthsPayment: reducedPayment,
+      after18MonthsPayment: reducedPayment,
+      description: 'Tax credit applied to principal - consistent lower payment'
+    };
+  } else {
+    // Tax credit NOT applied - payment is HIGHER for first 18 months, then reduces
+    const monthlyRate = 0.05 / 12; // Assume 5% APR
+    const totalMonths = loanTerm * 12;
+    
+    // Calculate the higher initial payment (based on full principal)
+    const higherPayment = (loanPrincipal * monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) / 
+                          (Math.pow(1 + monthlyRate, totalMonths) - 1);
+    
+    // After 18 months, principal is reduced by tax credit
+    const newPrincipal = loanPrincipal - taxCredit;
+    const remainingMonths = totalMonths - 18;
+    
+    const reducedPayment = (newPrincipal * monthlyRate * Math.pow(1 + monthlyRate, remainingMonths)) / 
+                           (Math.pow(1 + monthlyRate, remainingMonths) - 1);
+    
+    return {
+      effectivePayment: higherPayment, // For calculations during first 18 months
+      first18MonthsPayment: higherPayment,
+      after18MonthsPayment: reducedPayment,
+      description: 'Tax credit not applied - higher payment first 18 months, then reduces'
     };
   }
+};
+
+/**
+ * Calculate PPA buyout amount (30% discount on remaining payments)
+ */
+export const calculatePPABuyout = (ppaInitialRate, annualProduction, escalator, yearsPaid, totalTerm = 25) => {
+  let remainingValue = 0;
   
-  // Tax credit NOT applied - calculate reduced payment after 18 months
-  // Assume they'll apply tax credit to principal after receiving it
-  const newPrincipal = loanPrincipal - taxCredit;
-  const monthlyRate = 0.05 / 12; // Assume 5% APR
-  const remainingMonths = (loanTerm * 12) - 18;
+  for (let year = yearsPaid; year < totalTerm; year++) {
+    const annualPayment = (annualProduction * ppaInitialRate * Math.pow(1 + escalator / 100, year));
+    remainingValue += annualPayment;
+  }
   
-  // Calculate new payment after principal reduction
-  const reducedPayment = (newPrincipal * monthlyRate * Math.pow(1 + monthlyRate, remainingMonths)) / 
-                         (Math.pow(1 + monthlyRate, remainingMonths) - 1);
+  // Apply 30% discount for buyout
+  return remainingValue * 0.70;
+};
+
+/**
+ * Calculate loan principal remaining at payoff
+ */
+export const calculateLoanPrincipalAtPayoff = (loanPrincipal, taxCredit, appliedToLoan, loanInitialPayment, yearsPaid, loanTerm) => {
+  const monthlyRate = 0.05 / 12; // 5% APR
+  const monthsPaid = yearsPaid * 12;
   
-  return {
-    effectivePayment: loanInitialPayment,
-    first18MonthsExtra: loanInitialPayment,
-    reducedPayment: reducedPayment,
-    after18Months: reducedPayment
-  };
+  let principal = appliedToLoan ? (loanPrincipal - taxCredit) : loanPrincipal;
+  let payment = loanInitialPayment;
+  
+  // If tax credit not applied, recalculate payment after 18 months
+  if (!appliedToLoan && monthsPaid >= 18) {
+    // Calculate remaining principal after 18 months with higher payment
+    for (let m = 0; m < 18; m++) {
+      const interest = principal * monthlyRate;
+      const principalPayment = payment - interest;
+      principal -= principalPayment;
+    }
+    
+    // Apply tax credit after 18 months
+    principal -= taxCredit;
+    
+    // Recalculate payment for remaining term
+    const remainingMonths = (loanTerm * 12) - 18;
+    payment = (principal * monthlyRate * Math.pow(1 + monthlyRate, remainingMonths)) / 
+              (Math.pow(1 + monthlyRate, remainingMonths) - 1);
+    
+    // Continue amortization from month 19 to payoff
+    for (let m = 18; m < monthsPaid; m++) {
+      const interest = principal * monthlyRate;
+      const principalPayment = payment - interest;
+      principal -= principalPayment;
+    }
+  } else {
+    // Standard amortization
+    for (let m = 0; m < monthsPaid; m++) {
+      const interest = principal * monthlyRate;
+      const principalPayment = payment - interest;
+      principal -= principalPayment;
+      
+      // Apply tax credit after 18 months if not applied upfront
+      if (!appliedToLoan && m === 17) {
+        principal -= taxCredit;
+        // Recalculate payment
+        const remainingMonths = (loanTerm * 12) - 18;
+        payment = (principal * monthlyRate * Math.pow(1 + monthlyRate, remainingMonths)) / 
+                  (Math.pow(1 + monthlyRate, remainingMonths) - 1);
+      }
+    }
+  }
+  
+  return Math.max(0, principal);
 };
 
 /**
@@ -192,7 +281,12 @@ export const calculateComprehensiveSavings = (inputs) => {
     yearsSinceInstall
   );
   
-  let loanPaymentStructure = { effectivePayment: 0, first18MonthsExtra: 0, reducedPayment: 0, after18Months: 0 };
+  let loanPaymentStructure = { 
+    effectivePayment: 0, 
+    first18MonthsPayment: 0, 
+    after18MonthsPayment: 0,
+    description: '' 
+  };
   
   if (inputs.program === 'Loan') {
     loanPaymentStructure = calculateLoanPaymentImpact(
@@ -211,17 +305,47 @@ export const calculateComprehensiveSavings = (inputs) => {
   let cumulativeArbitrageSavings = 0;
   let cumulativeNEMCredits = 0;
   let cumulativeTrueUpCharges = 0;
+  let cumulativeNEM2Fees = 0;
   let yearlyData = [];
   
   const initialRate = getUtilityRate(inputs.installedYear, inputs.utility, inputs.onCareProgram);
+  
+  // Calculate payoff amounts if applicable
+  let ppaBuyoutAmount = 0;
+  let loanPrincipalAtPayoff = 0;
+  
+  if (inputs.program === 'PPA' && inputs.ppaPaidOff) {
+    const yearsPaid = inputs.ppaPaidOffYear - inputs.installedYear;
+    ppaBuyoutAmount = calculatePPABuyout(
+      inputs.ppaInitialRate,
+      inputs.annualProduction,
+      inputs.escalator,
+      yearsPaid
+    );
+  }
+  
+  if (inputs.program === 'Loan' && inputs.loanPaidOff) {
+    const yearsPaid = inputs.loanPaidOffYear - inputs.installedYear;
+    loanPrincipalAtPayoff = calculateLoanPrincipalAtPayoff(
+      inputs.loanPrincipal,
+      inputs.taxCredit,
+      inputs.appliedToLoan,
+      inputs.loanInitialPayment,
+      yearsPaid,
+      inputs.loanTerm
+    );
+  }
   
   for (let year = 0; year <= yearsSinceInstall; year++) {
     const currentYear = inputs.installedYear + year;
     const utilityRate = getUtilityRate(currentYear, inputs.utility, inputs.onCareProgram);
     const projectedUsage = inputs.annualUsageAtInstall * Math.pow(1 + usageGrowthRate, year);
     
+    // Apply degradation to production
+    const degradedProduction = getDegradedProduction(inputs.annualProduction, year);
+    
     const nemImpact = calculateNEMImpact(
-      inputs.annualProduction, 
+      degradedProduction, 
       projectedUsage, 
       utilityRate, 
       inputs.nemVersion, 
@@ -230,24 +354,40 @@ export const calculateComprehensiveSavings = (inputs) => {
     
     const utilityWouldPay = (projectedUsage / 12) * utilityRate;
     
+    // Add NEM 2.0 connection fee
+    const nem2MonthlyFee = inputs.nemVersion === 'NEM2' ? NEM2_CONNECTION_FEE : 0;
+    
     let solarCost;
+    const loanTermEndYear = inputs.installedYear + inputs.loanTerm;
+    const ppaTermEndYear = inputs.installedYear + 25; // Assume 25 year PPA term
+    
     if (inputs.program === 'Cash') {
       solarCost = 0; // No monthly payment for cash
     } else if (inputs.program === 'PPA') {
-      // PPA: Initial rate per kWh * production, escalated each year
-      const monthlyProduction = inputs.annualProduction / 12;
-      solarCost = monthlyProduction * inputs.ppaInitialRate * Math.pow(1 + inputs.escalator / 100, year);
-    } else if (inputs.program === 'Loan') {
-      const monthsIntoLoan = year * 12;
-      if (!inputs.appliedToLoan && monthsIntoLoan < 18) {
-        solarCost = loanPaymentStructure.first18MonthsExtra;
-      } else if (!inputs.appliedToLoan && monthsIntoLoan >= 18) {
-        solarCost = loanPaymentStructure.after18Months;
+      // Check if PPA is paid off or term ended
+      if (inputs.ppaPaidOff && currentYear >= inputs.ppaPaidOffYear) {
+        solarCost = 0;
+      } else if (currentYear >= ppaTermEndYear) {
+        solarCost = 0;
       } else {
-        solarCost = inputs.loanInitialPayment;
+        const monthlyProduction = degradedProduction / 12;
+        solarCost = monthlyProduction * inputs.ppaInitialRate * Math.pow(1 + inputs.escalator / 100, year);
+      }
+    } else if (inputs.program === 'Loan') {
+      // Check if loan is paid off or term ended
+      if (inputs.loanPaidOff && currentYear >= inputs.loanPaidOffYear) {
+        solarCost = 0;
+      } else if (currentYear >= loanTermEndYear) {
+        solarCost = 0;
+      } else {
+        const monthsIntoLoan = year * 12;
+        if (monthsIntoLoan < 18) {
+          solarCost = loanPaymentStructure.first18MonthsPayment;
+        } else {
+          solarCost = loanPaymentStructure.after18MonthsPayment;
+        }
       }
     } else {
-      // Other - use a default monthly payment if provided
       solarCost = inputs.loanInitialPayment || 0;
     }
     
@@ -264,9 +404,9 @@ export const calculateComprehensiveSavings = (inputs) => {
     
     let monthlySavings;
     if (nemImpact.type === 'credit') {
-      monthlySavings = utilityWouldPay - solarCost - batteryCost + arbitrageSavings + monthlyNEMImpact;
+      monthlySavings = utilityWouldPay - solarCost - batteryCost + arbitrageSavings + monthlyNEMImpact - nem2MonthlyFee;
     } else {
-      monthlySavings = utilityWouldPay - solarCost - batteryCost + arbitrageSavings - monthlyNEMImpact;
+      monthlySavings = utilityWouldPay - solarCost - batteryCost + arbitrageSavings - monthlyNEMImpact - nem2MonthlyFee;
     }
     
     const monthsInYear = year === Math.floor(yearsSinceInstall) ? (monthsSinceInstall % 12 || 12) : 12;
@@ -276,6 +416,7 @@ export const calculateComprehensiveSavings = (inputs) => {
       cumulativeCost += solarCost;
       cumulativeBatteryCost += batteryCost;
       cumulativeArbitrageSavings += arbitrageSavings;
+      cumulativeNEM2Fees += nem2MonthlyFee;
       
       if (nemImpact.type === 'credit') {
         cumulativeNEMCredits += monthlyNEMImpact;
@@ -289,16 +430,28 @@ export const calculateComprehensiveSavings = (inputs) => {
         year: currentYear,
         utilityRate: utilityRate.toFixed(3),
         projectedUsage: Math.round(projectedUsage),
+        degradedProduction: Math.round(degradedProduction),
         utilityCost: Math.round(utilityWouldPay * 12),
         solarCost: Math.round(solarCost * 12),
         batteryCost: Math.round(batteryCost * 12),
         annualSavings: Math.round(monthlySavings * 12),
         cumulativeSavings: Math.round(cumulativeSavings),
         arbitrageSavings: Math.round(arbitrageSavings * 12),
+        nem2Fees: Math.round(nem2MonthlyFee * 12),
         nemImpact: nemImpact.type === 'credit' ? Math.round(nemImpact.amount) : -Math.round(nemImpact.amount),
         netProduction: nemImpact.type === 'credit' ? Math.round(nemImpact.netProduction) : Math.round(nemImpact.shortage)
       });
     }
+  }
+  
+  // Add buyout amount to total cost if PPA was paid off
+  if (inputs.program === 'PPA' && inputs.ppaPaidOff) {
+    cumulativeCost += ppaBuyoutAmount;
+  }
+  
+  // Add remaining principal to total cost if loan was paid off early
+  if (inputs.program === 'Loan' && inputs.loanPaidOff) {
+    cumulativeCost += loanPrincipalAtPayoff;
   }
   
   // Add tax credit to savings for Loan/Cash
@@ -311,19 +464,29 @@ export const calculateComprehensiveSavings = (inputs) => {
   if (inputs.program === 'Cash') {
     totalInvestment = inputs.cashNetCost;
   } else if (inputs.program === 'PPA') {
-    // For PPA, total investment is all payments over term (typically 20-25 years)
-    const ppaYears = 20;
-    let ppaTotal = 0;
-    for (let y = 0; y < ppaYears; y++) {
-      const monthlyProduction = inputs.annualProduction / 12;
-      const monthlyCost = monthlyProduction * inputs.ppaInitialRate * Math.pow(1 + inputs.escalator / 100, y);
-      ppaTotal += monthlyCost * 12;
+    if (inputs.ppaPaidOff) {
+      // If paid off, investment is payments made + buyout
+      totalInvestment = cumulativeCost + inputs.ppaDownpayment;
+    } else {
+      // Full term PPA investment
+      const ppaYears = 25;
+      let ppaTotal = 0;
+      for (let y = 0; y < ppaYears; y++) {
+        const yearProduction = getDegradedProduction(inputs.annualProduction, y);
+        const monthlyCost = (yearProduction / 12) * inputs.ppaInitialRate * Math.pow(1 + inputs.escalator / 100, y);
+        ppaTotal += monthlyCost * 12;
+      }
+      totalInvestment = ppaTotal + inputs.ppaDownpayment;
     }
-    totalInvestment = ppaTotal + inputs.ppaDownpayment;
   } else if (inputs.program === 'Loan') {
-    totalInvestment = inputs.loanPrincipal + inputs.loanDownpayment;
+    if (inputs.loanPaidOff) {
+      // If paid off, investment is payments made + remaining principal
+      totalInvestment = cumulativeCost + inputs.loanDownpayment;
+    } else {
+      totalInvestment = inputs.loanPrincipal + inputs.loanDownpayment;
+    }
   } else {
-    totalInvestment = inputs.loanInitialPayment * 12 * 20; // Fallback
+    totalInvestment = inputs.loanInitialPayment * 12 * 20;
   }
   
   if (inputs.hasBattery && inputs.batteryMonthlyPayment > 0) {
@@ -332,11 +495,12 @@ export const calculateComprehensiveSavings = (inputs) => {
   
   const paybackMonths = totalInvestment / (cumulativeSavings / monthsSinceInstall);
   const roi = ((cumulativeSavings / totalInvestment) * 100);
-  const offsetPercentage = (inputs.annualProduction / inputs.currentAnnualUsage) * 100;
+  const currentDegradedProduction = getDegradedProduction(inputs.annualProduction, yearsSinceInstall);
+  const offsetPercentage = (currentDegradedProduction / inputs.currentAnnualUsage) * 100;
   const systemHealth = calculateSystemHealth(inputs.systemSize, inputs.annualProduction);
   
   const currentNEMImpact = calculateNEMImpact(
-    inputs.annualProduction, 
+    currentDegradedProduction, 
     inputs.currentAnnualUsage, 
     getUtilityRate(inputs.nowYear, inputs.utility, inputs.onCareProgram),
     inputs.nemVersion,
@@ -350,6 +514,7 @@ export const calculateComprehensiveSavings = (inputs) => {
     cumulativeArbitrageSavings: cumulativeArbitrageSavings.toFixed(2),
     cumulativeNEMCredits: cumulativeNEMCredits.toFixed(2),
     cumulativeTrueUpCharges: cumulativeTrueUpCharges.toFixed(2),
+    cumulativeNEM2Fees: cumulativeNEM2Fees.toFixed(2),
     monthsSinceInstall,
     yearsSinceInstall: yearsSinceInstall.toFixed(1),
     avgMonthlySavings: (cumulativeSavings / monthsSinceInstall).toFixed(2),
@@ -364,6 +529,9 @@ export const calculateComprehensiveSavings = (inputs) => {
     systemHealth,
     totalInvestment: totalInvestment.toFixed(2),
     currentNEMImpact,
-    loanPaymentStructure
+    loanPaymentStructure,
+    ppaBuyoutAmount: ppaBuyoutAmount.toFixed(2),
+    loanPrincipalAtPayoff: loanPrincipalAtPayoff.toFixed(2),
+    currentDegradedProduction: currentDegradedProduction.toFixed(0)
   };
 };
