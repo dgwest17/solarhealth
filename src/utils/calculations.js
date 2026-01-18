@@ -148,30 +148,14 @@ export const calculateLoanPaymentImpact = (program, loanInitialPayment, taxCredi
     };
   }
   
+  const monthlyRate = 0.05 / 12; // Assume 5% APR
+  const totalMonths = loanTerm * 12;
+  
+  // First 18 months payment is ALWAYS the same (based on full principal)
+  const first18Payment = loanInitialPayment;
+  
   if (appliedToLoan) {
-    // Tax credit APPLIED to loan - payment is LOWER from the start
-    const reducedPrincipal = loanPrincipal - taxCredit;
-    const monthlyRate = 0.05 / 12; // Assume 5% APR
-    const totalMonths = loanTerm * 12;
-    
-    const reducedPayment = (reducedPrincipal * monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) / 
-                           (Math.pow(1 + monthlyRate, totalMonths) - 1);
-    
-    return {
-      effectivePayment: reducedPayment,
-      first18MonthsPayment: reducedPayment,
-      after18MonthsPayment: reducedPayment,
-      description: 'Tax credit applied to principal - consistent lower payment'
-    };
-  } else {
-    // Tax credit NOT applied - payment is HIGHER for first 18 months, then reduces
-    const monthlyRate = 0.05 / 12; // Assume 5% APR
-    const totalMonths = loanTerm * 12;
-    
-    // Calculate the higher initial payment (based on full principal)
-    const higherPayment = (loanPrincipal * monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) / 
-                          (Math.pow(1 + monthlyRate, totalMonths) - 1);
-    
+    // Tax credit APPLIED to loan - reduces principal after 18 months
     // After 18 months, principal is reduced by tax credit
     const newPrincipal = loanPrincipal - taxCredit;
     const remainingMonths = totalMonths - 18;
@@ -180,10 +164,18 @@ export const calculateLoanPaymentImpact = (program, loanInitialPayment, taxCredi
                            (Math.pow(1 + monthlyRate, remainingMonths) - 1);
     
     return {
-      effectivePayment: higherPayment, // For calculations during first 18 months
-      first18MonthsPayment: higherPayment,
+      effectivePayment: first18Payment, // For calculations during first 18 months
+      first18MonthsPayment: first18Payment,
       after18MonthsPayment: reducedPayment,
-      description: 'Tax credit not applied - higher payment first 18 months, then reduces'
+      description: 'Tax credit applied - same first 18 months, then reduces'
+    };
+  } else {
+    // Tax credit NOT applied - payment stays the same throughout
+    return {
+      effectivePayment: first18Payment,
+      first18MonthsPayment: first18Payment,
+      after18MonthsPayment: first18Payment,
+      description: 'Tax credit not applied - consistent payment throughout'
     };
   }
 };
@@ -532,6 +524,8 @@ export const calculateComprehensiveSavings = (inputs) => {
     loanPaymentStructure,
     ppaBuyoutAmount: ppaBuyoutAmount.toFixed(2),
     loanPrincipalAtPayoff: loanPrincipalAtPayoff.toFixed(2),
-    currentDegradedProduction: currentDegradedProduction.toFixed(0)
+    currentDegradedProduction: currentDegradedProduction.toFixed(0),
+    utilityBillAtInstall: ((inputs.annualUsageAtInstall / 12) * initialRate).toFixed(2),
+    utilityBillNow: ((inputs.currentAnnualUsage / 12) * getUtilityRate(inputs.nowYear, inputs.utility, inputs.onCareProgram)).toFixed(2)
   };
 };
