@@ -565,4 +565,15 @@ const InputSection = ({
           disabled={isUpdating}
           className={`px-8 py-4 rounded-xl font-bold text-lg shadow-2xl transition-all ${
             isUpdating 
-              ? 'bg-gray-600 text-
+              ? 'bg-gray-600 text-gray-300 cursor-not-allowed'
+              : 'bg-gradient-to-r from-cyan-500 to-green-500 text-slate-900 hover:shadow-cyan-500/50 hover:scale-105'
+          }`}
+        >
+          {isUpdating ? '⏳ UPDATING...' : '🔄 UPDATE SYSTEM DATA'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default InputSection;
