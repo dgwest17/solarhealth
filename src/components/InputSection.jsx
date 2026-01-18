@@ -481,8 +481,8 @@ const InputSection = ({
               )}
               <p className="text-xs text-cyan-300/60 mt-2">
                 {inputs.appliedToLoan 
-                  ? 'Tax credit applied to principal - consistent lower payment' 
-                  : 'Tax credit not applied - higher payment first 18 months, then reduces'}
+                  ? 'Tax credit applied - same first 18 months, then reduces' 
+                  : 'Tax credit not applied - consistent payment throughout'}
               </p>
             </div>
           </div>
