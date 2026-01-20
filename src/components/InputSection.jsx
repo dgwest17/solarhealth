@@ -1,5 +1,5 @@
 import React from 'react';
-import { Database, RefreshCw, AlertCircle, Battery } from 'lucide-react';
+import { Database, RefreshCw, Battery } from 'lucide-react';
 import { UTILITY_OPTIONS, NEM_OPTIONS, PROGRAM_OPTIONS, API_PROVIDERS, TOU_RATES, PPA_ESCALATOR_OPTIONS } from '../utils/rateData';
 
 const InputSection = ({ 
@@ -13,7 +13,6 @@ const InputSection = ({
   onUpdate,
   isUpdating
 }) => {
-  // Calculate PPA current payment
   const calculatePPACurrentPayment = () => {
     const yearsSinceInstall = (inputs.nowYear - inputs.installedYear) + 
                              (inputs.nowMonth - inputs.installedMonth) / 12;
@@ -23,32 +22,32 @@ const InputSection = ({
   };
 
   return (
-    <div className="bg-slate-800/60 backdrop-blur-md border border-cyan-500/30 rounded-xl shadow-2xl p-8 mb-6">
-      <div className="flex justify-between items-start mb-6">
+    <div className="bg-slate-800/60 backdrop-blur-md border border-cyan-500/30 rounded-xl shadow-2xl p-6 mb-6">
+      <div className="flex justify-between items-start mb-4">
         <div>
-          <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 mb-2 flex items-center gap-2">
+          <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 mb-1">
             ⚡ California Solar Financial Audit
           </h1>
-          <p className="text-cyan-300 text-sm">NEM Analysis • Real Utility Rates • CARE Program Support</p>
+          <p className="text-cyan-300 text-xs">NEM Analysis • Real Utility Rates • CARE Program Support</p>
         </div>
         
         <div className="bg-slate-900/60 rounded-lg p-1 flex gap-1 border border-cyan-500/30">
           <button
             onClick={() => setDataSource('manual')}
-            className={`px-4 py-2 rounded-md flex items-center gap-2 transition-all ${
+            className={`px-3 py-1.5 text-sm rounded-md flex items-center gap-2 transition-all ${
               dataSource === 'manual' ? 'bg-cyan-500 shadow-lg text-white' : 'text-cyan-400 hover:bg-slate-800'
             }`}
           >
-            <Database size={16} />
+            <Database size={14} />
             Manual
           </button>
           <button
             onClick={() => setDataSource('api')}
-            className={`px-4 py-2 rounded-md flex items-center gap-2 transition-all ${
+            className={`px-3 py-1.5 text-sm rounded-md flex items-center gap-2 transition-all ${
               dataSource === 'api' ? 'bg-cyan-500 shadow-lg text-white' : 'text-cyan-400 hover:bg-slate-800'
             }`}
           >
-            <RefreshCw size={16} />
+            <RefreshCw size={14} />
             API
           </button>
         </div>
@@ -56,19 +55,19 @@ const InputSection = ({
 
       {/* API Integration Section */}
       {dataSource === 'api' && (
-        <div className="bg-blue-900/20 border border-blue-400/30 rounded-lg p-6 mb-6">
-          <h3 className="font-semibold text-blue-300 mb-4 flex items-center gap-2">
-            <RefreshCw size={20} />
+        <div className="bg-blue-900/20 border border-blue-400/30 rounded-lg p-4 mb-4">
+          <h3 className="font-semibold text-blue-300 mb-3 flex items-center gap-2 text-sm">
+            <RefreshCw size={16} />
             API Integration
           </h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
             <div>
-              <label className="block text-sm text-blue-200 mb-1">Provider</label>
+              <label className="block text-xs text-blue-200 mb-1">Provider</label>
               <select
                 value={inputs.apiProvider}
                 onChange={(e) => onInputChange('apiProvider', e.target.value)}
-                className="w-full px-3 py-2 border border-blue-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
+                className="w-full px-2 py-1.5 text-sm border border-blue-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
               >
                 {API_PROVIDERS.map(provider => (
                   <option key={provider.value} value={provider.value}>{provider.label}</option>
@@ -76,98 +75,100 @@ const InputSection = ({
               </select>
             </div>
             <div>
-              <label className="block text-sm text-blue-200 mb-1">API Key</label>
+              <label className="block text-xs text-blue-200 mb-1">API Key</label>
               <input
                 type="password"
                 value={inputs.apiKey}
                 onChange={(e) => onInputChange('apiKey', e.target.value)}
-                className="w-full px-3 py-2 border border-blue-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
+                className="w-full px-2 py-1.5 text-sm border border-blue-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
               />
             </div>
             <div>
-              <label className="block text-sm text-blue-200 mb-1">System ID</label>
+              <label className="block text-xs text-blue-200 mb-1">System ID</label>
               <input
                 type="text"
                 value={inputs.systemId}
                 onChange={(e) => onInputChange('systemId', e.target.value)}
-                className="w-full px-3 py-2 border border-blue-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
+                className="w-full px-2 py-1.5 text-sm border border-blue-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
               />
             </div>
           </div>
           
           <button
             onClick={onApiConnect}
-            className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+            className="bg-blue-500 text-white px-4 py-1.5 text-sm rounded-lg hover:bg-blue-600 transition-colors"
           >
             Connect
           </button>
           
           {apiStatus.connected && (
-            <span className="ml-4 text-green-400">✓ Connected</span>
+            <span className="ml-3 text-green-400 text-sm">✓ Connected</span>
           )}
         </div>
       )}
 
-      {/* Date Inputs */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div className="space-y-4">
-          <h3 className="font-semibold text-cyan-400 border-b border-cyan-500/30 pb-2">Installation</h3>
+      {/* Date & Utility Section - COMPACT */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        <div className="space-y-2">
+          <h3 className="font-semibold text-cyan-400 border-b border-cyan-500/30 pb-1 text-sm">Installation</h3>
           <div>
-            <label className="block text-sm text-cyan-300 mb-1">Year</label>
-            <input
-              type="number"
+            <label className="block text-xs text-cyan-300 mb-1">Year</label>
+            <select
               value={inputs.installedYear}
               onChange={(e) => onInputChange('installedYear', parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
-              min="2014"
-              max="2025"
-            />
+              className="w-full px-2 py-1.5 text-sm border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
+            >
+              {Array.from({ length: 12 }, (_, i) => 2014 + i).map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
           </div>
           <div>
-            <label className="block text-sm text-cyan-300 mb-1">Month</label>
-            <input
-              type="number"
+            <label className="block text-xs text-cyan-300 mb-1">Month</label>
+            <select
               value={inputs.installedMonth}
               onChange={(e) => onInputChange('installedMonth', parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
-              min="1"
-              max="12"
-            />
+              className="w-full px-2 py-1.5 text-sm border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
+            >
+              {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((month, idx) => (
+                <option key={idx + 1} value={idx + 1}>{month}</option>
+              ))}
+            </select>
           </div>
         </div>
 
-        <div className="space-y-4">
-          <h3 className="font-semibold text-green-400 border-b border-green-500/30 pb-2">
-            Current Date <span className="text-xs text-green-300">(Auto-Updated)</span>
+        <div className="space-y-2">
+          <h3 className="font-semibold text-green-400 border-b border-green-500/30 pb-1 text-sm">
+            Current <span className="text-xs text-green-300">(Auto)</span>
           </h3>
           <div>
-            <label className="block text-sm text-green-300 mb-1">Year</label>
+            <label className="block text-xs text-green-300 mb-1">Year</label>
             <input
               type="number"
               value={inputs.nowYear}
-              className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/40 text-green-300 text-lg"
+              className="w-full px-2 py-1.5 text-sm border border-green-400/30 rounded-lg bg-slate-900/40 text-green-300"
               readOnly
             />
           </div>
           <div>
-            <label className="block text-sm text-green-300 mb-1">Month</label>
+            <label className="block text-xs text-green-300 mb-1">Month</label>
             <input
               type="number"
               value={inputs.nowMonth}
-              className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/40 text-green-300 text-lg"
+              className="w-full px-2 py-1.5 text-sm border border-green-400/30 rounded-lg bg-slate-900/40 text-green-300"
               readOnly
             />
           </div>
         </div>
 
-        <div className="space-y-4">
-          <h3 className="font-semibold text-cyan-400 border-b border-cyan-500/30 pb-2">Utility</h3>
+        <div className="space-y-2">
+          <h3 className="font-semibold text-cyan-400 border-b border-cyan-500/30 pb-1 text-sm">Utility</h3>
           <div>
-            <label className="block text-sm text-cyan-300 mb-1">Provider</label>
+            <label className="block text-xs text-cyan-300 mb-1">Provider</label>
             <select
               value={inputs.utility}
               onChange={(e) => onInputChange('utility', e.target.value)}
-              className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
+              className="w-full px-2 py-1.5 text-sm border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
             >
               {UTILITY_OPTIONS.map(util => (
                 <option key={util.value} value={util.value}>{util.label}</option>
@@ -180,82 +181,82 @@ const InputSection = ({
                 type="checkbox"
                 checked={inputs.onCareProgram}
                 onChange={(e) => onInputChange('onCareProgram', e.target.checked)}
-                className="w-4 h-4 accent-green-400"
+                className="w-3 h-3 accent-green-400"
               />
-              <span className="text-sm text-cyan-300">CARE Program (30% discount)</span>
+              <span className="text-xs text-cyan-300">CARE (30% off)</span>
             </label>
           </div>
-          <div className="bg-cyan-500/20 p-3 rounded-lg border border-cyan-400/30">
-            <div className="text-xs text-cyan-300 mb-1">Current Rate</div>
-            <div className="text-2xl font-bold text-cyan-400">
+          <div className="bg-cyan-500/20 p-2 rounded-lg border border-cyan-400/30">
+            <div className="text-xs text-cyan-300">Rate</div>
+            <div className="text-lg font-bold text-cyan-400">
               ${calculations.currentUtilityRate}/kWh
             </div>
           </div>
         </div>
       </div>
 
-      {/* System Details */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      {/* System Details - COMPACT */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
         <div>
-          <label className="block text-sm text-cyan-300 mb-1">System Size (kW)</label>
+          <label className="block text-xs text-cyan-300 mb-1">System Size (kW)</label>
           <input
             type="number"
             step="0.1"
             value={inputs.systemSize}
             onChange={(e) => onInputChange('systemSize', parseFloat(e.target.value))}
-            className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
+            className="w-full px-2 py-1.5 text-sm border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
           />
         </div>
         <div>
-          <label className="block text-sm text-cyan-300 mb-1">Usage at Install (kWh/yr)</label>
+          <label className="block text-xs text-cyan-300 mb-1">Usage at Install (kWh/yr)</label>
           <input
             type="number"
             value={inputs.annualUsageAtInstall}
             onChange={(e) => onInputChange('annualUsageAtInstall', parseInt(e.target.value))}
-            className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
+            className="w-full px-2 py-1.5 text-sm border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
           />
         </div>
         <div>
-          <label className="block text-sm text-cyan-300 mb-1">Current Usage (kWh/yr)</label>
+          <label className="block text-xs text-cyan-300 mb-1">Current Usage (kWh/yr)</label>
           <input
             type="number"
             value={inputs.currentAnnualUsage}
             onChange={(e) => onInputChange('currentAnnualUsage', parseInt(e.target.value))}
-            className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
+            className="w-full px-2 py-1.5 text-sm border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
           />
         </div>
         <div>
-          <label className="block text-sm text-cyan-300 mb-1">Growth Rate</label>
-          <div className="w-full px-3 py-2 border border-orange-400/30 rounded-lg bg-orange-500/20 font-semibold text-orange-400 text-lg">
+          <label className="block text-xs text-cyan-300 mb-1">Growth Rate</label>
+          <div className="w-full px-2 py-1.5 text-sm border border-orange-400/30 rounded-lg bg-orange-500/20 font-semibold text-orange-400">
             {calculations.usageGrowthRate}%
           </div>
         </div>
       </div>
 
-      {/* System Production & NEM */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      {/* Production & NEM - COMPACT */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
         <div>
-          <label className="block text-sm text-cyan-300 mb-1">Annual System Production (kWh/yr)</label>
+          <label className="block text-xs text-cyan-300 mb-1">Annual Production (kWh/yr)</label>
           <input
             type="number"
             value={inputs.annualProduction}
             onChange={(e) => onInputChange('annualProduction', parseInt(e.target.value))}
-            className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
+            className="w-full px-2 py-1.5 text-sm border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
           />
-          <p className="text-xs text-yellow-400 mt-1">Current (degraded): {calculations.currentDegradedProduction} kWh/yr</p>
+          <p className="text-xs text-yellow-400 mt-0.5">Now (degraded): {calculations.currentDegradedProduction} kWh/yr</p>
         </div>
         <div>
-          <label className="block text-sm text-cyan-300 mb-1">Usage Offset</label>
-          <div className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-green-500/20 font-semibold text-green-400 text-lg">
+          <label className="block text-xs text-cyan-300 mb-1">Usage Offset</label>
+          <div className="w-full px-2 py-1.5 text-sm border border-green-400/30 rounded-lg bg-green-500/20 font-semibold text-green-400">
             {calculations.offsetPercentage}%
           </div>
         </div>
         <div>
-          <label className="block text-sm text-cyan-300 mb-1">NEM Version</label>
+          <label className="block text-xs text-cyan-300 mb-1">NEM Version</label>
           <select
             value={inputs.nemVersion}
             onChange={(e) => onInputChange('nemVersion', e.target.value)}
-            className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
+            className="w-full px-2 py-1.5 text-sm border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
           >
             {NEM_OPTIONS.map(nem => (
               <option key={nem.value} value={nem.value}>{nem.label}</option>
@@ -265,12 +266,12 @@ const InputSection = ({
       </div>
 
       {/* Solar Program Selection */}
-      <div className="mb-6">
-        <label className="block text-sm text-cyan-300 mb-2">Solar Program</label>
+      <div className="mb-4">
+        <label className="block text-xs text-cyan-300 mb-1">Solar Program</label>
         <select
           value={inputs.program}
           onChange={(e) => onInputChange('program', e.target.value)}
-          className="w-full md:w-1/2 px-4 py-3 border-2 border-cyan-400/50 rounded-lg bg-slate-900/60 text-cyan-300 text-lg font-medium"
+          className="w-full md:w-1/2 px-3 py-2 text-sm border-2 border-cyan-400/50 rounded-lg bg-slate-900/60 text-cyan-300 font-medium"
         >
           {PROGRAM_OPTIONS.map(prog => (
             <option key={prog.value} value={prog.value}>{prog.label}</option>
@@ -278,37 +279,37 @@ const InputSection = ({
         </select>
       </div>
 
-      {/* PPA/Lease Specific Inputs */}
+      {/* PPA/Lease Section - Keep existing content but compact styling */}
       {inputs.program === 'PPA' && (
-        <div className="bg-purple-900/20 border-2 border-purple-400/50 rounded-lg p-6 mb-6">
-          <h3 className="font-semibold text-purple-300 mb-4 text-lg">PPA/Lease Details</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+        <div className="bg-purple-900/20 border-2 border-purple-400/50 rounded-lg p-4 mb-4">
+          <h3 className="font-semibold text-purple-300 mb-3 text-sm">PPA/Lease Details</h3>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
             <div>
-              <label className="block text-sm text-purple-200 mb-1">Down Payment ($)</label>
+              <label className="block text-xs text-purple-200 mb-1">Down Payment ($)</label>
               <input
                 type="number"
                 value={inputs.ppaDownpayment}
                 onChange={(e) => onInputChange('ppaDownpayment', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+                className="w-full px-2 py-1.5 text-sm border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300"
                 placeholder="0"
               />
             </div>
             <div>
-              <label className="block text-sm text-purple-200 mb-1">Initial kWh Rate ($/kWh)</label>
+              <label className="block text-xs text-purple-200 mb-1">Initial Rate ($/kWh)</label>
               <input
                 type="number"
                 step="0.01"
                 value={inputs.ppaInitialRate}
                 onChange={(e) => onInputChange('ppaInitialRate', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+                className="w-full px-2 py-1.5 text-sm border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300"
               />
             </div>
             <div>
-              <label className="block text-sm text-purple-200 mb-1">Escalator</label>
+              <label className="block text-xs text-purple-200 mb-1">Escalator</label>
               <select
                 value={inputs.escalator}
                 onChange={(e) => onInputChange('escalator', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+                className="w-full px-2 py-1.5 text-sm border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300"
               >
                 {PPA_ESCALATOR_OPTIONS.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -316,170 +317,166 @@ const InputSection = ({
               </select>
             </div>
             <div>
-              <label className="block text-sm text-purple-200 mb-1">Initial Monthly Payment</label>
-              <div className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-cyan-500/20 font-semibold text-cyan-400 text-lg">
+              <label className="block text-xs text-purple-200 mb-1">Initial Monthly</label>
+              <div className="w-full px-2 py-1.5 text-sm border border-cyan-400/30 rounded-lg bg-cyan-500/20 font-semibold text-cyan-400">
                 ${((inputs.annualProduction / 12) * inputs.ppaInitialRate).toFixed(2)}
               </div>
             </div>
           </div>
 
-          <div className="mb-4">
+          <div className="mb-3">
             <label className="flex items-center space-x-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={inputs.ppaPaidOff}
                 onChange={(e) => onInputChange('ppaPaidOff', e.target.checked)}
-                className="w-4 h-4 accent-purple-400"
+                className="w-3 h-3 accent-purple-400"
               />
-              <span className="text-sm text-purple-200">System Paid Off Early?</span>
+              <span className="text-xs text-purple-200">Paid Off Early?</span>
             </label>
           </div>
 
           {inputs.ppaPaidOff && (
-            <div className="mb-4">
-              <label className="block text-sm text-purple-200 mb-1">Year System Was Paid Off</label>
+            <div className="mb-3">
+              <label className="block text-xs text-purple-200 mb-1">Year Paid Off</label>
               <select
                 value={inputs.ppaPaidOffYear}
                 onChange={(e) => onInputChange('ppaPaidOffYear', parseInt(e.target.value))}
-                className="w-full md:w-64 px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+                className="w-full md:w-48 px-2 py-1.5 text-sm border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300"
               >
                 {Array.from({ length: inputs.nowYear - inputs.installedYear + 1 }, (_, i) => inputs.installedYear + i).map(year => (
                   <option key={year} value={year}>{year}</option>
                 ))}
               </select>
               <p className="text-xs text-purple-300 mt-1">
-                Buyout amount (30% discount): ${parseFloat(calculations.ppaBuyoutAmount).toLocaleString()}
+                Buyout (30% discount): ${parseFloat(calculations.ppaBuyoutAmount).toLocaleString()}
               </p>
             </div>
           )}
 
-          <div className="mt-4 bg-pink-900/20 border border-pink-400/30 rounded-lg p-4">
-            <h4 className="font-semibold text-pink-300 mb-3 text-sm">💳 Payment Structure</h4>
-            <div className="text-sm text-pink-200 space-y-2">
-              <p>Initial Payment ({inputs.installedYear}): <span className="font-bold text-purple-300 text-xl">${((inputs.annualProduction / 12) * inputs.ppaInitialRate).toFixed(2)}/month</span></p>
+          <div className="mt-3 bg-pink-900/20 border border-pink-400/30 rounded-lg p-3">
+            <h4 className="font-semibold text-pink-300 mb-2 text-xs">💳 Payment Info</h4>
+            <div className="text-xs text-pink-200 space-y-1">
+              <p>Initial ({inputs.installedYear}): <span className="font-bold text-purple-300">${((inputs.annualProduction / 12) * inputs.ppaInitialRate).toFixed(2)}/mo</span></p>
               {!inputs.ppaPaidOff && (
-                <p>Current Payment ({inputs.nowYear}): <span className="font-bold text-pink-400 text-xl">${calculatePPACurrentPayment()}/month</span></p>
+                <p>Current ({inputs.nowYear}): <span className="font-bold text-pink-400">${calculatePPACurrentPayment()}/mo</span></p>
               )}
               {inputs.ppaPaidOff && (
-                <p className="text-green-400 font-semibold">✓ System paid off in {inputs.ppaPaidOffYear}</p>
-              )}
-              <p>Years Since Install: <span className="font-bold text-cyan-400">{((inputs.nowYear - inputs.installedYear) + (inputs.nowMonth - inputs.installedMonth) / 12).toFixed(1)} years</span></p>
-              {!inputs.ppaPaidOff && (
-                <p className="text-xs text-pink-300/60 mt-2">Payment increases {inputs.escalator}% annually based on escalator</p>
+                <p className="text-green-400 font-semibold">✓ Paid off in {inputs.ppaPaidOffYear}</p>
               )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Loan Specific Inputs */}
+      {/* Loan Section - Compact */}
       {inputs.program === 'Loan' && (
-        <div className="bg-green-900/20 border-2 border-green-400/50 rounded-lg p-6 mb-6">
-          <h3 className="font-semibold text-green-300 mb-4 text-lg">Loan Details</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+        <div className="bg-green-900/20 border-2 border-green-400/50 rounded-lg p-4 mb-4">
+          <h3 className="font-semibold text-green-300 mb-3 text-sm">Loan Details</h3>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
             <div>
-              <label className="block text-sm text-green-200 mb-1">Down Payment ($)</label>
+              <label className="block text-xs text-green-200 mb-1">Down Payment ($)</label>
               <input
                 type="number"
                 value={inputs.loanDownpayment}
                 onChange={(e) => onInputChange('loanDownpayment', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
+                className="w-full px-2 py-1.5 text-sm border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300"
                 placeholder="0"
               />
             </div>
             <div>
-              <label className="block text-sm text-green-200 mb-1">Initial Monthly Payment ($)</label>
+              <label className="block text-xs text-green-200 mb-1">Monthly Payment ($)</label>
               <input
                 type="number"
                 value={inputs.loanInitialPayment}
                 onChange={(e) => onInputChange('loanInitialPayment', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
+                className="w-full px-2 py-1.5 text-sm border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300"
               />
             </div>
             <div>
-              <label className="block text-sm text-green-200 mb-1">Initial Principal ($)</label>
+              <label className="block text-xs text-green-200 mb-1">Principal ($)</label>
               <input
                 type="number"
                 value={inputs.loanPrincipal}
                 onChange={(e) => onInputChange('loanPrincipal', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
+                className="w-full px-2 py-1.5 text-sm border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300"
               />
             </div>
             <div>
-              <label className="block text-sm text-green-200 mb-1">Term (years)</label>
+              <label className="block text-xs text-green-200 mb-1">Term (years)</label>
               <input
                 type="number"
                 value={inputs.loanTerm}
                 onChange={(e) => onInputChange('loanTerm', parseInt(e.target.value))}
-                className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
+                className="w-full px-2 py-1.5 text-sm border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300"
               />
             </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
             <div>
-              <label className="block text-sm text-green-200 mb-1">Tax Credit (30% of Project)</label>
+              <label className="block text-xs text-green-200 mb-1">Tax Credit (30%)</label>
               <input
                 type="number"
                 value={inputs.taxCredit}
                 onChange={(e) => onInputChange('taxCredit', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
+                className="w-full px-2 py-1.5 text-sm border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300"
+                placeholder={calculations.autoTaxCredit}
               />
+              <p className="text-xs text-green-300 mt-0.5">Auto: ${calculations.autoTaxCredit}</p>
             </div>
             <div className="flex items-end">
-              <label className="flex items-center space-x-2 cursor-pointer pb-2">
+              <label className="flex items-center space-x-2 cursor-pointer pb-1">
                 <input
                   type="checkbox"
                   checked={inputs.appliedToLoan}
                   onChange={(e) => onInputChange('appliedToLoan', e.target.checked)}
-                  className="w-4 h-4 accent-green-400"
+                  className="w-3 h-3 accent-green-400"
                 />
-                <span className="text-sm text-green-200">Apply tax credit to loan principal?</span>
+                <span className="text-xs text-green-200">Apply to principal?</span>
               </label>
             </div>
           </div>
 
-          <div className="mb-4">
+          <div className="mb-3">
             <label className="flex items-center space-x-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={inputs.loanPaidOff}
                 onChange={(e) => onInputChange('loanPaidOff', e.target.checked)}
-                className="w-4 h-4 accent-green-400"
+                className="w-3 h-3 accent-green-400"
               />
-              <span className="text-sm text-green-200">Loan Paid Off Early?</span>
+              <span className="text-xs text-green-200">Paid Off Early?</span>
             </label>
           </div>
 
           {inputs.loanPaidOff && (
-            <div className="mb-4">
-              <label className="block text-sm text-green-200 mb-1">Year Loan Was Paid Off</label>
+            <div className="mb-3">
+              <label className="block text-xs text-green-200 mb-1">Year Paid Off</label>
               <select
                 value={inputs.loanPaidOffYear}
                 onChange={(e) => onInputChange('loanPaidOffYear', parseInt(e.target.value))}
-                className="w-full md:w-64 px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
+                className="w-full md:w-48 px-2 py-1.5 text-sm border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300"
               >
                 {Array.from({ length: inputs.nowYear - inputs.installedYear + 1 }, (_, i) => inputs.installedYear + i).map(year => (
                   <option key={year} value={year}>{year}</option>
                 ))}
               </select>
               <p className="text-xs text-green-300 mt-1">
-                Remaining principal at payoff: ${parseFloat(calculations.loanPrincipalAtPayoff).toLocaleString()}
+                Remaining principal: ${parseFloat(calculations.loanPrincipalAtPayoff).toLocaleString()}
               </p>
             </div>
           )}
 
-          <div className="mt-4 bg-cyan-900/20 border border-cyan-400/30 rounded-lg p-4">
-            <h4 className="font-semibold text-cyan-300 mb-3 text-sm">💳 Payment Structure</h4>
-            <div className="text-sm text-cyan-200 space-y-2">
-              <p>First 18 Months: <span className="font-bold text-cyan-400 text-xl">${calculations.loanPaymentStructure.first18MonthsPayment.toFixed(2)}/month</span></p>
-              <p>After 18 Months: <span className="font-bold text-green-400 text-xl">
-                ${calculations.loanPaymentStructure.after18MonthsPayment.toFixed(2)}/month
-              </span></p>
+          <div className="mt-3 bg-cyan-900/20 border border-cyan-400/30 rounded-lg p-3">
+            <h4 className="font-semibold text-cyan-300 mb-2 text-xs">💳 Payment Structure</h4>
+            <div className="text-xs text-cyan-200 space-y-1">
+              <p>First 18 Months: <span className="font-bold text-cyan-400">${calculations.loanPaymentStructure.first18MonthsPayment.toFixed(2)}/mo</span></p>
+              <p>After 18 Months: <span className="font-bold text-green-400">${calculations.loanPaymentStructure.after18MonthsPayment.toFixed(2)}/mo</span></p>
               {inputs.loanPaidOff && (
-                <p className="text-green-400 font-semibold">✓ Loan paid off in {inputs.loanPaidOffYear}</p>
+                <p className="text-green-400 font-semibold">✓ Paid off in {inputs.loanPaidOffYear}</p>
               )}
-              <p className="text-xs text-cyan-300/60 mt-2">
+              <p className="text-xs text-cyan-300/60 mt-1">
                 {inputs.appliedToLoan 
                   ? 'Tax credit applied - same first 18 months, then reduces' 
                   : 'Tax credit not applied - consistent payment throughout'}
@@ -489,31 +486,32 @@ const InputSection = ({
         </div>
       )}
 
-      {/* Cash Specific Inputs */}
+      {/* Cash Section - Compact */}
       {inputs.program === 'Cash' && (
-        <div className="bg-blue-900/20 border-2 border-blue-400/50 rounded-lg p-6 mb-6">
-          <h3 className="font-semibold text-blue-300 mb-4 text-lg">Cash Purchase Details</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-blue-900/20 border-2 border-blue-400/50 rounded-lg p-4 mb-4">
+          <h3 className="font-semibold text-blue-300 mb-3 text-sm">Cash Purchase</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm text-blue-200 mb-1">
-                Net Project Cost ($)
-                <span className="ml-2 text-xs text-green-400 font-semibold">After Tax Credits & Rebates</span>
+              <label className="block text-xs text-blue-200 mb-1">
+                Net Cost ($) <span className="text-green-400 font-semibold">After Credits</span>
               </label>
               <input
                 type="number"
                 value={inputs.cashNetCost}
                 onChange={(e) => onInputChange('cashNetCost', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-blue-400/30 rounded-lg bg-slate-900/60 text-blue-300 text-lg"
+                className="w-full px-2 py-1.5 text-sm border border-blue-400/30 rounded-lg bg-slate-900/60 text-blue-300"
               />
             </div>
             <div>
-              <label className="block text-sm text-blue-200 mb-1">Tax Credit Received (30%)</label>
+              <label className="block text-xs text-blue-200 mb-1">Tax Credit (30%)</label>
               <input
                 type="number"
                 value={inputs.taxCredit}
                 onChange={(e) => onInputChange('taxCredit', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-blue-400/30 rounded-lg bg-slate-900/60 text-blue-300 text-lg"
+                className="w-full px-2 py-1.5 text-sm border border-blue-400/30 rounded-lg bg-slate-900/60 text-blue-300"
+                placeholder={calculations.autoTaxCredit}
               />
+              <p className="text-xs text-blue-300 mt-0.5">Auto: ${calculations.autoTaxCredit}</p>
             </div>
           </div>
         </div>
@@ -521,30 +519,29 @@ const InputSection = ({
 
       {/* NEM 2.0 Export Rate */}
       {inputs.nemVersion === 'NEM2' && (
-        <div className="mb-6">
-          <label className="block text-sm text-cyan-300 mb-1">NEM 2.0 Export Rate ($/kWh)</label>
+        <div className="mb-4">
+          <label className="block text-xs text-cyan-300 mb-1">NEM 2.0 Export Rate ($/kWh)</label>
           <input
             type="number"
             step="0.01"
             value={inputs.exportRate}
             onChange={(e) => onInputChange('exportRate', parseFloat(e.target.value))}
-            className="w-full md:w-64 px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
+            className="w-full md:w-48 px-2 py-1.5 text-sm border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
           />
-          <p className="text-xs text-gray-400 mt-1">Typical range: $0.06 - $0.08/kWh</p>
-          <p className="text-xs text-yellow-400 mt-1">Note: NEM 2.0 includes $12/month connection fee</p>
+          <p className="text-xs text-gray-400 mt-0.5">Range: $0.06-$0.08/kWh • Includes $12/mo fee</p>
         </div>
       )}
 
-      {/* Battery & TOU Options */}
-      <div className="flex gap-6 mb-6">
+      {/* Battery & TOU */}
+      <div className="flex gap-4 mb-4">
         <label className="flex items-center space-x-2 cursor-pointer">
           <input
             type="checkbox"
             checked={inputs.hasBattery}
             onChange={(e) => onInputChange('hasBattery', e.target.checked)}
-            className="w-4 h-4 accent-cyan-400"
+            className="w-3 h-3 accent-cyan-400"
           />
-          <span className="text-sm text-cyan-300">🔋 Battery system present?</span>
+          <span className="text-xs text-cyan-300">🔋 Battery?</span>
         </label>
         
         <label className="flex items-center space-x-2 cursor-pointer">
@@ -552,77 +549,77 @@ const InputSection = ({
             type="checkbox"
             checked={inputs.useTOU}
             onChange={(e) => onInputChange('useTOU', e.target.checked)}
-            className="w-4 h-4 accent-cyan-400"
+            className="w-3 h-3 accent-cyan-400"
           />
-          <span className="text-sm text-cyan-300">⚡ Use TOU rates?</span>
+          <span className="text-xs text-cyan-300">⚡ TOU rates?</span>
         </label>
       </div>
 
-      {/* Battery Configuration */}
+      {/* Battery Config - Compact */}
       {inputs.hasBattery && (
-        <div className="bg-purple-900/20 border-2 border-purple-400/50 rounded-lg p-6 mb-6">
-          <h3 className="font-semibold text-purple-300 mb-4 flex items-center gap-2">
-            <Battery className="text-purple-400" />
-            Battery System Analysis
+        <div className="bg-purple-900/20 border-2 border-purple-400/50 rounded-lg p-4 mb-4">
+          <h3 className="font-semibold text-purple-300 mb-3 flex items-center gap-2 text-sm">
+            <Battery className="text-purple-400" size={16} />
+            Battery System
           </h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div>
-              <label className="block text-sm text-purple-200 mb-1">Capacity (kWh)</label>
+              <label className="block text-xs text-purple-200 mb-1">Capacity (kWh)</label>
               <input
                 type="number"
                 step="0.1"
                 value={inputs.batteryCapacity}
                 onChange={(e) => onInputChange('batteryCapacity', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+                className="w-full px-2 py-1.5 text-sm border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300"
               />
             </div>
             
             <div>
-              <label className="block text-sm text-purple-200 mb-1">Efficiency (%)</label>
+              <label className="block text-xs text-purple-200 mb-1">Efficiency (%)</label>
               <input
                 type="number"
                 value={inputs.batteryEfficiency}
                 onChange={(e) => onInputChange('batteryEfficiency', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+                className="w-full px-2 py-1.5 text-sm border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300"
                 min="70"
                 max="100"
               />
             </div>
             
             <div>
-              <label className="block text-sm text-purple-200 mb-1">Monthly Payment ($)</label>
+              <label className="block text-xs text-purple-200 mb-1">Monthly Payment ($)</label>
               <input
                 type="number"
                 value={inputs.batteryMonthlyPayment}
                 onChange={(e) => onInputChange('batteryMonthlyPayment', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+                className="w-full px-2 py-1.5 text-sm border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300"
               />
             </div>
             
             <div>
-              <label className="block text-sm text-purple-200 mb-1">Arbitrage Savings</label>
-              <div className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-purple-500/20 font-semibold text-purple-300 text-lg">
+              <label className="block text-xs text-purple-200 mb-1">Arbitrage Savings</label>
+              <div className="w-full px-2 py-1.5 text-sm border border-purple-400/30 rounded-lg bg-purple-500/20 font-semibold text-purple-300">
                 ${parseFloat(calculations.cumulativeArbitrageSavings).toLocaleString()}
               </div>
             </div>
           </div>
           
           {inputs.useTOU && (
-            <div className="mt-4 bg-slate-900/40 rounded-lg p-4">
-              <h4 className="font-medium text-purple-200 mb-2 text-sm">TOU Rate Structure</h4>
-              <div className="grid grid-cols-3 gap-3 text-sm">
+            <div className="mt-3 bg-slate-900/40 rounded-lg p-3">
+              <h4 className="font-medium text-purple-200 mb-2 text-xs">TOU Rates</h4>
+              <div className="grid grid-cols-3 gap-2 text-xs">
                 <div>
                   <span className="text-gray-400">Peak:</span>
-                  <span className="ml-2 font-semibold text-red-400">${TOU_RATES[inputs.utility].peak}/kWh</span>
+                  <span className="ml-1 font-semibold text-red-400">${TOU_RATES[inputs.utility].peak}</span>
                 </div>
                 <div>
-                  <span className="text-gray-400">Off-Peak:</span>
-                  <span className="ml-2 font-semibold text-green-400">${TOU_RATES[inputs.utility].offPeak}/kWh</span>
+                  <span className="text-gray-400">Off:</span>
+                  <span className="ml-1 font-semibold text-green-400">${TOU_RATES[inputs.utility].offPeak}</span>
                 </div>
                 <div>
-                  <span className="text-gray-400">Super Off-Peak:</span>
-                  <span className="ml-2 font-semibold text-blue-400">${TOU_RATES[inputs.utility].superOffPeak}/kWh</span>
+                  <span className="text-gray-400">Super:</span>
+                  <span className="ml-1 font-semibold text-blue-400">${TOU_RATES[inputs.utility].superOffPeak}</span>
                 </div>
               </div>
             </div>
@@ -630,12 +627,12 @@ const InputSection = ({
         </div>
       )}
 
-      {/* Update System Data Button */}
+      {/* Update Button */}
       <div className="flex justify-center">
         <button
           onClick={onUpdate}
           disabled={isUpdating}
-          className={`px-8 py-4 rounded-xl font-bold text-lg shadow-2xl transition-all ${
+          className={`px-6 py-3 rounded-xl font-bold text-sm shadow-2xl transition-all ${
             isUpdating 
               ? 'bg-gray-600 text-gray-300 cursor-not-allowed' 
               : 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600'
