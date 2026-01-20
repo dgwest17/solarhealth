@@ -3,6 +3,7 @@ import { calculateComprehensiveSavings } from './utils/calculations';
 import { DEFAULT_INPUTS, DEFAULT_API_STATUS } from './constants/defaults';
 import InputSection from './components/InputSection';
 import ResultsDashboard from './components/ResultsDashboard';
+import SystemScore from './components/SystemScore';
 import NEMStatusCard from './components/NEMStatusCard';
 import SystemHealthAlert from './components/SystemHealthAlert';
 import ChartsSection from './components/ChartsSection';
@@ -95,6 +96,12 @@ const SolarCalculator = () => {
           isUpdating={isUpdating}
         />
 
+        {/* System Score - NEW */}
+        <SystemScore 
+          calculations={calculations}
+          inputs={inputs}
+        />
+
         {/* NEM Status Card */}
         <NEMStatusCard 
           currentNEMImpact={calculations.currentNEMImpact}
@@ -134,6 +141,7 @@ const SolarCalculator = () => {
             <li>NEM calculations: Retail rate (NEM 1.0), wholesale rate (NEM 2.0), reduced rate (NEM 3.0)</li>
             <li>CARE Program: 30% discount applied to all utility rates</li>
             <li>Performance: California average 1400 kWh/kW/year</li>
+            <li>Degradation: 0.55% annual solar panel degradation applied</li>
           </ul>
         </div>
       </div>
