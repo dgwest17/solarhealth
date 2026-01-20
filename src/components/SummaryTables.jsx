@@ -45,6 +45,16 @@ const SummaryTables = ({ calculations, inputs }) => {
               </span>
             </div>
           )}
+          {parseFloat(calculations.taxCreditInSavings) > 0 && (
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-600">
+                Tax Credit Received {inputs.program === 'Loan' && !inputs.appliedToLoan && '(included in savings)'}
+              </span>
+              <span className="font-semibold text-green-600">
+                +${parseFloat(calculations.taxCreditInSavings).toLocaleString()}
+              </span>
+            </div>
+          )}
           {inputs.program === 'PPA' && inputs.ppaPaidOff && (
             <div className="flex justify-between border-b pb-2">
               <span className="text-gray-600">PPA Buyout Amount</span>
@@ -64,9 +74,17 @@ const SummaryTables = ({ calculations, inputs }) => {
           <div className="flex justify-between border-b pb-2">
             <span className="text-gray-600">Payback Period</span>
             <span className="font-semibold">
-              {(calculations.paybackMonths / 12).toFixed(1)} years
+              {calculations.paybackDisplay}
             </span>
           </div>
+          {parseFloat(calculations.taxCreditInSavings) > 0 && (
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-600">Tax Credit (in savings)</span>
+              <span className="font-semibold text-green-600">
+                ${parseFloat(calculations.taxCreditInSavings).toLocaleString()}
+              </span>
+            </div>
+          )}
           <div className="flex justify-between border-b pb-2">
             <span className="text-gray-600">ROI</span>
             <span className="font-semibold text-green-600">{calculations.roi}%</span>
