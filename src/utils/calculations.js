@@ -66,28 +66,125 @@ export const calculateBatteryArbitrage = (hasBattery, useTOU, utility, batteryCa
 };
 
 /**
- * Calculate system health and performance ratio
+ * Calculate NEW System Score based on financial performance and true-up status
+ * S = SuperSolar, A, B, C, D, F
  */
-export const calculateSystemHealth = (systemSize, annualProduction) => {
-  const expectedProduction = systemSize * 1400; // California average: 1400 kWh/kW/year
-  const actualProduction = annualProduction;
-  const performanceRatio = (actualProduction / expectedProduction) * 100;
-  
-  let status = 'excellent';
-  let message = 'System performing above expectations';
-  
-  if (performanceRatio < 70) {
-    status = 'poor';
-    message = 'System significantly underperforming - inspection recommended';
-  } else if (performanceRatio < 85) {
-    status = 'fair';
-    message = 'System underperforming - may need maintenance';
-  } else if (performanceRatio < 95) {
-    status = 'good';
-    message = 'System performing as expected';
+export const calculateSystemScore = (
+  annualUtilityCost, 
+  cumulativeSavings, 
+  currentNEMImpact, 
+  hasBattery,
+  program,
+  yearlyData
+) => {
+  // Determine if savings are trending positive (compare last 2 years if available)
+  let savingsTrendingPositive = true;
+  if (yearlyData.length >= 2) {
+    const lastYear = yearlyData[yearlyData.length - 1];
+    const prevYear = yearlyData[yearlyData.length - 2];
+    savingsTrendingPositive = lastYear.annualSavings >= prevYear.annualSavings;
   }
   
-  return { performanceRatio, status, message, expectedProduction };
+  const cumulativeSavingsNum = parseFloat(cumulativeSavings);
+  const annualTrueUp = currentNEMImpact.type === 'trueup' ? currentNEMImpact.amount : 0;
+  const annualCredit = currentNEMImpact.type === 'credit' ? currentNEMImpact.amount : 0;
+  
+  // Approximate connection fees (varies by utility, using ~$120/year average)
+  const approximateConnectionFees = 120;
+  const onlyPayingConnectionFees = annualUtilityCost <= approximateConnectionFees * 1.2; // 20% buffer
+  
+  let score, status, message, recommendation;
+  
+  // S for SuperSolar
+  if (onlyPayingConnectionFees && 
+      cumulativeSavingsNum > 0 && 
+      savingsTrendingPositive && 
+      annualCredit > 250) {
+    score = 'S';
+    status = 'supersolar';
+    message = 'SuperSolar Performance! Your system is exceeding expectations.';
+    recommendation = `No changes needed. Your system is performing amazingly and you have saved boatloads of money! You are earning money and there is room to grow usage!${!hasBattery ? ' Battery will add backup capabilities.' : ''}`;
+  }
+  
+  // A Grade
+  else if (onlyPayingConnectionFees && 
+           cumulativeSavingsNum > 0 && 
+           savingsTrendingPositive && 
+           annualCredit >= 0 && 
+           annualCredit <= 250) {
+    score = 'A';
+    status = 'excellent';
+    message = 'Excellent system performance with strong savings!';
+    recommendation = `No changes needed to system, you are earning money and your system has saved you thousands!${!hasBattery ? ' Battery may improve system savings and add backup capabilities.' : ''}`;
+  }
+  
+  // B Grade
+  else if (cumulativeSavingsNum > 0 && 
+           savingsTrendingPositive && 
+           annualTrueUp >= 0 && 
+           annualTrueUp <= 500) {
+    score = 'B';
+    status = 'good';
+    message = 'Good system performance with solid savings.';
+    recommendation = `Your system is doing well and you've saved a lot. However, you may want to consider adding extra solar${!hasBattery ? ' and a battery may improve system savings while adding backup capabilities' : ''}.`;
+  }
+  
+  // C Grade
+  else if (cumulativeSavingsNum > 0 && 
+           savingsTrendingPositive && 
+           annualTrueUp > 500 && 
+           annualTrueUp <= 2000) {
+    score = 'C';
+    status = 'fair';
+    message = 'Fair performance - system working but could be optimized.';
+    recommendation = `You've saved money with solar, it's better than having no solar! However, your system may need an update. Consider adding more panels${!hasBattery ? ' and/or a battery' : ''} to reduce your annual true-up.`;
+  }
+  
+  // D Grade
+  else if (cumulativeSavingsNum >= 100 && 
+           !savingsTrendingPositive && 
+           annualTrueUp >= 1000) {
+    score = 'D';
+    status = 'poor';
+    message = 'Below expectations - system needs attention.';
+    recommendation = `You've saved money with solar, it's better than having no solar! However, your system may need an update or repair. It is highly recommended you consult a repair firm or add more panels${!hasBattery ? ' and a battery' : ''} to reduce your annual true-up.`;
+  }
+  
+  // F Grade
+  else if (cumulativeSavingsNum < 100 && 
+           annualTrueUp >= 1000) {
+    score = 'F';
+    status = 'failing';
+    message = 'System significantly underperforming - immediate action needed.';
+    
+    if (program === 'PPA' || program === 'Lease') {
+      recommendation = `Shoot! We believe in solar and what it can do for people. However there are many variables that can lead to a poor experience for a few systems. You may need a system repair or whole new system. Since you have a ${program}, reach out to the company who owns the system for repairs or pursue other actions such as buying out the system or consulting with an installation company.`;
+    } else {
+      recommendation = `Shoot! We believe in solar and what it can do for people. However there are many variables that can lead to a poor experience for a few systems. You may need a system repair or whole new system. Consult with a repair company or installation company.`;
+    }
+  }
+  
+  // Default to C if none of the above match
+  else {
+    score = 'C';
+    status = 'fair';
+    message = 'System performance is adequate but could be improved.';
+    recommendation = `Your system is working, but there's room for improvement. Consider adding more panels${!hasBattery ? ' and/or a battery' : ''} to reduce your annual true-up.`;
+  }
+  
+  return {
+    score,
+    status,
+    message,
+    recommendation,
+    metrics: {
+      onlyPayingConnectionFees,
+      cumulativeSavings: cumulativeSavingsNum,
+      savingsTrendingPositive,
+      annualTrueUp,
+      annualCredit
+    }
+  };
 };
 
 /**
@@ -141,7 +238,7 @@ export const calculateLoanPaymentImpact = (program, loanInitialPayment, taxCredi
   }
   
   if (appliedToLoan) {
-    // Tax credit applied to loan - payment stays the same
+    // Tax credit applied to loan - payment stays the same throughout
     return { 
       effectivePayment: loanInitialPayment, 
       first18MonthsExtra: loanInitialPayment,
@@ -151,12 +248,11 @@ export const calculateLoanPaymentImpact = (program, loanInitialPayment, taxCredi
   }
   
   // Tax credit NOT applied - calculate reduced payment after 18 months
-  // Assume they'll apply tax credit to principal after receiving it
   const newPrincipal = loanPrincipal - taxCredit;
   const monthlyRate = 0.05 / 12; // Assume 5% APR
   const remainingMonths = (loanTerm * 12) - 18;
   
-  // Calculate new payment after principal reduction
+  // Calculate new reduced payment after principal reduction
   const reducedPayment = (newPrincipal * monthlyRate * Math.pow(1 + monthlyRate, remainingMonths)) / 
                          (Math.pow(1 + monthlyRate, remainingMonths) - 1);
   
@@ -192,13 +288,22 @@ export const calculateComprehensiveSavings = (inputs) => {
     yearsSinceInstall
   );
   
+  // Auto-calculate tax credit as 30% of principal if not provided
+  let calculatedTaxCredit = inputs.taxCredit;
+  if (inputs.program === 'Loan' && (!inputs.taxCredit || inputs.taxCredit === 0)) {
+    calculatedTaxCredit = inputs.loanPrincipal * 0.30;
+  } else if (inputs.program === 'Cash' && (!inputs.taxCredit || inputs.taxCredit === 0)) {
+    const grossCost = inputs.cashNetCost / 0.70;
+    calculatedTaxCredit = grossCost * 0.30;
+  }
+  
   let loanPaymentStructure = { effectivePayment: 0, first18MonthsExtra: 0, reducedPayment: 0, after18Months: 0 };
   
   if (inputs.program === 'Loan') {
     loanPaymentStructure = calculateLoanPaymentImpact(
       inputs.program, 
       inputs.loanInitialPayment, 
-      inputs.taxCredit, 
+      calculatedTaxCredit,
       inputs.appliedToLoan,
       inputs.loanPrincipal,
       inputs.loanTerm
@@ -214,6 +319,12 @@ export const calculateComprehensiveSavings = (inputs) => {
   let yearlyData = [];
   
   const initialRate = getUtilityRate(inputs.installedYear, inputs.utility, inputs.onCareProgram);
+  const currentRate = getUtilityRate(inputs.nowYear, inputs.utility, inputs.onCareProgram);
+  
+  const utilityBillAtInstall = (inputs.annualUsageAtInstall / 12) * initialRate;
+  const utilityBillNow = (inputs.currentAnnualUsage / 12) * currentRate;
+  
+  let currentAnnualUtilityCost = 0;
   
   for (let year = 0; year <= yearsSinceInstall; year++) {
     const currentYear = inputs.installedYear + year;
@@ -232,22 +343,18 @@ export const calculateComprehensiveSavings = (inputs) => {
     
     let solarCost;
     if (inputs.program === 'Cash') {
-      solarCost = 0; // No monthly payment for cash
+      solarCost = 0;
     } else if (inputs.program === 'PPA') {
-      // PPA: Initial rate per kWh * production, escalated each year
       const monthlyProduction = inputs.annualProduction / 12;
       solarCost = monthlyProduction * inputs.ppaInitialRate * Math.pow(1 + inputs.escalator / 100, year);
     } else if (inputs.program === 'Loan') {
       const monthsIntoLoan = year * 12;
-      if (!inputs.appliedToLoan && monthsIntoLoan < 18) {
-        solarCost = loanPaymentStructure.first18MonthsExtra;
-      } else if (!inputs.appliedToLoan && monthsIntoLoan >= 18) {
+      if (!inputs.appliedToLoan && monthsIntoLoan >= 18) {
         solarCost = loanPaymentStructure.after18Months;
       } else {
         solarCost = inputs.loanInitialPayment;
       }
     } else {
-      // Other - use a default monthly payment if provided
       solarCost = inputs.loanInitialPayment || 0;
     }
     
@@ -284,6 +391,14 @@ export const calculateComprehensiveSavings = (inputs) => {
       }
     }
     
+    // Track current year annual utility cost
+    if (year === Math.floor(yearsSinceInstall)) {
+      currentAnnualUtilityCost = (solarCost + batteryCost) * 12;
+      if (nemImpact.type === 'trueup') {
+        currentAnnualUtilityCost += nemImpact.amount;
+      }
+    }
+    
     if (monthsInYear === 12) {
       yearlyData.push({
         year: currentYear,
@@ -301,9 +416,11 @@ export const calculateComprehensiveSavings = (inputs) => {
     }
   }
   
-  // Add tax credit to savings for Loan/Cash
-  if ((inputs.program === 'Loan' || inputs.program === 'Cash') && inputs.taxCredit > 0) {
-    cumulativeSavings += inputs.taxCredit;
+  // Add tax credit to savings for Loan if NOT applied to loan, or for Cash
+  if (inputs.program === 'Loan' && !inputs.appliedToLoan && calculatedTaxCredit > 0) {
+    cumulativeSavings += calculatedTaxCredit;
+  } else if (inputs.program === 'Cash' && calculatedTaxCredit > 0) {
+    cumulativeSavings += calculatedTaxCredit;
   }
   
   // Calculate total investment
@@ -311,7 +428,6 @@ export const calculateComprehensiveSavings = (inputs) => {
   if (inputs.program === 'Cash') {
     totalInvestment = inputs.cashNetCost;
   } else if (inputs.program === 'PPA') {
-    // For PPA, total investment is all payments over term (typically 20-25 years)
     const ppaYears = 20;
     let ppaTotal = 0;
     for (let y = 0; y < ppaYears; y++) {
@@ -323,24 +439,33 @@ export const calculateComprehensiveSavings = (inputs) => {
   } else if (inputs.program === 'Loan') {
     totalInvestment = inputs.loanPrincipal + inputs.loanDownpayment;
   } else {
-    totalInvestment = inputs.loanInitialPayment * 12 * 20; // Fallback
+    totalInvestment = inputs.loanInitialPayment * 12 * 20;
   }
   
   if (inputs.hasBattery && inputs.batteryMonthlyPayment > 0) {
     totalInvestment += inputs.batteryMonthlyPayment * 12 * 10;
   }
   
-  const paybackMonths = totalInvestment / (cumulativeSavings / monthsSinceInstall);
-  const roi = ((cumulativeSavings / totalInvestment) * 100);
+  const paybackYears = totalInvestment / (cumulativeSavings / yearsSinceInstall);
   const offsetPercentage = (inputs.annualProduction / inputs.currentAnnualUsage) * 100;
-  const systemHealth = calculateSystemHealth(inputs.systemSize, inputs.annualProduction);
+  const roi = ((cumulativeSavings / totalInvestment) * 100);
   
   const currentNEMImpact = calculateNEMImpact(
     inputs.annualProduction, 
     inputs.currentAnnualUsage, 
-    getUtilityRate(inputs.nowYear, inputs.utility, inputs.onCareProgram),
+    currentRate,
     inputs.nemVersion,
     inputs.exportRate
+  );
+  
+  // Calculate System Score
+  const systemScore = calculateSystemScore(
+    currentAnnualUtilityCost,
+    cumulativeSavings.toFixed(2),
+    currentNEMImpact,
+    inputs.hasBattery,
+    inputs.program,
+    yearlyData
   );
   
   return {
@@ -353,17 +478,23 @@ export const calculateComprehensiveSavings = (inputs) => {
     monthsSinceInstall,
     yearsSinceInstall: yearsSinceInstall.toFixed(1),
     avgMonthlySavings: (cumulativeSavings / monthsSinceInstall).toFixed(2),
-    currentUtilityRate: getUtilityRate(inputs.nowYear, inputs.utility, inputs.onCareProgram).toFixed(3),
+    currentUtilityRate: currentRate.toFixed(3),
     initialUtilityRate: initialRate.toFixed(3),
-    rateIncrease: (((getUtilityRate(inputs.nowYear, inputs.utility, inputs.onCareProgram) - initialRate) / initialRate) * 100).toFixed(1),
+    rateIncrease: (((currentRate - initialRate) / initialRate) * 100).toFixed(1),
     yearlyData,
-    paybackMonths: paybackMonths.toFixed(1),
+    paybackYears: paybackYears.toFixed(1),
+    paybackMonths: (paybackYears * 12).toFixed(1),
     roi: roi.toFixed(1),
     offsetPercentage: offsetPercentage.toFixed(0),
     usageGrowthRate: (usageGrowthRate * 100).toFixed(1),
-    systemHealth,
+    systemScore,
     totalInvestment: totalInvestment.toFixed(2),
     currentNEMImpact,
-    loanPaymentStructure
+    loanPaymentStructure,
+    calculatedTaxCredit: calculatedTaxCredit.toFixed(2),
+    utilityBillAtInstall: utilityBillAtInstall.toFixed(2),
+    utilityBillNow: utilityBillNow.toFixed(2),
+    utilityBillIncrease: ((utilityBillNow - utilityBillAtInstall) / utilityBillAtInstall * 100).toFixed(1),
+    currentAnnualUtilityCost: currentAnnualUtilityCost.toFixed(2)
   };
 };
