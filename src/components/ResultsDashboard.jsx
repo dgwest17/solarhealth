@@ -43,15 +43,15 @@ const ResultsDashboard = ({ calculations }) => {
         <div className="text-xs opacity-75 mt-2">Since installation</div>
       </div>
 
-      {/* Payback Period */}
+      {/* Payback Period - UPDATED to show years */}
       <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-6 text-white">
         <div className="flex items-center justify-between mb-2">
           <Calendar className="w-8 h-8" />
         </div>
         <div className="text-3xl font-bold mb-1">
-          {calculations.paybackMonths}
+          {calculations.paybackYears} yrs
         </div>
-        <div className="text-sm opacity-90">Payback (months)</div>
+        <div className="text-sm opacity-90">Payback Period</div>
         <div className="text-xs opacity-75 mt-2">
           ROI: {calculations.roi}%
         </div>
