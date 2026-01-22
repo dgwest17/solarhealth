@@ -111,10 +111,7 @@ const SolarCalculator = () => {
         />
 
         {/* System Health Alert */}
-        <SystemHealthAlert 
-          systemHealth={calculations.systemHealth}
-          annualProduction={inputs.annualProduction}
-        />
+        <SystemHealthAlert systemScore={calculations.systemScore} />
 
         {/* Results Dashboard */}
         <ResultsDashboard calculations={calculations} />
