@@ -322,13 +322,25 @@ const InputSection = ({
             </div>
           </div>
 
+          <div className="mt-4 mb-4">
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={inputs.ppaPaidOffEarly}
+                onChange={(e) => onInputChange('ppaPaidOffEarly', e.target.checked)}
+                className="w-4 h-4 accent-purple-400"
+              />
+              <span className="text-sm text-purple-200">Paid off early or bought out?</span>
+            </label>
+          </div>
+
           <div className="mt-4 bg-pink-900/20 border border-pink-400/30 rounded-lg p-4">
             <h4 className="font-semibold text-pink-300 mb-3 text-sm">💳 Payment Structure</h4>
             <div className="text-sm text-pink-200 space-y-2">
               <p>Initial Payment ({inputs.installedYear}): <span className="font-bold text-purple-300 text-xl">${((inputs.annualProduction / 12) * inputs.ppaInitialRate).toFixed(2)}/month</span></p>
-              <p>Current Payment ({inputs.nowYear}): <span className="font-bold text-pink-400 text-xl">${calculatePPACurrentPayment()}/month</span></p>
+              <p>Current Payment ({inputs.nowYear}): <span className="font-bold text-pink-400 text-xl">${inputs.ppaPaidOffEarly ? '0.00' : calculatePPACurrentPayment()}/month</span></p>
               <p>Years Since Install: <span className="font-bold text-cyan-400">{((inputs.nowYear - inputs.installedYear) + (inputs.nowMonth - inputs.installedMonth) / 12).toFixed(1)} years</span></p>
-              <p className="text-xs text-pink-300/60 mt-2">Payment increases {inputs.escalator}% annually based on escalator</p>
+              <p className="text-xs text-pink-300/60 mt-2">{inputs.ppaPaidOffEarly ? 'No longer making payments - paid off' : `Payment increases ${inputs.escalator}% annually based on escalator`}</p>
             </div>
           </div>
         </div>
@@ -378,15 +390,17 @@ const InputSection = ({
             </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
               <label className="block text-sm text-green-200 mb-1">Tax Credit (30% of Project)</label>
               <input
                 type="number"
-                value={inputs.taxCredit}
+                value={inputs.taxCredit || (inputs.loanPrincipal * 0.30).toFixed(0)}
                 onChange={(e) => onInputChange('taxCredit', parseFloat(e.target.value))}
                 className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
+                placeholder={(inputs.loanPrincipal * 0.30).toFixed(0)}
               />
+              <p className="text-xs text-green-300/60 mt-1">Auto: ${(inputs.loanPrincipal * 0.30).toFixed(0)}</p>
             </div>
             <div className="flex items-end">
               <label className="flex items-center space-x-2 cursor-pointer pb-2">
@@ -397,6 +411,17 @@ const InputSection = ({
                   className="w-4 h-4 accent-green-400"
                 />
                 <span className="text-sm text-green-200">Apply tax credit to loan principal?</span>
+              </label>
+            </div>
+            <div className="flex items-end">
+              <label className="flex items-center space-x-2 cursor-pointer pb-2">
+                <input
+                  type="checkbox"
+                  checked={inputs.paidOffEarly}
+                  onChange={(e) => onInputChange('paidOffEarly', e.target.checked)}
+                  className="w-4 h-4 accent-green-400"
+                />
+                <span className="text-sm text-green-200">Paid off early?</span>
               </label>
             </div>
           </div>
