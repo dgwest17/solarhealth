@@ -1,86 +1,140 @@
 import React from 'react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, TrendingUp, Award, CheckCircle } from 'lucide-react';
 
-const SystemHealthAlert = ({ systemHealth, annualProduction }) => {
-  // Don't show alert if system is performing excellently
-  if (systemHealth.status === 'excellent') {
-    return null;
-  }
+const SystemHealthAlert = ({ systemScore }) => {
+  if (!systemScore) return null;
 
-  const getAlertColor = (status) => {
-    switch (status) {
-      case 'poor':
+  const getScoreColor = (score) => {
+    switch (score) {
+      case 'S':
         return {
-          bg: 'bg-red-50',
-          border: 'border-red-300',
-          icon: 'text-red-600',
-          text: 'text-red-600'
+          bg: 'bg-gradient-to-r from-yellow-50 to-orange-50',
+          border: 'border-yellow-400',
+          icon: 'text-yellow-600',
+          text: 'text-yellow-900',
+          badge: 'bg-yellow-500 text-white'
         };
-      case 'fair':
+      case 'A':
         return {
-          bg: 'bg-orange-50',
-          border: 'border-orange-300',
-          icon: 'text-orange-600',
-          text: 'text-orange-600'
+          bg: 'bg-green-50',
+          border: 'border-green-400',
+          icon: 'text-green-600',
+          text: 'text-green-900',
+          badge: 'bg-green-500 text-white'
         };
-      case 'good':
+      case 'B':
+        return {
+          bg: 'bg-blue-50',
+          border: 'border-blue-400',
+          icon: 'text-blue-600',
+          text: 'text-blue-900',
+          badge: 'bg-blue-500 text-white'
+        };
+      case 'C':
         return {
           bg: 'bg-yellow-50',
-          border: 'border-yellow-300',
+          border: 'border-yellow-400',
           icon: 'text-yellow-600',
-          text: 'text-yellow-600'
+          text: 'text-yellow-900',
+          badge: 'bg-yellow-500 text-white'
+        };
+      case 'D':
+        return {
+          bg: 'bg-orange-50',
+          border: 'border-orange-400',
+          icon: 'text-orange-600',
+          text: 'text-orange-900',
+          badge: 'bg-orange-500 text-white'
+        };
+      case 'F':
+        return {
+          bg: 'bg-red-50',
+          border: 'border-red-400',
+          icon: 'text-red-600',
+          text: 'text-red-900',
+          badge: 'bg-red-500 text-white'
         };
       default:
         return {
           bg: 'bg-gray-50',
-          border: 'border-gray-300',
+          border: 'border-gray-400',
           icon: 'text-gray-600',
-          text: 'text-gray-600'
+          text: 'text-gray-900',
+          badge: 'bg-gray-500 text-white'
         };
     }
   };
 
-  const colors = getAlertColor(systemHealth.status);
+  const getIcon = (score) => {
+    if (score === 'S' || score === 'A') return <Award className="mt-1" size={28} />;
+    if (score === 'B') return <CheckCircle className="mt-1" size={28} />;
+    if (score === 'C') return <TrendingUp className="mt-1" size={28} />;
+    return <AlertCircle className="mt-1" size={28} />;
+  };
+
+  const colors = getScoreColor(systemScore.score);
 
   return (
     <div className={`${colors.bg} border-2 ${colors.border} rounded-xl shadow-lg p-6 mb-6`}>
-      <div className="flex items-start gap-3">
-        <AlertCircle className={`${colors.icon} mt-1`} size={24} />
-        <div className="flex-1">
-          <h3 className="font-semibold text-gray-800 mb-1">System Performance Alert</h3>
-          <p className="text-gray-700 mb-2">{systemHealth.message}</p>
-          <div className="text-sm text-gray-600">
-            <span className="font-medium">
-              Performance Ratio: {systemHealth.performanceRatio.toFixed(1)}%
-            </span>
-            <span className="mx-2">•</span>
-            <span>Expected: {systemHealth.expectedProduction.toLocaleString()} kWh/yr</span>
-            <span className="mx-2">•</span>
-            <span>Actual: {annualProduction.toLocaleString()} kWh/yr</span>
+      <div className="flex items-start gap-4">
+        {/* Score Badge */}
+        <div className="flex flex-col items-center">
+          <div className={`${colors.badge} rounded-full w-16 h-16 flex items-center justify-center text-3xl font-bold shadow-lg`}>
+            {systemScore.score}
           </div>
-          
-          {systemHealth.status === 'poor' && (
-            <div className="mt-3 bg-white rounded-lg p-3 border border-red-200">
-              <h4 className="font-semibold text-gray-800 text-sm mb-1">Recommended Actions:</h4>
-              <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                <li>Schedule a professional system inspection immediately</li>
-                <li>Check for shading issues or debris on panels</li>
-                <li>Review inverter performance logs for errors</li>
-                <li>Verify all panels are functioning correctly</li>
-              </ul>
+          <div className="text-xs font-semibold mt-1 text-gray-600">System Score</div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1">
+          <div className="flex items-start gap-3">
+            <div className={colors.icon}>
+              {getIcon(systemScore.score)}
             </div>
-          )}
-          
-          {systemHealth.status === 'fair' && (
-            <div className="mt-3 bg-white rounded-lg p-3 border border-orange-200">
-              <h4 className="font-semibold text-gray-800 text-sm mb-1">Suggested Actions:</h4>
-              <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                <li>Schedule routine maintenance and panel cleaning</li>
-                <li>Check for recent shading changes (tree growth, new construction)</li>
-                <li>Review monitoring system for any warning messages</li>
-              </ul>
+            <div className="flex-1">
+              <h3 className={`font-bold text-xl mb-1 ${colors.text}`}>
+                {systemScore.message}
+              </h3>
+              <p className="text-gray-700 mb-3 leading-relaxed">
+                {systemScore.recommendation}
+              </p>
+
+              {/* Metrics Display */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-4">
+                <div className="bg-white/50 rounded-lg p-3">
+                  <div className="text-xs text-gray-600 mb-1">Cumulative Savings</div>
+                  <div className="text-lg font-bold text-gray-800">
+                    ${systemScore.metrics.cumulativeSavings.toLocaleString()}
+                  </div>
+                </div>
+                
+                {systemScore.metrics.annualTrueUp > 0 && (
+                  <div className="bg-white/50 rounded-lg p-3">
+                    <div className="text-xs text-gray-600 mb-1">Annual True-Up</div>
+                    <div className="text-lg font-bold text-orange-600">
+                      ${systemScore.metrics.annualTrueUp.toLocaleString()}
+                    </div>
+                  </div>
+                )}
+                
+                {systemScore.metrics.annualCredit > 0 && (
+                  <div className="bg-white/50 rounded-lg p-3">
+                    <div className="text-xs text-gray-600 mb-1">Annual Credit</div>
+                    <div className="text-lg font-bold text-green-600">
+                      ${systemScore.metrics.annualCredit.toLocaleString()}
+                    </div>
+                  </div>
+                )}
+                
+                <div className="bg-white/50 rounded-lg p-3">
+                  <div className="text-xs text-gray-600 mb-1">Savings Trend</div>
+                  <div className={`text-lg font-bold ${systemScore.metrics.savingsTrendingPositive ? 'text-green-600' : 'text-red-600'}`}>
+                    {systemScore.metrics.savingsTrendingPositive ? '↗ Positive' : '↘ Declining'}
+                  </div>
+                </div>
+              </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
