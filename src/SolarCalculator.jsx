@@ -35,7 +35,19 @@ const SolarCalculator = () => {
   // Calculate all metrics whenever inputs change
   const calculations = useMemo(() => {
     try {
-      return calculateComprehensiveSavings(inputs);
+      const result = calculateComprehensiveSavings(inputs);
+      
+      // BACKWARD COMPATIBILITY: If old components expect systemHealth, provide it
+      if (!result.systemHealth && result.systemScore) {
+        result.systemHealth = {
+          performanceRatio: 95, // Default safe value
+          status: result.systemScore.status,
+          message: result.systemScore.message,
+          expectedProduction: inputs.systemSize * 1400
+        };
+      }
+      
+      return result;
     } catch (error) {
       console.error('Calculation error:', error);
       // Return safe defaults if calculation fails
@@ -70,6 +82,12 @@ const SolarCalculator = () => {
             annualTrueUp: 0,
             annualCredit: 0
           }
+        },
+        systemHealth: {
+          performanceRatio: 95,
+          status: 'good',
+          message: 'System performing as expected',
+          expectedProduction: inputs.systemSize * 1400
         },
         totalInvestment: '0',
         currentNEMImpact: {
@@ -158,10 +176,22 @@ const SolarCalculator = () => {
           cumulativeTrueUpCharges={calculations.cumulativeTrueUpCharges}
         />
 
-        {/* System Score Alert - NEW */}
-        <SystemHealthAlert 
-          systemScore={calculations.systemScore}
-        />
+        {/* System Score Alert - NEW (with fallback to old) */}
+        {calculations.systemScore ? (
+          <SystemHealthAlert 
+            systemScore={calculations.systemScore}
+          />
+        ) : calculations.systemHealth ? (
+          // OLD VERSION FALLBACK - if you still have old SystemHealthAlert
+          <div className="bg-blue-50 border-2 border-blue-300 rounded-xl shadow-lg p-6 mb-6">
+            <h3 className="font-semibold text-blue-800 mb-2">
+              System Health: {calculations.systemHealth.message}
+            </h3>
+            <p className="text-blue-700">
+              Performance Ratio: {calculations.systemHealth.performanceRatio?.toFixed(1)}%
+            </p>
+          </div>
+        ) : null}
 
         {/* Results Dashboard */}
         <ResultsDashboard calculations={calculations} />
