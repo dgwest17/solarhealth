@@ -19,7 +19,7 @@ export const DEFAULT_INPUTS = {
   installedMonth: 1,
   nowYear: currentDate.year,
   nowMonth: currentDate.month,
-  utility: 'SDGE',
+  utility: 'SCE',
   systemSize: 8.0,
   annualUsageAtInstall: 10000,
   currentAnnualUsage: 11500,
