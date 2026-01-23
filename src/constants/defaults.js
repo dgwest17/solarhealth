@@ -32,16 +32,18 @@ export const DEFAULT_INPUTS = {
   ppaInitialRate: 0.12,
   escalator: 0.9,
   ppaDownpayment: 0,
-  ppaPaidOffEarly: false,  // NEW: Track if PPA paid off early
+  ppaPaidOff: false,  // NEW: Track if PPA paid off
+  ppaPaidOffYear: currentDate.year,  // NEW: Year PPA was paid off
   
   // Loan specific
   loanDownpayment: 0,
-  loanInitialPayment: 150,
   loanPrincipal: 24000,
   loanTerm: 20,
+  loanInterestRate: 5.99,  // NEW: Interest rate
   taxCredit: 0,  // Will auto-calculate as 30% if 0
-  appliedToLoan: false,
-  paidOffEarly: false,  // NEW: Track if loan paid off early
+  taxCreditApplied: false,  // NEW: Changed from appliedToLoan for clarity
+  loanPaidOff: false,  // NEW: Track if loan paid off
+  loanPaidOffYear: currentDate.year,  // NEW: Year loan was paid off
   
   // Cash specific
   cashNetCost: 16800, // After 30% tax credit
@@ -69,46 +71,21 @@ export const DEFAULT_API_STATUS = {
 };
 
 /**
- * Performance thresholds for system health (System Score)
+ * Annual solar panel degradation rate
  */
-export const PERFORMANCE_THRESHOLDS = {
-  excellent: 95,  // >=95% - No alert
-  good: 85,       // 85-94% - Yellow alert
-  fair: 70,       // 70-84% - Orange alert
-  poor: 0         // <70% - Red alert
-};
+export const ANNUAL_DEGRADATION_RATE = 0.0055; // 0.55% per year
 
 /**
- * California solar production average (kWh per kW per year)
+ * NEM 2.0 connection fee (monthly)
  */
-export const CA_SOLAR_PRODUCTION_AVG = 1400;
+export const NEM2_CONNECTION_FEE = 12; // $12/month
 
 /**
- * Default loan term in years
+ * PPA buyout discount (percentage of remaining payments)
  */
-export const DEFAULT_LOAN_TERM_YEARS = 20;
-
-/**
- * Default battery lifetime in years
- */
-export const DEFAULT_BATTERY_TERM_YEARS = 10;
-
-/**
- * CARE program discount percentage
- */
-export const CARE_DISCOUNT_PERCENTAGE = 0.30; // 30% discount
-
-/**
- * Tax credit application period in months
- */
-export const TAX_CREDIT_APPLICATION_MONTHS = 18;
+export const PPA_BUYOUT_DISCOUNT = 0.30; // 30% discount
 
 /**
  * Federal solar tax credit percentage (ITC)
  */
 export const FEDERAL_TAX_CREDIT_PERCENTAGE = 0.30; // 30%
-
-/**
- * NEM 3.0 default export rate
- */
-export const NEM3_DEFAULT_EXPORT_RATE = 0.05;
