@@ -1,6 +1,7 @@
 import React from 'react';
 import { Database, RefreshCw, AlertCircle, Battery } from 'lucide-react';
 import { UTILITY_OPTIONS, NEM_OPTIONS, PROGRAM_OPTIONS, API_PROVIDERS, TOU_RATES, PPA_ESCALATOR_OPTIONS } from '../utils/rateData';
+import { calculateMonthlyPayment } from '../utils/loanCalculations';
 
 const InputSection = ({ 
   inputs, 
@@ -13,6 +14,29 @@ const InputSection = ({
   onUpdate,
   isUpdating
 }) => {
+  // Generate year options (1999 to current year)
+  const currentYear = new Date().getFullYear();
+  const yearOptions = [];
+  for (let year = 1999; year <= currentYear; year++) {
+    yearOptions.push(year);
+  }
+  
+  // Generate month options
+  const monthOptions = [
+    { value: 1, label: 'January' },
+    { value: 2, label: 'February' },
+    { value: 3, label: 'March' },
+    { value: 4, label: 'April' },
+    { value: 5, label: 'May' },
+    { value: 6, label: 'June' },
+    { value: 7, label: 'July' },
+    { value: 8, label: 'August' },
+    { value: 9, label: 'September' },
+    { value: 10, label: 'October' },
+    { value: 11, label: 'November' },
+    { value: 12, label: 'December' }
+  ];
+  
   // Calculate PPA current payment
   const calculatePPACurrentPayment = () => {
     const yearsSinceInstall = (inputs.nowYear - inputs.installedYear) + 
@@ -21,6 +45,27 @@ const InputSection = ({
     const currentRate = inputs.ppaInitialRate * Math.pow(1 + inputs.escalator / 100, yearsSinceInstall);
     return (monthlyProduction * currentRate).toFixed(2);
   };
+  
+  // Calculate loan payments with correct logic
+  const taxCredit = calculations.calculatedTaxCredit || (inputs.loanPrincipal * 0.30);
+  
+  let initialLoanPayment = 0;
+  let paymentAfter18Months = 0;
+  
+  if (inputs.program === 'Loan' && inputs.loanPrincipal > 0) {
+    if (inputs.taxCreditApplied) {
+      // Tax credit applied: lower payment entire time
+      const reducedPrincipal = inputs.loanPrincipal - taxCredit;
+      initialLoanPayment = calculateMonthlyPayment(reducedPrincipal, inputs.loanInterestRate || 5.99, inputs.loanTerm);
+      paymentAfter18Months = initialLoanPayment;
+    } else {
+      // Tax credit NOT applied: higher payment first 18 months, then lower
+      initialLoanPayment = calculateMonthlyPayment(inputs.loanPrincipal, inputs.loanInterestRate || 5.99, inputs.loanTerm);
+      const reducedPrincipal = inputs.loanPrincipal - taxCredit;
+      const remainingYears = inputs.loanTerm - 1.5; // After 18 months
+      paymentAfter18Months = calculateMonthlyPayment(reducedPrincipal, inputs.loanInterestRate || 5.99, remainingYears);
+    }
+  }
 
   return (
     <div className="bg-slate-800/60 backdrop-blur-md border border-cyan-500/30 rounded-xl shadow-2xl p-8 mb-6">
@@ -108,31 +153,33 @@ const InputSection = ({
         </div>
       )}
 
-      {/* Date Inputs */}
+      {/* Date Inputs - NOW WITH DROPDOWNS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         <div className="space-y-4">
           <h3 className="font-semibold text-cyan-400 border-b border-cyan-500/30 pb-2">Installation</h3>
           <div>
             <label className="block text-sm text-cyan-300 mb-1">Year</label>
-            <input
-              type="number"
+            <select
               value={inputs.installedYear}
               onChange={(e) => onInputChange('installedYear', parseInt(e.target.value))}
               className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
-              min="2014"
-              max="2025"
-            />
+            >
+              {yearOptions.map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-sm text-cyan-300 mb-1">Month</label>
-            <input
-              type="number"
+            <select
               value={inputs.installedMonth}
               onChange={(e) => onInputChange('installedMonth', parseInt(e.target.value))}
               className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
-              min="1"
-              max="12"
-            />
+            >
+              {monthOptions.map(month => (
+                <option key={month.value} value={month.value}>{month.label}</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -242,6 +289,9 @@ const InputSection = ({
             onChange={(e) => onInputChange('annualProduction', parseInt(e.target.value))}
             className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
           />
+          <p className="text-xs text-gray-400 mt-1">
+            Current (with 0.55% degradation): {calculations.currentDegradedProduction} kWh/yr
+          </p>
         </div>
         <div>
           <label className="block text-sm text-cyan-300 mb-1">Usage Offset</label>
@@ -322,60 +372,76 @@ const InputSection = ({
             </div>
           </div>
 
-          <div className="mt-4 mb-4">
+          {/* System Paid Off Section */}
+          <div className="mb-4">
             <label className="flex items-center space-x-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={inputs.ppaPaidOffEarly}
-                onChange={(e) => onInputChange('ppaPaidOffEarly', e.target.checked)}
+                checked={inputs.ppaPaidOff}
+                onChange={(e) => onInputChange('ppaPaidOff', e.target.checked)}
                 className="w-4 h-4 accent-purple-400"
               />
-              <span className="text-sm text-purple-200">Paid off early or bought out?</span>
+              <span className="text-sm text-purple-200">System Paid Off / Bought Out?</span>
             </label>
           </div>
+
+          {inputs.ppaPaidOff && (
+            <div className="mb-4">
+              <label className="block text-sm text-purple-200 mb-1">Year Paid Off</label>
+              <select
+                value={inputs.ppaPaidOffYear}
+                onChange={(e) => onInputChange('ppaPaidOffYear', parseInt(e.target.value))}
+                className="w-full md:w-64 px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+              >
+                {yearOptions.filter(y => y >= inputs.installedYear && y <= currentYear).map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+              {calculations.ppaBuyoutCost > 0 && (
+                <p className="text-xs text-purple-300 mt-1">
+                  Estimated buyout cost: ${parseFloat(calculations.ppaBuyoutCost).toLocaleString()}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="mt-4 bg-pink-900/20 border border-pink-400/30 rounded-lg p-4">
             <h4 className="font-semibold text-pink-300 mb-3 text-sm">💳 Payment Structure</h4>
             <div className="text-sm text-pink-200 space-y-2">
               <p>Initial Payment ({inputs.installedYear}): <span className="font-bold text-purple-300 text-xl">${((inputs.annualProduction / 12) * inputs.ppaInitialRate).toFixed(2)}/month</span></p>
-              <p>Current Payment ({inputs.nowYear}): <span className="font-bold text-pink-400 text-xl">${inputs.ppaPaidOffEarly ? '0.00' : calculatePPACurrentPayment()}/month</span></p>
+              <p>Current Payment ({inputs.nowYear}): <span className="font-bold text-pink-400 text-xl">${inputs.ppaPaidOff ? '0.00' : calculatePPACurrentPayment()}/month</span></p>
               <p>Years Since Install: <span className="font-bold text-cyan-400">{((inputs.nowYear - inputs.installedYear) + (inputs.nowMonth - inputs.installedMonth) / 12).toFixed(1)} years</span></p>
-              <p className="text-xs text-pink-300/60 mt-2">{inputs.ppaPaidOffEarly ? 'No longer making payments - paid off' : `Payment increases ${inputs.escalator}% annually based on escalator`}</p>
+              <p className="text-xs text-pink-300/60 mt-2">
+                {inputs.ppaPaidOff ? 
+                  `System paid off in ${inputs.ppaPaidOffYear} - no longer making payments` : 
+                  `Payment increases ${inputs.escalator}% annually based on escalator`}
+              </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Loan Specific Inputs */}
+      {/* Loan Specific Inputs - WITH CORRECTED LOGIC */}
       {inputs.program === 'Loan' && (
         <div className="bg-green-900/20 border-2 border-green-400/50 rounded-lg p-6 mb-6">
           <h3 className="font-semibold text-green-300 mb-4 text-lg">Loan Details</h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             <div>
-              <label className="block text-sm text-green-200 mb-1">Down Payment ($)</label>
-              <input
-                type="number"
-                value={inputs.loanDownpayment}
-                onChange={(e) => onInputChange('loanDownpayment', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
-                placeholder="0"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-green-200 mb-1">Initial Monthly Payment ($)</label>
-              <input
-                type="number"
-                value={inputs.loanInitialPayment}
-                onChange={(e) => onInputChange('loanInitialPayment', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-green-200 mb-1">Initial Principal ($)</label>
+              <label className="block text-sm text-green-200 mb-1">Principal ($)</label>
               <input
                 type="number"
                 value={inputs.loanPrincipal}
                 onChange={(e) => onInputChange('loanPrincipal', parseFloat(e.target.value))}
+                className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-green-200 mb-1">Interest Rate (%)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={inputs.loanInterestRate}
+                onChange={(e) => onInputChange('loanInterestRate', parseFloat(e.target.value))}
                 className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
               />
             </div>
@@ -388,56 +454,92 @@ const InputSection = ({
                 className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
               />
             </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
-              <label className="block text-sm text-green-200 mb-1">Tax Credit (30% of Project)</label>
+              <label className="block text-sm text-green-200 mb-1">Down Payment ($)</label>
               <input
                 type="number"
-                value={inputs.taxCredit || (inputs.loanPrincipal * 0.30).toFixed(0)}
+                value={inputs.loanDownpayment}
+                onChange={(e) => onInputChange('loanDownpayment', parseFloat(e.target.value))}
+                className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
+                placeholder="0"
+              />
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm text-green-200 mb-1">Tax Credit (30% of Principal)</label>
+              <input
+                type="number"
+                value={taxCredit}
                 onChange={(e) => onInputChange('taxCredit', parseFloat(e.target.value))}
                 className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
-                placeholder={(inputs.loanPrincipal * 0.30).toFixed(0)}
+                placeholder={(inputs.loanPrincipal * 0.30).toFixed(2)}
               />
-              <p className="text-xs text-green-300/60 mt-1">Auto: ${(inputs.loanPrincipal * 0.30).toFixed(0)}</p>
             </div>
             <div className="flex items-end">
               <label className="flex items-center space-x-2 cursor-pointer pb-2">
                 <input
                   type="checkbox"
-                  checked={inputs.appliedToLoan}
-                  onChange={(e) => onInputChange('appliedToLoan', e.target.checked)}
+                  checked={inputs.taxCreditApplied}
+                  onChange={(e) => onInputChange('taxCreditApplied', e.target.checked)}
                   className="w-4 h-4 accent-green-400"
                 />
-                <span className="text-sm text-green-200">Apply tax credit to loan principal?</span>
-              </label>
-            </div>
-            <div className="flex items-end">
-              <label className="flex items-center space-x-2 cursor-pointer pb-2">
-                <input
-                  type="checkbox"
-                  checked={inputs.paidOffEarly}
-                  onChange={(e) => onInputChange('paidOffEarly', e.target.checked)}
-                  className="w-4 h-4 accent-green-400"
-                />
-                <span className="text-sm text-green-200">Paid off early?</span>
+                <span className="text-sm text-green-200">Tax credit applied to loan principal?</span>
               </label>
             </div>
           </div>
 
+          {/* System Paid Off Section */}
+          <div className="mb-4">
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={inputs.loanPaidOff}
+                onChange={(e) => onInputChange('loanPaidOff', e.target.checked)}
+                className="w-4 h-4 accent-green-400"
+              />
+              <span className="text-sm text-green-200">Loan Paid Off Early?</span>
+            </label>
+          </div>
+
+          {inputs.loanPaidOff && (
+            <div className="mb-4">
+              <label className="block text-sm text-green-200 mb-1">Year Paid Off</label>
+              <select
+                value={inputs.loanPaidOffYear}
+                onChange={(e) => onInputChange('loanPaidOffYear', parseInt(e.target.value))}
+                className="w-full md:w-64 px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
+              >
+                {yearOptions.filter(y => y >= inputs.installedYear && y <= currentYear).map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+              {calculations.loanPaymentStructure && calculations.loanPaymentStructure.principalAtPayoff > 0 && (
+                <p className="text-xs text-green-300 mt-1">
+                  Remaining principal at payoff: ${parseFloat(calculations.loanPaymentStructure.principalAtPayoff).toLocaleString()}
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="mt-4 bg-cyan-900/20 border border-cyan-400/30 rounded-lg p-4">
             <h4 className="font-semibold text-cyan-300 mb-3 text-sm">💳 Payment Structure</h4>
             <div className="text-sm text-cyan-200 space-y-2">
-              <p>First 18 Months: <span className="font-bold text-cyan-400 text-xl">${inputs.loanInitialPayment}/month</span></p>
-              <p>Current Payment: <span className="font-bold text-green-400 text-xl">
-                ${inputs.appliedToLoan ? inputs.loanInitialPayment : (calculations.loanPaymentStructure.after18Months || inputs.loanInitialPayment).toFixed(2)}/month
-              </span></p>
-              <p className="text-xs text-cyan-300/60 mt-2">
-                {inputs.appliedToLoan 
-                  ? 'Tax credit applied to principal - payment remains consistent' 
-                  : 'Tax credit not applied - payment reduces after 18 months'}
-              </p>
+              {inputs.taxCreditApplied ? (
+                <>
+                  <p className="text-green-400 font-semibold">✓ Tax credit applied to loan principal</p>
+                  <p>Monthly Payment (entire term): <span className="font-bold text-green-400 text-xl">${initialLoanPayment.toFixed(2)}/month</span></p>
+                  <p className="text-xs text-cyan-300/60 mt-2">Principal reduced from ${inputs.loanPrincipal.toLocaleString()} to ${(inputs.loanPrincipal - taxCredit).toLocaleString()} - lower payment entire time</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-orange-400 font-semibold">⚠ Tax credit NOT applied to loan</p>
+                  <p>First 18 Months: <span className="font-bold text-cyan-400 text-xl">${initialLoanPayment.toFixed(2)}/month</span></p>
+                  <p>After 18 Months: <span className="font-bold text-green-400 text-xl">${paymentAfter18Months.toFixed(2)}/month</span></p>
+                  <p className="text-xs text-cyan-300/60 mt-2">Higher payment first 18 months, then payment reduces when tax credit is applied</p>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -467,6 +569,7 @@ const InputSection = ({
                 value={inputs.taxCredit}
                 onChange={(e) => onInputChange('taxCredit', parseFloat(e.target.value))}
                 className="w-full px-3 py-2 border border-blue-400/30 rounded-lg bg-slate-900/60 text-blue-300 text-lg"
+                placeholder={((inputs.cashNetCost / 0.70) * 0.30).toFixed(2)}
               />
             </div>
           </div>
@@ -484,7 +587,7 @@ const InputSection = ({
             onChange={(e) => onInputChange('exportRate', parseFloat(e.target.value))}
             className="w-full md:w-64 px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
           />
-          <p className="text-xs text-gray-400 mt-1">Typical range: $0.06 - $0.08/kWh</p>
+          <p className="text-xs text-gray-400 mt-1">Typical range: $0.06 - $0.08/kWh | Connection fee: $12/month</p>
         </div>
       )}
 
@@ -590,21 +693,11 @@ const InputSection = ({
           disabled={isUpdating}
           className={`px-8 py-4 rounded-xl font-bold text-lg shadow-2xl transition-all ${
             isUpdating 
-              ? 'bg-gray-600 text-gray-300 cursor-not-allowed' 
-              : 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600 hover:shadow-cyan-500/50'
+              ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+              : 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600'
           }`}
         >
-          {isUpdating ? (
-            <span className="flex items-center gap-2">
-              <RefreshCw className="animate-spin" size={20} />
-              Updating...
-            </span>
-          ) : (
-            <span className="flex items-center gap-2">
-              <RefreshCw size={20} />
-              Update System Data
-            </span>
-          )}
+          {isUpdating ? '🔄 Updating...' : '✨ Update System Data'}
         </button>
       </div>
     </div>
