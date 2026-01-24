@@ -53,17 +53,17 @@ const InputSection = ({
   let paymentAfter18Months = 0;
   
   if (inputs.program === 'Loan' && inputs.loanPrincipal > 0) {
+    // Calculate base payment on full principal
+    initialLoanPayment = calculateMonthlyPayment(inputs.loanPrincipal, inputs.loanInterestRate || 5.99, inputs.loanTerm);
+    
     if (inputs.taxCreditApplied) {
-      // Tax credit applied: lower payment entire time
+      // Tax credit WILL BE applied at month 18: payment reduces after 18 months
       const reducedPrincipal = inputs.loanPrincipal - taxCredit;
-      initialLoanPayment = calculateMonthlyPayment(reducedPrincipal, inputs.loanInterestRate || 5.99, inputs.loanTerm);
-      paymentAfter18Months = initialLoanPayment;
-    } else {
-      // Tax credit NOT applied: higher payment first 18 months, then lower
-      initialLoanPayment = calculateMonthlyPayment(inputs.loanPrincipal, inputs.loanInterestRate || 5.99, inputs.loanTerm);
-      const reducedPrincipal = inputs.loanPrincipal - taxCredit;
-      const remainingYears = inputs.loanTerm - 1.5; // After 18 months
+      const remainingYears = inputs.loanTerm - 1.5;
       paymentAfter18Months = calculateMonthlyPayment(reducedPrincipal, inputs.loanInterestRate || 5.99, remainingYears);
+    } else {
+      // Tax credit NOT applied: payment stays same (customer gets tax credit as cash)
+      paymentAfter18Months = initialLoanPayment;
     }
   }
 
@@ -528,16 +528,16 @@ const InputSection = ({
             <div className="text-sm text-cyan-200 space-y-2">
               {inputs.taxCreditApplied ? (
                 <>
-                  <p className="text-green-400 font-semibold">✓ Tax credit applied to loan principal</p>
-                  <p>Monthly Payment (entire term): <span className="font-bold text-green-400 text-xl">${initialLoanPayment.toFixed(2)}/month</span></p>
-                  <p className="text-xs text-cyan-300/60 mt-2">Principal reduced from ${inputs.loanPrincipal.toLocaleString()} to ${(inputs.loanPrincipal - taxCredit).toLocaleString()} - lower payment entire time</p>
+                  <p className="text-orange-400 font-semibold">⚠ Tax credit will be applied at month 18</p>
+                  <p>First 18 Months: <span className="font-bold text-cyan-400 text-xl">${initialLoanPayment.toFixed(2)}/month</span></p>
+                  <p>After 18 Months: <span className="font-bold text-green-400 text-xl">${paymentAfter18Months.toFixed(2)}/month</span></p>
+                  <p className="text-xs text-cyan-300/60 mt-2">Higher payment first 18 months, then payment reduces when tax credit is applied to principal</p>
                 </>
               ) : (
                 <>
-                  <p className="text-orange-400 font-semibold">⚠ Tax credit NOT applied to loan</p>
-                  <p>First 18 Months: <span className="font-bold text-cyan-400 text-xl">${initialLoanPayment.toFixed(2)}/month</span></p>
-                  <p>After 18 Months: <span className="font-bold text-green-400 text-xl">${paymentAfter18Months.toFixed(2)}/month</span></p>
-                  <p className="text-xs text-cyan-300/60 mt-2">Higher payment first 18 months, then payment reduces when tax credit is applied</p>
+                  <p className="text-green-400 font-semibold">✓ Tax credit NOT applied - you receive as cash back</p>
+                  <p>Monthly Payment (entire term): <span className="font-bold text-green-400 text-xl">${initialLoanPayment.toFixed(2)}/month</span></p>
+                  <p className="text-xs text-cyan-300/60 mt-2">Payment stays same entire time - you keep tax credit as cash back</p>
                 </>
               )}
             </div>
