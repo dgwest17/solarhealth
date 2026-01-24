@@ -155,9 +155,9 @@ export const calculatePPABuyout = (
 /**
  * Calculate loan payment structure with CORRECTED tax credit logic
  * 
- * FIXED LOGIC:
- * - taxCreditApplied = false: HIGHER payment first 18 months, then LOWER
- * - taxCreditApplied = true: LOWER payment entire time (principal already reduced)
+ * CORRECTED LOGIC:
+ * - taxCreditApplied = false: Same payment entire time (customer gets tax credit as cash back)
+ * - taxCreditApplied = true: Higher payment first 18 months, then LOWER (tax credit reduces principal at 18 months)
  */
 export const calculateLoanPaymentStructure = (
   loanPrincipal,
@@ -170,45 +170,42 @@ export const calculateLoanPaymentStructure = (
   installedYear
 ) => {
   if (taxCreditApplied) {
-    // Tax credit APPLIED to loan upfront
-    // Principal is reduced from day 1
-    const reducedPrincipal = loanPrincipal - taxCredit;
-    const monthlyPayment = calculateMonthlyPayment(reducedPrincipal, loanInterestRate, loanTerm);
-    
-    return {
-      initialPayment: monthlyPayment,
-      paymentAfter18Months: monthlyPayment,
-      description: 'Tax credit applied to loan principal',
-      principalAtPayoff: loanPaidOff ? 
-        calculateRemainingPrincipal(
-          reducedPrincipal, 
-          loanInterestRate, 
-          loanTerm, 
-          (loanPaidOffYear - installedYear) * 12
-        ) : 0
-    };
-  } else {
-    // Tax credit NOT applied to loan upfront
-    // Customer pays HIGHER for 18 months, then applies tax credit and payment REDUCES
+    // Tax credit APPLIED to loan at month 18
+    // Customer pays HIGHER for 18 months, then principal is reduced and payment LOWERS
     const initialPayment = calculateMonthlyPayment(loanPrincipal, loanInterestRate, loanTerm);
-    const paymentAfter18Months = calculatePaymentAfterTaxCredit(
-      loanPrincipal,
-      taxCredit,
-      loanInterestRate,
-      loanTerm,
-      18
-    );
+    
+    // After 18 months, principal is reduced by tax credit
+    const reducedPrincipal = loanPrincipal - taxCredit;
+    const remainingYears = loanTerm - 1.5; // 18 months = 1.5 years
+    const paymentAfter18Months = calculateMonthlyPayment(reducedPrincipal, loanInterestRate, remainingYears);
     
     return {
       initialPayment: initialPayment,
       paymentAfter18Months: paymentAfter18Months,
-      description: 'Tax credit NOT applied to loan - payment reduces after 18 months',
+      description: 'Tax credit applied at month 18 - payment reduces after',
+      principalAtPayoff: loanPaidOff ? 
+        calculateRemainingPrincipal(
+          reducedPrincipal, 
+          loanInterestRate, 
+          remainingYears, 
+          Math.max(0, ((loanPaidOffYear - installedYear) * 12) - 18)
+        ) : 0
+    };
+  } else {
+    // Tax credit NOT applied to loan
+    // Customer receives tax credit as cash back, payment stays the same
+    const monthlyPayment = calculateMonthlyPayment(loanPrincipal, loanInterestRate, loanTerm);
+    
+    return {
+      initialPayment: monthlyPayment,
+      paymentAfter18Months: monthlyPayment, // SAME payment - no change
+      description: 'Tax credit NOT applied to loan - payment stays same',
       principalAtPayoff: loanPaidOff ?
         calculateRemainingPrincipal(
-          loanPrincipal - taxCredit, // Principal after tax credit applied at 18 months
+          loanPrincipal,
           loanInterestRate,
           loanTerm,
-          Math.max(0, (loanPaidOffYear - installedYear) * 12 - 18)
+          (loanPaidOffYear - installedYear) * 12
         ) : 0
     };
   }
@@ -223,7 +220,7 @@ export const getMonthsSinceInstall = (installedYear, installedMonth, nowYear, no
 
 /**
  * Calculate NEW System Score based on financial performance
- * FIXED to match exact criteria
+ * EXACT CRITERIA per user specifications
  */
 export const calculateSystemScore = (
   annualUtilityCost, 
@@ -242,7 +239,7 @@ export const calculateSystemScore = (
   }
   
   const cumulativeSavingsNum = parseFloat(cumulativeSavings);
-  const annualTrueUp = currentNEMImpact.type === 'trueup' ? currentNEMImpact.amount : 0;
+  const annualTrueUpOwed = currentNEMImpact.type === 'trueup' ? currentNEMImpact.amount : 0;
   const annualCredit = currentNEMImpact.type === 'credit' ? currentNEMImpact.amount : 0;
   
   // Connection fees threshold (~$120/year)
@@ -252,6 +249,7 @@ export const calculateSystemScore = (
   let score, status, message, recommendation;
   
   // S for SuperSolar
+  // Annual utility costs = connection fees only, cumulative savings positive & trending, Annual TRUE-UP IS A CREDIT > $250
   if (onlyPayingConnectionFees && 
       cumulativeSavingsNum > 0 && 
       savingsTrendingPositive && 
@@ -263,6 +261,7 @@ export const calculateSystemScore = (
   }
   
   // A Grade
+  // Annual utility costs = connection fees only, cumulative savings positive & trending, Annual TRUE-UP IS A CREDIT $0-$250
   else if (onlyPayingConnectionFees && 
            cumulativeSavingsNum > 0 && 
            savingsTrendingPositive && 
@@ -275,10 +274,11 @@ export const calculateSystemScore = (
   }
   
   // B Grade
+  // Cumulative savings positive & trending, Annual true-up OWED $0-$500
   else if (cumulativeSavingsNum > 0 && 
            savingsTrendingPositive && 
-           annualTrueUp >= 0 && 
-           annualTrueUp <= 500) {
+           annualTrueUpOwed >= 0 && 
+           annualTrueUpOwed <= 500) {
     score = 'B';
     status = 'good';
     message = 'Good system performance with solid savings.';
@@ -286,29 +286,20 @@ export const calculateSystemScore = (
   }
   
   // C Grade
+  // Cumulative savings positive & trending, Annual true-up OWED $500-$2000
   else if (cumulativeSavingsNum > 0 && 
            savingsTrendingPositive && 
-           annualTrueUp > 500 && 
-           annualTrueUp <= 2000) {
+           annualTrueUpOwed > 500 && 
+           annualTrueUpOwed <= 2000) {
     score = 'C';
     status = 'fair';
     message = 'Fair performance - system working but could be optimized.';
     recommendation = `You've saved money with solar, it's better than having no solar! However, your system may need an update. Consider adding more panels${!hasBattery ? ' and/or a battery' : ''} to reduce your annual true-up.`;
   }
   
-  // D Grade
-  else if (cumulativeSavingsNum >= 100 && 
-           !savingsTrendingPositive && 
-           annualTrueUp >= 1000) {
-    score = 'D';
-    status = 'poor';
-    message = 'Below expectations - system needs attention.';
-    recommendation = `You've saved money with solar, it's better than having no solar! However, your system may need an update or repair. It is highly recommended you consult a repair firm or add more panels${!hasBattery ? ' and a battery' : ''} to reduce your annual true-up.`;
-  }
-  
-  // F Grade
-  else if (cumulativeSavingsNum < 100 && 
-           annualTrueUp >= 1000) {
+  // F Grade - CHECK FIRST (more specific)
+  // Cumulative savings < $100 and may not improve OR Annual true-up OWED $1000+
+  else if (cumulativeSavingsNum < 100 || annualTrueUpOwed >= 1000) {
     score = 'F';
     status = 'failing';
     message = 'System significantly underperforming - immediate action needed.';
@@ -318,6 +309,15 @@ export const calculateSystemScore = (
     } else {
       recommendation = `Shoot! We believe in solar and what it can do for people. However there are many variables that can lead to a poor experience for a few systems. You may need a system repair or whole new system. Consult with a repair company or installation company.`;
     }
+  }
+  
+  // D Grade
+  // Cumulative savings low and may not improve OR Annual true-up OWED $1000+
+  else if (!savingsTrendingPositive || annualTrueUpOwed >= 1000) {
+    score = 'D';
+    status = 'poor';
+    message = 'Below expectations - system needs attention.';
+    recommendation = `You've saved money with solar, it's better than having no solar! However, your system may need an update or repair. It is highly recommended you consult a repair firm or add more panels${!hasBattery ? ' and a battery' : ''} to reduce your annual true-up.`;
   }
   
   // Default to C if none match
@@ -337,7 +337,13 @@ export const calculateSystemScore = (
       onlyPayingConnectionFees,
       cumulativeSavings: cumulativeSavingsNum,
       savingsTrendingPositive,
-      annualTrueUp,
+      annualTrueUpOwed,
+      annualCredit
+    }
+  };
+};
+      savingsTrendingPositive,
+      annualTrueUpOwed,
       annualCredit
     }
   };
@@ -592,6 +598,22 @@ export const calculateComprehensiveSavings = (inputs) => {
     expectedProduction: inputs.systemSize * 1400
   };
   
+  // Add backward compatibility for old InputSection
+  const backwardCompatibleLoanStructure = loanPaymentStructure ? {
+    ...loanPaymentStructure,
+    after18Months: loanPaymentStructure.paymentAfter18Months,
+    effectivePayment: loanPaymentStructure.initialPayment,
+    first18MonthsExtra: loanPaymentStructure.initialPayment,
+    reducedPayment: loanPaymentStructure.paymentAfter18Months
+  } : {
+    after18Months: 0,
+    effectivePayment: 0,
+    first18MonthsExtra: 0,
+    reducedPayment: 0,
+    initialPayment: 0,
+    paymentAfter18Months: 0
+  };
+
   return {
     cumulativeSavings: cumulativeSavings.toFixed(2),
     cumulativeCost: cumulativeCost.toFixed(2),
@@ -616,7 +638,7 @@ export const calculateComprehensiveSavings = (inputs) => {
     systemHealth, // Backward compatibility
     totalInvestment: totalInvestment.toFixed(2),
     currentNEMImpact,
-    loanPaymentStructure,
+    loanPaymentStructure: backwardCompatibleLoanStructure, // FIXED: Backward compatible
     ppaBuyoutCost: ppaBuyoutCost.toFixed(2),
     calculatedTaxCredit: calculatedTaxCredit.toFixed(2),
     utilityBillAtInstall: utilityBillAtInstall.toFixed(2),
