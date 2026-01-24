@@ -71,6 +71,14 @@ const SummaryTables = ({ calculations, inputs }) => {
               ${parseFloat(safeCalc.cumulativeTrueUpCharges || 0).toLocaleString()}
             </span>
           </div>
+          {safeCalc.cumulativeConnectionFees && parseFloat(safeCalc.cumulativeConnectionFees) > 0 && (
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-600">NEM 2.0 Connection Fees</span>
+              <span className="font-semibold text-blue-600">
+                ${parseFloat(safeCalc.cumulativeConnectionFees).toLocaleString()}
+              </span>
+            </div>
+          )}
           <div className="flex justify-between border-b pb-2">
             <span className="text-gray-600">Payback Period</span>
             <span className="font-semibold">
@@ -137,7 +145,7 @@ const SummaryTables = ({ calculations, inputs }) => {
             </span>
           </div>
           <div className="flex justify-between border-b pb-2">
-            <span className="text-gray-600">Utility Bill Now</span>
+            <span className="text-gray-600">Utility Bill if You Didn't Have Solar</span>
             <span className="font-semibold text-red-600">
               ${safeCalc.utilityBillNow || '0'}/mo
             </span>
