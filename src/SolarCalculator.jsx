@@ -7,6 +7,7 @@ import NEMStatusCard from './components/NEMStatusCard';
 import SystemHealthAlert from './components/SystemHealthAlert';
 import ChartsSection from './components/ChartsSection';
 import SummaryTables from './components/SummaryTables';
+import PDFReportGenerator from './components/PDFReportGenerator';
 
 const SolarCalculator = () => {
   const [inputs, setInputs] = useState(DEFAULT_INPUTS);
@@ -33,83 +34,10 @@ const SolarCalculator = () => {
   }, []);
 
   // Calculate all metrics whenever inputs change
-  const calculations = useMemo(() => {
-    try {
-      const result = calculateComprehensiveSavings(inputs);
-      
-      // BACKWARD COMPATIBILITY: If old components expect systemHealth, provide it
-      if (!result.systemHealth && result.systemScore) {
-        result.systemHealth = {
-          performanceRatio: 95, // Default safe value
-          status: result.systemScore.status,
-          message: result.systemScore.message,
-          expectedProduction: inputs.systemSize * 1400
-        };
-      }
-      
-      return result;
-    } catch (error) {
-      console.error('Calculation error:', error);
-      // Return safe defaults if calculation fails
-      return {
-        cumulativeSavings: '0',
-        cumulativeCost: '0',
-        cumulativeBatteryCost: '0',
-        cumulativeArbitrageSavings: '0',
-        cumulativeNEMCredits: '0',
-        cumulativeTrueUpCharges: '0',
-        monthsSinceInstall: 0,
-        yearsSinceInstall: '0',
-        avgMonthlySavings: '0',
-        currentUtilityRate: '0',
-        initialUtilityRate: '0',
-        rateIncrease: '0',
-        yearlyData: [],
-        paybackYears: '0',
-        paybackMonths: '0',
-        roi: '0',
-        offsetPercentage: '0',
-        usageGrowthRate: '0',
-        systemScore: {
-          score: 'C',
-          status: 'fair',
-          message: 'Calculating...',
-          recommendation: 'Please wait while we calculate your system score.',
-          metrics: {
-            onlyPayingConnectionFees: false,
-            cumulativeSavings: 0,
-            savingsTrendingPositive: true,
-            annualTrueUp: 0,
-            annualCredit: 0
-          }
-        },
-        systemHealth: {
-          performanceRatio: 95,
-          status: 'good',
-          message: 'System performing as expected',
-          expectedProduction: inputs.systemSize * 1400
-        },
-        totalInvestment: '0',
-        currentNEMImpact: {
-          type: 'trueup',
-          amount: 0,
-          shortage: 0,
-          rate: 0
-        },
-        loanPaymentStructure: {
-          effectivePayment: 0,
-          first18MonthsExtra: 0,
-          reducedPayment: 0,
-          after18Months: 0
-        },
-        calculatedTaxCredit: '0',
-        utilityBillAtInstall: '0',
-        utilityBillNow: '0',
-        utilityBillIncrease: '0',
-        currentAnnualUtilityCost: '0'
-      };
-    }
-  }, [inputs]);
+  const calculations = useMemo(() => 
+    calculateComprehensiveSavings(inputs), 
+    [inputs]
+  );
 
   const handleInputChange = (field, value) => {
     setInputs(prev => ({ ...prev, [field]: value }));
@@ -176,22 +104,11 @@ const SolarCalculator = () => {
           cumulativeTrueUpCharges={calculations.cumulativeTrueUpCharges}
         />
 
-        {/* System Score Alert - NEW (with fallback to old) */}
-        {calculations.systemScore ? (
-          <SystemHealthAlert 
-            systemScore={calculations.systemScore}
-          />
-        ) : calculations.systemHealth ? (
-          // OLD VERSION FALLBACK - if you still have old SystemHealthAlert
-          <div className="bg-blue-50 border-2 border-blue-300 rounded-xl shadow-lg p-6 mb-6">
-            <h3 className="font-semibold text-blue-800 mb-2">
-              System Health: {calculations.systemHealth.message}
-            </h3>
-            <p className="text-blue-700">
-              Performance Ratio: {calculations.systemHealth.performanceRatio?.toFixed(1)}%
-            </p>
-          </div>
-        ) : null}
+        {/* System Health Alert */}
+        <SystemHealthAlert 
+          systemHealth={calculations.systemHealth}
+          annualProduction={inputs.annualProduction}
+        />
 
         {/* Results Dashboard */}
         <ResultsDashboard calculations={calculations} />
@@ -209,6 +126,20 @@ const SolarCalculator = () => {
           calculations={calculations}
           inputs={inputs}
         />
+
+        {/* PDF Report Generator */}
+        <div className="bg-slate-800/60 backdrop-blur-md border border-emerald-500/30 rounded-xl shadow-2xl p-6 mb-6">
+          <h2 className="text-xl font-bold text-emerald-400 mb-2 flex items-center gap-2">
+            📄 Customer Report
+          </h2>
+          <p className="text-emerald-300/70 text-sm mb-4">
+            Generate a professional, print-ready PDF report with system analysis, financial summary, year-by-year breakdown, and personalized recommendations.
+          </p>
+          <PDFReportGenerator 
+            calculations={calculations}
+            inputs={inputs}
+          />
+        </div>
 
         {/* Data Sources Footer */}
         <div className="bg-slate-800/50 border border-cyan-500/30 rounded-lg p-4 text-sm text-cyan-300/80">
