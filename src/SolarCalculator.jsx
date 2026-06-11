@@ -7,6 +7,7 @@ import NEMStatusCard from './components/NEMStatusCard';
 import SystemHealthAlert from './components/SystemHealthAlert';
 import ChartsSection from './components/ChartsSection';
 import SummaryTables from './components/SummaryTables';
+import AINarrative from './components/AINarrative';
 import PDFReportGenerator from './components/PDFReportGenerator';
 
 const SolarCalculator = () => {
@@ -16,75 +17,56 @@ const SolarCalculator = () => {
   const [showHistoricalRates, setShowHistoricalRates] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // Auto-update current date on mount and when needed
+  // Phase 2: AI-generated narrative (shared between the UI card and the PDF)
+  const [narrative, setNarrative] = useState(null);
+
+  // Auto-update current date on mount
   useEffect(() => {
-    const updateCurrentDate = () => {
-      const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth() + 1;
-      
-      setInputs(prev => ({
-        ...prev,
-        nowYear: currentYear,
-        nowMonth: currentMonth
-      }));
-    };
-
-    updateCurrentDate();
-  }, []);
-
-  // Calculate all metrics whenever inputs change
-  const calculations = useMemo(() => 
-    calculateComprehensiveSavings(inputs), 
-    [inputs]
-  );
-
-  const handleInputChange = (field, value) => {
-    setInputs(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleApiConnect = () => {
-    setApiStatus({ connected: false, lastSync: null, error: 'Connecting...' });
-    
-    setTimeout(() => {
-      if (inputs.apiKey && inputs.systemId) {
-        setApiStatus({
-          connected: true,
-          lastSync: new Date().toISOString(),
-          error: null
-        });
-      } else {
-        setApiStatus({
-          connected: false,
-          lastSync: null,
-          error: 'Invalid API credentials'
-        });
-      }
-    }, 1500);
-  };
-
-  const handleUpdateSystem = () => {
-    setIsUpdating(true);
-    
-    // Update current date
     const now = new Date();
     setInputs(prev => ({
       ...prev,
       nowYear: now.getFullYear(),
       nowMonth: now.getMonth() + 1
     }));
+  }, []);
 
-    // Simulate calculation time
+  const calculations = useMemo(
+    () => calculateComprehensiveSavings(inputs),
+    [inputs]
+  );
+
+  const handleInputChange = (field, value) => {
+    setInputs(prev => ({ ...prev, [field]: value }));
+    // Audit data changed — any existing narrative is now stale
+    setNarrative(null);
+  };
+
+  const handleApiConnect = () => {
+    setApiStatus({ connected: false, lastSync: null, error: 'Connecting...' });
     setTimeout(() => {
-      setIsUpdating(false);
+      if (inputs.apiKey && inputs.systemId) {
+        setApiStatus({ connected: true, lastSync: new Date().toISOString(), error: null });
+      } else {
+        setApiStatus({ connected: false, lastSync: null, error: 'Invalid API credentials' });
+      }
     }, 1500);
+  };
+
+  const handleUpdateSystem = () => {
+    setIsUpdating(true);
+    const now = new Date();
+    setInputs(prev => ({
+      ...prev,
+      nowYear: now.getFullYear(),
+      nowMonth: now.getMonth() + 1
+    }));
+    setTimeout(() => setIsUpdating(false), 1500);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Input Section */}
-        <InputSection 
+        <InputSection
           inputs={inputs}
           onInputChange={handleInputChange}
           dataSource={dataSource}
@@ -96,52 +78,44 @@ const SolarCalculator = () => {
           isUpdating={isUpdating}
         />
 
-        {/* NEM Status Card */}
-        <NEMStatusCard 
+        <NEMStatusCard
           currentNEMImpact={calculations.currentNEMImpact}
           nemVersion={inputs.nemVersion}
           cumulativeNEMCredits={calculations.cumulativeNEMCredits}
           cumulativeTrueUpCharges={calculations.cumulativeTrueUpCharges}
         />
 
-        {/* System Health Alert */}
-        <SystemHealthAlert 
+        <SystemHealthAlert
           systemHealth={calculations.systemHealth}
           annualProduction={inputs.annualProduction}
         />
 
-        {/* Results Dashboard */}
         <ResultsDashboard calculations={calculations} />
 
-        {/* Charts Section */}
-        <ChartsSection 
+        {/* Phase 2: AI-Powered Personalized Narrative */}
+        <AINarrative
+          inputs={inputs}
+          calculations={calculations}
+          narrative={narrative}
+          onNarrativeGenerated={setNarrative}
+        />
+
+        {/* Customer-facing PDF report (includes narrative when generated) */}
+        <PDFReportGenerator
+          inputs={inputs}
+          calculations={calculations}
+          narrative={narrative}
+        />
+
+        <ChartsSection
           yearlyData={calculations.yearlyData}
           inputs={inputs}
           showHistoricalRates={showHistoricalRates}
           setShowHistoricalRates={setShowHistoricalRates}
         />
 
-        {/* Summary Tables */}
-        <SummaryTables 
-          calculations={calculations}
-          inputs={inputs}
-        />
+        <SummaryTables calculations={calculations} inputs={inputs} />
 
-        {/* PDF Report Generator */}
-        <div className="bg-slate-800/60 backdrop-blur-md border border-emerald-500/30 rounded-xl shadow-2xl p-6 mb-6">
-          <h2 className="text-xl font-bold text-emerald-400 mb-2 flex items-center gap-2">
-            📄 Customer Report
-          </h2>
-          <p className="text-emerald-300/70 text-sm mb-4">
-            Generate a professional, print-ready PDF report with system analysis, financial summary, year-by-year breakdown, and personalized recommendations.
-          </p>
-          <PDFReportGenerator 
-            calculations={calculations}
-            inputs={inputs}
-          />
-        </div>
-
-        {/* Data Sources Footer */}
         <div className="bg-slate-800/50 border border-cyan-500/30 rounded-lg p-4 text-sm text-cyan-300/80">
           <p className="font-semibold mb-2 text-cyan-400">Data Sources:</p>
           <ul className="list-disc list-inside space-y-1">
