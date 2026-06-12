@@ -65,8 +65,20 @@ const SolarCalculator = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
+    <div className="app-root min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
       <div className="max-w-7xl mx-auto">
+        {/* Print-only report header */}
+        <div className="hidden print:block mb-4 pb-3 border-b-2 border-amber-500">
+          <div className="flex justify-between items-end">
+            <h1 className="text-2xl font-bold text-slate-900">Solar Financial Audit</h1>
+            <div className="text-right text-xs text-slate-600">
+              {clientName && <p>Prepared for: <strong>{clientName}</strong></p>}
+              <p>{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="print:hidden">
         <InputSection
           inputs={inputs}
           onInputChange={handleInputChange}
@@ -78,6 +90,7 @@ const SolarCalculator = () => {
           onUpdate={handleUpdateSystem}
           isUpdating={isUpdating}
         />
+        </div>
 
         {/* System Report Card */}
         <SystemScore
@@ -109,9 +122,8 @@ const SolarCalculator = () => {
 
         {/* Customer-facing PDF report (includes narrative when generated) */}
         <PDFReportGenerator
-          inputs={inputs}
-          calculations={calculations}
-          narrative={narrative}
+          clientName={clientName}
+          setClientName={setClientName}
         />
 
         <ChartsSection
@@ -123,7 +135,7 @@ const SolarCalculator = () => {
 
         <SummaryTables calculations={calculations} inputs={inputs} />
 
-        <div className="bg-slate-800/50 border border-cyan-500/30 rounded-lg p-4 text-sm text-cyan-300/80">
+        <div className="print:hidden bg-slate-800/50 border border-cyan-500/30 rounded-lg p-4 text-sm text-cyan-300/80">
           <p className="font-semibold mb-2 text-cyan-400">Data Sources:</p>
           <ul className="list-disc list-inside space-y-1">
             <li>Utility rates: CPUC reports with updated 2025 rates (PG&E: $0.48/kWh, SDG&E: $0.52/kWh, SCE: $0.314/kWh)</li>
