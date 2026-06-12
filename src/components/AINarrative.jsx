@@ -70,7 +70,7 @@ const AINarrative = ({ inputs, calculations, narrative, onNarrativeGenerated }) 
         {status !== 'loading' && (
           <button
             onClick={generate}
-            className="shrink-0 bg-amber-400 hover:bg-amber-300 text-[#0a1628] font-semibold px-5 py-2.5 rounded-lg transition-colors flex items-center gap-2"
+            className="print:hidden shrink-0 bg-amber-400 hover:bg-amber-300 text-[#0a1628] font-semibold px-5 py-2.5 rounded-lg transition-colors flex items-center gap-2"
           >
             {status === 'done' ? <RefreshCw size={16} /> : <Sparkles size={16} />}
             {status === 'done' ? 'Regenerate' : 'Generate report'}
@@ -79,7 +79,7 @@ const AINarrative = ({ inputs, calculations, narrative, onNarrativeGenerated }) 
       </div>
 
       {status === 'idle' && (
-        <div className="text-slate-400 text-sm border border-dashed border-slate-600 rounded-lg p-6 text-center">
+        <div className="print:hidden text-slate-400 text-sm border border-dashed border-slate-600 rounded-lg p-6 text-center">
           Run the audit above, then generate your personalized summary.
         </div>
       )}
