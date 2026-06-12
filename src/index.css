@@ -1,3 +1,62 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ============================================================
+   PRINT STYLES — "Generate PDF" prints the live dashboard
+   ============================================================ */
+@media print {
+  @page {
+    size: letter;
+    margin: 0.45in;
+  }
+
+  /* White paper instead of the dark app background */
+  body,
+  .app-root {
+    background: #ffffff !important;
+    padding: 0 !important;
+  }
+
+  /* Keep card colors (KPI gradients, badges, charts) in the PDF */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Dark glass cards → white cards with dark text on paper */
+  [class*="bg-slate-8"],
+  [class*="bg-slate-9"],
+  [class*="from-slate-9"],
+  [class*="from-\[#0a1628\]"] {
+    background: #ffffff !important;
+    border-color: #e2e8f0 !important;
+    box-shadow: none !important;
+  }
+  [class*="text-slate-1"],
+  [class*="text-slate-2"],
+  [class*="text-slate-3"],
+  [class*="text-amber-1"],
+  [class*="text-cyan-2"],
+  [class*="text-cyan-3"] {
+    color: #1e293b !important;
+  }
+  [class*="text-amber-3"],
+  [class*="text-amber-4"] {
+    color: #92600a !important;
+  }
+  [class*="text-slate-4"] {
+    color: #475569 !important;
+  }
+
+  /* Don't split cards across pages */
+  .rounded-xl,
+  .rounded-lg {
+    break-inside: avoid;
+  }
+
+  /* Tighter spacing on paper */
+  .mb-6 {
+    margin-bottom: 0.75rem !important;
+  }
+}
