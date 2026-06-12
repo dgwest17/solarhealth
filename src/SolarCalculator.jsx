@@ -7,6 +7,7 @@ import NEMStatusCard from './components/NEMStatusCard';
 import SystemHealthAlert from './components/SystemHealthAlert';
 import ChartsSection from './components/ChartsSection';
 import SummaryTables from './components/SummaryTables';
+import SystemScore from './components/SystemScore';
 import AINarrative from './components/AINarrative';
 import PDFReportGenerator from './components/PDFReportGenerator';
 
@@ -76,6 +77,12 @@ const SolarCalculator = () => {
           calculations={calculations}
           onUpdate={handleUpdateSystem}
           isUpdating={isUpdating}
+        />
+
+        {/* System Report Card */}
+        <SystemScore
+          calculations={calculations}
+          inputs={inputs}
         />
 
         <NEMStatusCard
