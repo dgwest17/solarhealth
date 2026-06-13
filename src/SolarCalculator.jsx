@@ -21,6 +21,9 @@ const SolarCalculator = () => {
   // Phase 2: AI-generated narrative (shared between the UI card and the PDF)
   const [narrative, setNarrative] = useState(null);
 
+  // Client name shown on the printed report header
+  const [clientName, setClientName] = useState('');
+
   // Auto-update current date on mount
   useEffect(() => {
     const now = new Date();
