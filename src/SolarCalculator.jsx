@@ -95,48 +95,73 @@ const SolarCalculator = () => {
         />
         </div>
 
-        {/* System Report Card */}
+        {/* Sections below render in their natural source order on screen.
+            In print, .print-flow uses flex with `order:` to produce the
+            client-facing PDF sequence — without changing the on-screen layout. */}
+        <div className="print-flow">
+
+        {/* PDF page 1: System Score */}
+        <div className="print-order-1">
         <SystemScore
           calculations={calculations}
           inputs={inputs}
         />
+        </div>
 
+        {/* PDF page 1: NEM Analysis */}
+        <div className="print-order-2">
         <NEMStatusCard
           currentNEMImpact={calculations.currentNEMImpact}
           nemVersion={inputs.nemVersion}
           cumulativeNEMCredits={calculations.cumulativeNEMCredits}
           cumulativeTrueUpCharges={calculations.cumulativeTrueUpCharges}
         />
+        </div>
 
+        <div className="print-order-5">
         <SystemHealthAlert
           systemHealth={calculations.systemHealth}
           annualProduction={inputs.annualProduction}
         />
+        </div>
 
+        {/* PDF page 1: Savings/Payback summary (the 4 KPI cards) */}
+        <div className="print-order-3">
         <ResultsDashboard calculations={calculations} />
+        </div>
 
-        {/* Phase 2: AI-Powered Personalized Narrative */}
+        {/* PDF page 2 — narrative flows with the charts/tables block */}
+        <div className="print-order-6">
         <AINarrative
           inputs={inputs}
           calculations={calculations}
           narrative={narrative}
           onNarrativeGenerated={setNarrative}
         />
+        </div>
 
-        {/* Customer-facing PDF report (includes narrative when generated) */}
+        {/* PDF: hidden (config UI, not for clients) */}
         <PDFReportGenerator
           clientName={clientName}
           setClientName={setClientName}
         />
 
+        {/* PDF page 2: Charts */}
+        <div className="print-order-7">
         <ChartsSection
           yearlyData={calculations.yearlyData}
           inputs={inputs}
           showHistoricalRates={showHistoricalRates}
           setShowHistoricalRates={setShowHistoricalRates}
         />
+        </div>
 
+        {/* PDF page 2: Financial Summary + System Metrics */}
+        <div className="print-order-8">
         <SummaryTables calculations={calculations} inputs={inputs} />
+        </div>
+
+        </div>
 
         <div className="print:hidden bg-slate-800/50 border border-cyan-500/30 rounded-lg p-4 text-sm text-cyan-300/80">
           <p className="font-semibold mb-2 text-cyan-400">Data Sources:</p>
