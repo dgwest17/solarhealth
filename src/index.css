@@ -49,10 +49,35 @@
     color: #475569 !important;
   }
 
-  /* Don't split cards across pages */
+  /* Print-only: switch the section wrapper to flex column so `order:`
+     reorders sections for the PDF without affecting the on-screen layout */
+  .print-flow {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* PDF section order:
+     1. System Score
+     2. NEM Analysis
+     3. Summary of Savings/Payback (KPI cards)
+     5. SystemHealthAlert (only if shown)
+     ─ Page break ─
+     6. Narrative
+     7. Charts
+     8. Financial Summary + System Metrics */
+  .print-order-1 { order: 1; }
+  .print-order-2 { order: 2; }
+  .print-order-3 { order: 3; }
+  .print-order-5 { order: 5; }
+  .print-order-6 { order: 6; break-before: page; page-break-before: always; }
+  .print-order-7 { order: 7; }
+  .print-order-8 { order: 8; }
+
+  /* Never split an individual card across pages */
   .rounded-xl,
   .rounded-lg {
     break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   /* Tighter spacing on paper */
