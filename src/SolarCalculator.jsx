@@ -10,6 +10,7 @@ import SummaryTables from './components/SummaryTables';
 import SystemScore from './components/SystemScore';
 import AINarrative from './components/AINarrative';
 import PDFReportGenerator from './components/PDFReportGenerator';
+import SystemSpecsSheet from './components/SystemSpecsSheet';
 
 const SolarCalculator = () => {
   const [inputs, setInputs] = useState(DEFAULT_INPUTS);
@@ -130,8 +131,8 @@ const SolarCalculator = () => {
         <ResultsDashboard calculations={calculations} />
         </div>
 
-        {/* PDF page 2 — narrative flows with the charts/tables block */}
-        <div className="print-order-6">
+        {/* AI Narrative — on screen only, excluded from the PDF (print:hidden) */}
+        <div className="print:hidden">
         <AINarrative
           inputs={inputs}
           calculations={calculations}
@@ -147,7 +148,7 @@ const SolarCalculator = () => {
         />
 
         {/* PDF page 2: Charts */}
-        <div className="print-order-7">
+        <div className="print-order-6">
         <ChartsSection
           yearlyData={calculations.yearlyData}
           inputs={inputs}
@@ -157,9 +158,12 @@ const SolarCalculator = () => {
         </div>
 
         {/* PDF page 2: Financial Summary + System Metrics */}
-        <div className="print-order-8">
+        <div className="print-order-7">
         <SummaryTables calculations={calculations} inputs={inputs} />
         </div>
+
+        {/* PDF page 3: System Specifications (print-only) */}
+        <SystemSpecsSheet inputs={inputs} />
 
         </div>
 
