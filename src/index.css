@@ -71,7 +71,7 @@
   .print-order-5 { order: 5; }
   .print-order-6 { order: 6; break-before: page; page-break-before: always; }
   .print-order-7 { order: 7; }
-  .print-order-8 { order: 8; }
+  .print-order-9 { order: 9; break-before: page; page-break-before: always; }
 
   /* Never split an individual card across pages */
   .rounded-xl,
