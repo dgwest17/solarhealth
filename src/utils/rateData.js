@@ -20,9 +20,9 @@ export const UTILITY_RATES = {
 // Time-of-Use Rate Structures
 export const TOU_RATES = {
   SCE: { 
-    peak: 0.55,          // 4-9 PM
-    offPeak: 0.27,       // All other times
-    superOffPeak: 0.24   // 8 AM - 4 PM weekdays
+    peak: 0.65,          // 4-9 PM
+    offPeak: 0.35,       // All other times
+    superOffPeak: 0.25   // 8 AM - 4 PM weekdays
   },
   PGE: { 
     peak: 0.58, 
@@ -30,9 +30,9 @@ export const TOU_RATES = {
     superOffPeak: 0.26 
   },
   SDGE: { 
-    peak: 0.73, 
-    offPeak: 0.45, 
-    superOffPeak: 0.32 
+    peak: 0.79, 
+    offPeak: 0.48, 
+    superOffPeak: 0.12 
   }
 };
 
