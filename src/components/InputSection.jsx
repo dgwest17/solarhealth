@@ -72,7 +72,7 @@ const InputSection = ({
       <div className="flex justify-between items-start mb-6">
         <div>
           <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 mb-2 flex items-center gap-2">
-            ⚡ California Solar Financial Audit
+            ⚡ California Solar Audit
           </h1>
           <p className="text-cyan-300 text-sm">NEM Analysis • Real Utility Rates • CARE Program Support</p>
         </div>
