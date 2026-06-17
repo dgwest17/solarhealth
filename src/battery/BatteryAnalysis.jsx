@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Battery } from 'lucide-react';
-import BatteryConsumptionProduction from './components/BatteryConsumptionProduction';
+import BatteryConsumptionProduction from './BatteryConsumptionProduction';
 
 /**
  * Battery Analysis tab.
