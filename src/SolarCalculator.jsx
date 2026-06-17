@@ -74,7 +74,7 @@ const SolarCalculator = () => {
         {/* Print-only report header */}
         <div className="hidden print:block mb-4 pb-3 border-b-2 border-amber-500">
           <div className="flex justify-between items-end">
-            <h1 className="text-2xl font-bold text-slate-900">Solar Financial Audit</h1>
+            <h1 className="text-2xl font-bold text-slate-900">California Solar Audit</h1>
             <div className="text-right text-xs text-slate-600">
               {clientName && <p>Prepared for: <strong>{clientName}</strong></p>}
               <p>{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
@@ -96,40 +96,31 @@ const SolarCalculator = () => {
         />
         </div>
 
-        {/* Sections below render in their natural source order on screen.
-            In print, .print-flow uses flex with `order:` to produce the
-            client-facing PDF sequence — without changing the on-screen layout. */}
-        <div className="print-flow">
+        {/* Sections render in natural source order. In print, page breaks
+            (.print-break-before) split them into the client-facing PDF pages
+            without affecting the on-screen layout. */}
 
-        {/* PDF page 1: System Score */}
-        <div className="print-order-1">
+        {/* System Score */}
         <SystemScore
           calculations={calculations}
           inputs={inputs}
         />
-        </div>
 
-        {/* PDF page 1: NEM Analysis */}
-        <div className="print-order-2">
+        {/* NEM Analysis */}
         <NEMStatusCard
           currentNEMImpact={calculations.currentNEMImpact}
           nemVersion={inputs.nemVersion}
           cumulativeNEMCredits={calculations.cumulativeNEMCredits}
           cumulativeTrueUpCharges={calculations.cumulativeTrueUpCharges}
         />
-        </div>
 
-        <div className="print-order-5">
         <SystemHealthAlert
           systemHealth={calculations.systemHealth}
           annualProduction={inputs.annualProduction}
         />
-        </div>
 
-        {/* PDF page 1: Savings/Payback summary (the 4 KPI cards) */}
-        <div className="print-order-3">
+        {/* Savings/Payback summary (the 4 KPI cards) — last thing on PDF page 1 */}
         <ResultsDashboard calculations={calculations} />
-        </div>
 
         {/* AI Narrative — on screen only, excluded from the PDF (print:hidden) */}
         <div className="print:hidden">
@@ -147,8 +138,8 @@ const SolarCalculator = () => {
           setClientName={setClientName}
         />
 
-        {/* PDF page 2: Charts */}
-        <div className="print-order-6">
+        {/* PDF page 2 starts here: Charts */}
+        <div className="print-break-before">
         <ChartsSection
           yearlyData={calculations.yearlyData}
           inputs={inputs}
@@ -158,14 +149,10 @@ const SolarCalculator = () => {
         </div>
 
         {/* PDF page 2: Financial Summary + System Metrics */}
-        <div className="print-order-7">
         <SummaryTables calculations={calculations} inputs={inputs} />
-        </div>
 
-        {/* PDF page 3: System Specifications (print-only) */}
+        {/* PDF page 3: System Specifications (print-only, has its own page break) */}
         <SystemSpecsSheet inputs={inputs} />
-
-        </div>
 
         <div className="print:hidden bg-slate-800/50 border border-cyan-500/30 rounded-lg p-4 text-sm text-cyan-300/80">
           <p className="font-semibold mb-2 text-cyan-400">Data Sources:</p>
