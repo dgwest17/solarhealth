@@ -37,7 +37,7 @@ const SystemSpecsSheet = ({ inputs }) => {
   }
 
   return (
-    <div className="hidden print:block print-order-9" style={{ breakBefore: 'page', pageBreakBefore: 'always' }}>
+    <div className="hidden print:block" style={{ breakBefore: 'page', pageBreakBefore: 'always' }}>
       <div className="mb-4 pb-3 border-b-2 border-amber-500">
         <h1 className="text-2xl font-bold text-gray-900">System Specifications</h1>
         <p className="text-sm text-gray-500">The values this audit is based on</p>
