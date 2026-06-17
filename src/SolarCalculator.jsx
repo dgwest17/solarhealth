@@ -138,15 +138,13 @@ const SolarCalculator = () => {
           setClientName={setClientName}
         />
 
-        {/* PDF page 2 starts here: Charts */}
-        <div className="print-break-before">
+        {/* Charts — priority two on page 1, rest flow to page 2 (handled in print CSS) */}
         <ChartsSection
           yearlyData={calculations.yearlyData}
           inputs={inputs}
           showHistoricalRates={showHistoricalRates}
           setShowHistoricalRates={setShowHistoricalRates}
         />
-        </div>
 
         {/* PDF page 2: Financial Summary + System Metrics */}
         <SummaryTables calculations={calculations} inputs={inputs} />
