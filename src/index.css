@@ -56,6 +56,30 @@
     page-break-before: always;
   }
 
+  /* Priority charts (Cumulative Savings + Annual Cost Comparison): keep
+     both side-by-side on page 1, just under the KPI cards. Shorter in
+     print so they fit alongside the score/NEM/KPI content. */
+  .print-priority-charts {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.75rem !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .print-priority-charts .recharts-responsive-container {
+    height: 200px !important;
+  }
+
+  /* Secondary charts (rate history, usage growth, historical table):
+     start a fresh page. */
+  .print-secondary-charts {
+    break-before: page;
+    page-break-before: always;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.75rem !important;
+  }
+
   /* Never split a card, chart, or table across a page boundary */
   .rounded-xl,
   .rounded-lg,
