@@ -4,7 +4,7 @@ import {
   ResponsiveContainer, ReferenceArea
 } from 'recharts';
 import { Sun, Zap, ArrowDown } from 'lucide-react';
-import { CONSUMPTION_PROFILES, buildDailyOverlay } from './batteryModel';
+import { CONSUMPTION_PROFILES, buildDailyOverlay } from './BatteryModel';
 
 /**
  * Section 1 — Production / Consumption overlay.
