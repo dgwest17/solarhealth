@@ -4,7 +4,9 @@ import { UTILITY_RATES } from '../utils/rateData';
 
 const ChartsSection = ({ yearlyData, inputs, showHistoricalRates, setShowHistoricalRates }) => {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <>
+    {/* Priority charts — kept together on PDF page 1 */}
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 print-priority-charts">
       {/* Cumulative Savings Over Time */}
       <div className="bg-white rounded-xl shadow-lg p-6">
         <h3 className="text-lg font-semibold mb-4">Cumulative Savings Over Time</h3>
@@ -49,8 +51,10 @@ const ChartsSection = ({ yearlyData, inputs, showHistoricalRates, setShowHistori
           </BarChart>
         </ResponsiveContainer>
       </div>
+    </div>
 
-      {/* Utility Rate History */}
+    {/* Secondary charts — start PDF page 2 */}
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 print-secondary-charts">
       <div className="bg-white rounded-xl shadow-lg p-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold">Utility Rate History</h3>
@@ -117,6 +121,7 @@ const ChartsSection = ({ yearlyData, inputs, showHistoricalRates, setShowHistori
         </ResponsiveContainer>
       </div>
     </div>
+    </>
   );
 };
 
