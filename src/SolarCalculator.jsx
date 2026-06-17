@@ -11,6 +11,7 @@ import SystemScore from './components/SystemScore';
 import AINarrative from './components/AINarrative';
 import PDFReportGenerator from './components/PDFReportGenerator';
 import SystemSpecsSheet from './components/SystemSpecsSheet';
+import BatteryAnalysis from './battery/BatteryAnalysis';
 
 const SolarCalculator = () => {
   const [inputs, setInputs] = useState(DEFAULT_INPUTS);
@@ -24,6 +25,9 @@ const SolarCalculator = () => {
 
   // Client name shown on the printed report header
   const [clientName, setClientName] = useState('');
+
+  // Tab switcher: 'audit' (the financial audit) | 'battery' (battery analysis)
+  const [activeTab, setActiveTab] = useState('audit');
 
   // Auto-update current date on mount
   useEffect(() => {
@@ -82,6 +86,39 @@ const SolarCalculator = () => {
           </div>
         </div>
 
+        {/* Tab navigation (hidden in print) */}
+        <div className="print:hidden flex gap-2 mb-6 bg-slate-900/60 p-1.5 rounded-xl border border-slate-700/50 w-fit">
+          <button
+            onClick={() => setActiveTab('audit')}
+            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+              activeTab === 'audit'
+                ? 'bg-amber-400 text-slate-900'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            Financial Audit
+          </button>
+          <button
+            onClick={() => setActiveTab('battery')}
+            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+              activeTab === 'battery'
+                ? 'bg-amber-400 text-slate-900'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            Battery Analysis
+          </button>
+        </div>
+
+        {/* BATTERY ANALYSIS TAB */}
+        {activeTab === 'battery' && (
+          <div className="print:hidden">
+            <BatteryAnalysis inputs={inputs} />
+          </div>
+        )}
+
+        {/* FINANCIAL AUDIT TAB */}
+        <div style={{ display: activeTab === 'audit' ? 'block' : 'none' }}>
         <div className="print:hidden">
         <InputSection
           inputs={inputs}
@@ -160,6 +197,7 @@ const SolarCalculator = () => {
             <li>CARE Program: 30% discount applied to all utility rates</li>
             <li>Performance: California average 1400 kWh/kW/year</li>
           </ul>
+        </div>
         </div>
       </div>
     </div>
