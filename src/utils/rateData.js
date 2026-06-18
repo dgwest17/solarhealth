@@ -14,6 +14,11 @@ export const UTILITY_RATES = {
     2014: 0.232, 2015: 0.235, 2016: 0.249, 2017: 0.265, 2018: 0.285,
     2019: 0.315, 2020: 0.265, 2021: 0.340, 2022: 0.420, 2023: 0.440,
     2024: 0.450, 2025: 0.490, 2026: 0.51
+  },
+  SMUD: {
+    2014: 0.118, 2015: 0.121, 2016: 0.124, 2017: 0.128, 2018: 0.133,
+    2019: 0.139, 2020: 0.146, 2021: 0.158, 2022: 0.178, 2023: 0.205,
+    2024: 0.228, 2025: 0.245, 2026: 0.253
   }
 };
 
@@ -33,6 +38,11 @@ export const TOU_RATES = {
     peak: 0.79, 
     offPeak: 0.48, 
     superOffPeak: 0.12 
+  },
+  SMUD: {
+    peak: 0.3765,        // Summer peak: weekdays 5-8 PM
+    offPeak: 0.1550,     // Summer off-peak: midnight-noon, weekends/holidays
+    superOffPeak: 0.2139 // Summer mid-peak: noon-5 PM & 8 PM-midnight
   }
 };
 
@@ -40,7 +50,8 @@ export const TOU_RATES = {
 export const UTILITY_OPTIONS = [
   { value: 'SCE', label: 'Southern California Edison (SCE)' },
   { value: 'PGE', label: 'Pacific Gas & Electric (PG&E)' },
-  { value: 'SDGE', label: 'San Diego Gas & Electric (SDG&E)' }
+  { value: 'SDGE', label: 'San Diego Gas & Electric (SDG&E)' },
+  { value: 'SMUD', label: 'Sacramento Municipal Utility District (SMUD)' }
 ];
 
 // NEM version options
