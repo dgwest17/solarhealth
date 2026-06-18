@@ -7,7 +7,7 @@ import React from 'react';
  * Hidden on screen via `hidden print:block`.
  */
 const SystemSpecsSheet = ({ inputs }) => {
-  const utilityLabel = { PGE: 'PG&E', SCE: 'Southern California Edison', SDGE: 'SDG&E' }[inputs.utility] || inputs.utility;
+  const utilityLabel = { PGE: 'PG&E', SCE: 'Southern California Edison', SDGE: 'SDG&E', SMUD: 'SMUD' }[inputs.utility] || inputs.utility;
   const nemLabel = { NEM1: 'NEM 1.0', NEM2: 'NEM 2.0', NEM3: 'NEM 3.0' }[inputs.nemVersion] || inputs.nemVersion;
   const programLabel = { PPA: 'PPA / Lease', Loan: 'Loan', Cash: 'Cash Purchase', Other: 'Other' }[inputs.program] || inputs.program;
   const monthName = (m) => ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][m] || m;
