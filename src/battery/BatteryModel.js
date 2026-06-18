@@ -120,3 +120,84 @@ export const buildDailyOverlay = (profileKey, annualUsageKwh, annualProductionKw
     annualNighttimeImport: Math.round(nighttimeImport * 365)
   };
 };
+
+/* ============================================================
+   SECTION 3 & 4 — Export economics + battery recovery
+   ============================================================ */
+
+// Hardcoded constants (from research / NEM rules). Override in code as needed.
+export const GRID_LOSS_PCT = 15;            // line/transmission loss
+export const NET_COMPENSATION_RATE = 0.06;  // $/kWh net export comp (NEM3-style)
+
+/**
+ * Hours considered "daytime" (production) vs "nighttime" (import).
+ * Aligns with the production bell curve (~6am–7pm).
+ */
+const isDaytimeHour = (h) => h >= 6 && h <= 18;
+
+/**
+ * Section 3 — Export inefficiency economics.
+ *
+ * exportKwh / importKwh: annual kWh. If manual=false they come from the
+ * overlay model; if manual=true the caller supplies them.
+ *
+ * Daytime sell rate = utility superOffPeak (midday, when solar dumps to grid).
+ * Night buy rate     = utility peak (4-9pm+ when home pulls from grid).
+ */
+export const calculateExportEconomics = (touRates, exportKwh, importKwh) => {
+  const daytimeSellRate = touRates.superOffPeak; // midday export value
+  const nightBuyRate = touRates.peak;            // evening/peak import cost
+
+  const valueSold = exportKwh * daytimeSellRate;
+  const valueBought = importKwh * nightBuyRate;
+  const netCompensation = (exportKwh - importKwh) * NET_COMPENSATION_RATE;
+
+  return {
+    daytimeSellRate,
+    nightBuyRate,
+    valueSold,
+    valueBought,
+    netCompensation,
+    exportKwh,
+    importKwh
+  };
+};
+
+/**
+ * Section 4 — Battery recovery value.
+ *
+ * Instead of dumping daytime surplus to the grid at the low midday rate
+ * and buying back at peak, a battery stores that surplus and offsets the
+ * peak-rate import. Recovered value = energy shifted × (peak − midday).
+ *
+ * recoverableKwh is the lesser of daytime surplus and nighttime need
+ * (a battery can't shift more than it stores or more than the home uses),
+ * further capped by usable battery capacity over the year.
+ */
+export const calculateBatteryRecovery = (touRates, exportKwh, importKwh, batteryCapacityKwh, batteryEfficiency = 90) => {
+  // How much surplus a battery could realistically time-shift annually
+  const maxShiftable = Math.min(exportKwh, importKwh);
+
+  // Capacity ceiling: one usable cycle/day for a year
+  const usableDaily = (batteryCapacityKwh || 13.5) * (batteryEfficiency / 100);
+  const capacityCeiling = usableDaily * 365;
+
+  const shiftedKwh = Math.min(maxShiftable, capacityCeiling);
+
+  // Without battery: that energy was sold low (midday) — value = shifted × midday
+  const withoutBatteryValue = shiftedKwh * touRates.superOffPeak;
+  // With battery: that energy offsets peak imports — value = shifted × peak
+  const withBatteryValue = shiftedKwh * touRates.peak;
+
+  const annualRecovered = withBatteryValue - withoutBatteryValue;
+
+  return {
+    shiftedKwh: Math.round(shiftedKwh),
+    capacityCeiling: Math.round(capacityCeiling),
+    withoutBatteryValue,
+    withBatteryValue,
+    annualRecovered,
+    peakRate: touRates.peak,
+    middayRate: touRates.superOffPeak
+  };
+};

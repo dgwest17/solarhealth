@@ -1,15 +1,29 @@
 import React, { useState } from 'react';
 import { Battery } from 'lucide-react';
+import { buildDailyOverlay } from './BatteryModel';
 import BatteryConsumptionProduction from './BatteryConsumptionProduction';
+import BatteryEnergyLoss from './BatteryEnergyLoss';
+import BatteryExportInefficiencies from './BatteryExportInefficiencies';
+import BatteryRecovery from './BatteryRecovery';
 
 /**
- * Battery Analysis tab.
- * Section 1 (Production/Consumption overlay) is live.
- * Sections 2–4 (Energy Loss, Export Inefficiencies, Battery Recovery)
- * will be added next.
+ * Battery Analysis tab — four stacked sections:
+ *   1. Production / Consumption overlay (profile dropdown)
+ *   2. Energy Loss day/night graphic
+ *   3. Export Inefficiencies (economics + grid demand)
+ *   4. Battery Recovery (value recovered + backup)
+ *
+ * The overlay (built from the selected profile + the client's system data)
+ * is computed once here and shared, so every section stays in sync.
  */
 const BatteryAnalysis = ({ inputs }) => {
   const [profileKey, setProfileKey] = useState('evening_heavy');
+
+  const overlay = buildDailyOverlay(
+    profileKey,
+    inputs.currentAnnualUsage,
+    inputs.annualProduction
+  );
 
   return (
     <div>
@@ -23,14 +37,18 @@ const BatteryAnalysis = ({ inputs }) => {
         </p>
       </div>
 
-      {/* Section 1 */}
       <BatteryConsumptionProduction
         inputs={inputs}
         profileKey={profileKey}
         setProfileKey={setProfileKey}
+        overlay={overlay}
       />
 
-      {/* Sections 2–4 coming next */}
+      <BatteryEnergyLoss />
+
+      <BatteryExportInefficiencies inputs={inputs} overlay={overlay} />
+
+      <BatteryRecovery inputs={inputs} overlay={overlay} />
     </div>
   );
 };

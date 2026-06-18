@@ -4,20 +4,15 @@ import {
   ResponsiveContainer, ReferenceArea
 } from 'recharts';
 import { Sun, Zap, ArrowDown } from 'lucide-react';
-import { CONSUMPTION_PROFILES, buildDailyOverlay } from './BatteryModel';
+import { CONSUMPTION_PROFILES } from './BatteryModel';
 
 /**
  * Section 1 — Production / Consumption overlay.
  * 24-hour (12am–12am) average-day model. Production = yellow,
  * consumption = orange, with daytime overproduction highlighted.
+ * Receives the shared `overlay` from the container.
  */
-const BatteryConsumptionProduction = ({ inputs, profileKey, setProfileKey }) => {
-  const overlay = buildDailyOverlay(
-    profileKey,
-    inputs.currentAnnualUsage,
-    inputs.annualProduction
-  );
-
+const BatteryConsumptionProduction = ({ inputs, profileKey, setProfileKey, overlay }) => {
   // Find the daytime overproduction window (first/last hour with surplus)
   const surplusHours = overlay.data.filter((d) => d.surplus > 0).map((d) => d.hour);
   const surplusStart = surplusHours.length ? Math.min(...surplusHours) : null;
