@@ -201,3 +201,167 @@ export const calculateBatteryRecovery = (touRates, exportKwh, importKwh, battery
     middayRate: touRates.superOffPeak
   };
 };
+
+/* ============================================================
+   ENERGY CREDITS vs. REAL MONEY (NEM 1.0 / 2.0 reframing)
+   ------------------------------------------------------------
+   Exporting to the grid banks "energy credits" valued at the
+   export/midday rate — NOT cash. The only real money is the
+   year-end net true-up at NET_COMPENSATION_RATE ($0.06/kWh)
+   on net exported kWh. A customer can gross-overproduce and
+   STILL owe a true-up, because daytime credits (banked low)
+   don't cover nighttime imports (charged high).
+   ============================================================ */
+
+/**
+ * Energy-credit economics without a battery.
+ * - creditsEarned: value of exported kWh at the midday/export rate (bill credits)
+ * - importCost:    value of imported kWh at the peak rate (what credits get burned on)
+ * - netKwh:        export − import (positive = net over-producer)
+ * - realMoney:     net kWh × $0.06 (the only actual cash, if net positive)
+ * - trueUpOwed:    if import cost exceeds credits earned, the $ shortfall owed
+ */
+export const calculateEnergyCredits = (touRates, exportKwh, importKwh) => {
+  const exportRate = touRates.superOffPeak; // midday/export credit rate
+  const importRate = touRates.peak;          // evening/peak import rate
+
+  const creditsEarned = exportKwh * exportRate;
+  const importCost = importKwh * importRate;
+  const netKwh = exportKwh - importKwh;
+
+  const realMoney = netKwh > 0 ? netKwh * NET_COMPENSATION_RATE : 0;
+  const creditShortfall = importCost - creditsEarned; // >0 means a true-up bill
+  const trueUpOwed = creditShortfall > 0 ? creditShortfall : 0;
+
+  return {
+    exportRate,
+    importRate,
+    creditsEarned,
+    importCost,
+    netKwh,
+    realMoney,
+    trueUpOwed,
+    isNetOverProducer: netKwh > 0
+  };
+};
+
+/**
+ * Energy Credits Recovered by a battery.
+ * With a battery the customer "sells to themselves": stored surplus offsets
+ * peak imports, so the shifted kWh is effectively recovered at the PEAK rate
+ * instead of being dumped at the midday rate.
+ *
+ * Returns the recovered credit value plus the real-money net-export figure
+ * (still only $0.06 × net export for a gross over-producer).
+ */
+export const calculateCreditsRecovered = (touRates, exportKwh, importKwh, batteryCapacityKwh, batteryEfficiency = 90) => {
+  const recovery = calculateBatteryRecovery(touRates, exportKwh, importKwh, batteryCapacityKwh, batteryEfficiency);
+  const credits = calculateEnergyCredits(touRates, exportKwh, importKwh);
+
+  return {
+    ...recovery,
+    creditsRecovered: recovery.annualRecovered, // peak − midday spread on shifted kWh
+    realMoneyNetExport: credits.realMoney,       // $0.06 × net export (over-producers)
+    isNetOverProducer: credits.isNetOverProducer,
+    netKwh: credits.netKwh
+  };
+};
+
+/**
+ * 10-year projection of credit value LOST if the customer does nothing,
+ * as the utility keeps raising nighttime/peak rates to cope with rising
+ * demand (data centers, AI, EVs). Each year peak import rate escalates;
+ * the gap between what they pay at night and the credits they banked at
+ * midday widens.
+ *
+ * peakEscalationPct: annual % increase in peak import rate (default 8%).
+ * Returns yearly rows + cumulative lost credit value over 10 years.
+ */
+export const projectCreditLoss = (touRates, exportKwh, importKwh, peakEscalationPct = 8, years = 10) => {
+  const rows = [];
+  let cumulative = 0;
+  const baseImportRate = touRates.peak;
+  const exportRate = touRates.superOffPeak;
+
+  for (let y = 0; y < years; y++) {
+    const escalatedImportRate = baseImportRate * Math.pow(1 + peakEscalationPct / 100, y);
+    // Annual gap: what they pay to import at night vs. credits banked by day
+    const importCost = importKwh * escalatedImportRate;
+    const creditsEarned = exportKwh * exportRate; // export credits roughly flat (already suppressed)
+    const annualGap = Math.max(0, importCost - creditsEarned);
+    cumulative += annualGap;
+
+    rows.push({
+      year: new Date().getFullYear() + y,
+      importRate: Math.round(escalatedImportRate * 1000) / 1000,
+      annualGap: Math.round(annualGap),
+      cumulative: Math.round(cumulative)
+    });
+  }
+
+  return {
+    rows,
+    totalLost: Math.round(cumulative),
+    peakEscalationPct,
+    finalYearRate: rows[rows.length - 1].importRate
+  };
+};
+
+/* ============================================================
+   SECTION 6 — Battery Stabilization economics
+   (Upfront / Finance / Lease + VPP rebate)
+   ============================================================ */
+
+/**
+ * Estimated essential backup hours from raw total storage.
+ * Uses RAW kWh (note in UI: ~90% round-trip efficiency + reserve apply).
+ */
+export const estimateBackupHours = (totalKwh, essentialLoadKw = 0.75) => {
+  if (!essentialLoadKw) return 0;
+  return Math.round((totalKwh / essentialLoadKw) * 10) / 10;
+};
+
+/**
+ * Stabilization value for each purchase option.
+ *
+ * recoveredValuePerYear = Energy Credits Recovered / year (from §4)
+ * vppPerYear            = VPP rebate $/battery/yr × battery count (if enabled)
+ * ARS (Annual Recovered Savings) = recoveredValuePerYear + vppPerYear
+ *
+ * Upfront:  netInvestment = batteryValue − federal − localRebate
+ *           roiYears = netInvestment / ARS
+ * Finance/Lease: MRS = ARS / 12; monthlyInvestment = payment − MRS
+ *           if positive → "only $X/mo"; if negative → annual net win = |monthly|×12
+ */
+export const calculateStabilization = (option, inputs, recoveredValuePerYear, batteryCount, vppEnabled, vppPerBattery) => {
+  const vppPerYear = vppEnabled ? (vppPerBattery || 250) * (batteryCount || 1) : 0;
+  const ars = recoveredValuePerYear + vppPerYear;
+
+  const base = { ars, vppPerYear, recoveredValuePerYear };
+
+  if (option === 'upfront') {
+    const batteryValue = Number(inputs.batteryValue) || 0;
+    const federal = Number(inputs.federalIncentive) || 0;
+    const local = Number(inputs.localRebate) || 0;
+    const netInvestment = Math.max(0, batteryValue - federal - local);
+    const roiYears = ars > 0 ? netInvestment / ars : null;
+    return { ...base, option, netInvestment, roiYears };
+  }
+
+  // Finance & Lease share the monthly math
+  const monthlyPayment = Number(inputs.monthlyPayment) || 0;
+  const mrs = ars / 12;
+  const monthlyInvestment = monthlyPayment - mrs; // positive = net cost, negative = net win
+  const isNetWin = monthlyInvestment < 0;
+  const annualNetWin = isNetWin ? Math.abs(monthlyInvestment) * 12 : 0;
+
+  return {
+    ...base,
+    option,
+    monthlyPayment,
+    mrs,
+    monthlyInvestment,
+    isNetWin,
+    annualNetWin
+  };
+};

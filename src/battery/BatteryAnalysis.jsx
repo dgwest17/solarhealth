@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Battery } from 'lucide-react';
-import { buildDailyOverlay } from './BatteryModel';
+import { buildDailyOverlay, calculateCreditsRecovered } from './BatteryModel';
+import { TOU_RATES } from '../utils/rateData';
 import BatteryConsumptionProduction from './BatteryConsumptionProduction';
 import BatteryEnergyLoss from './BatteryEnergyLoss';
 import BatteryExportInefficiencies from './BatteryExportInefficiencies';
 import BatteryRecovery from './BatteryRecovery';
+import BatteryStabilization from './BatteryStabilization';
 
 /**
  * Battery Analysis tab — four stacked sections:
@@ -23,6 +25,16 @@ const BatteryAnalysis = ({ inputs }) => {
     profileKey,
     inputs.currentAnnualUsage,
     inputs.annualProduction
+  );
+
+  // Energy Credits Recovered / year — shared with the stabilization ROI math
+  const touRates = TOU_RATES[inputs.utility] || TOU_RATES.SCE;
+  const recovery = calculateCreditsRecovered(
+    touRates,
+    overlay.annualDaytimeOverproduction,
+    overlay.annualNighttimeImport,
+    inputs.batteryCapacity,
+    inputs.batteryEfficiency
   );
 
   return (
@@ -49,6 +61,12 @@ const BatteryAnalysis = ({ inputs }) => {
       <BatteryExportInefficiencies inputs={inputs} overlay={overlay} />
 
       <BatteryRecovery inputs={inputs} overlay={overlay} />
+
+      <BatteryStabilization
+        recoveredValuePerYear={recovery.creditsRecovered}
+        overlay={overlay}
+        inputs={inputs}
+      />
     </div>
   );
 };
