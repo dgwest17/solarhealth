@@ -23,12 +23,12 @@ const BatteryStabilization = ({ recoveredValuePerYear, overlay, inputs }) => {
   const [batteryCount, setBatteryCount] = useState(1);
 
   // Purchase-option inputs
-  const [batteryValue, setBatteryValue] = useState(16000);
-  const [federalIncentive, setFederalIncentive] = useState(4800);
+  const [batteryValue, setBatteryValue] = useState(20000);
+  const [federalIncentive, setFederalIncentive] = useState(6000);
   const [localRebate, setLocalRebate] = useState(0);
-  const [term, setTerm] = useState(120);
-  const [monthlyPayment, setMonthlyPayment] = useState(180);
-  const [escalator, setEscalator] = useState(0);
+  const [term, setTerm] = useState(144);
+  const [monthlyPayment, setMonthlyPayment] = useState(120);
+  const [escalator, setEscalator] = useState(2.9%);
 
   // VPP
   const [vppEnabled, setVppEnabled] = useState(false);
