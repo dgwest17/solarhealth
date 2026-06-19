@@ -28,7 +28,7 @@ const BatteryStabilization = ({ recoveredValuePerYear, overlay, inputs }) => {
   const [localRebate, setLocalRebate] = useState(0);
   const [term, setTerm] = useState(144);
   const [monthlyPayment, setMonthlyPayment] = useState(120);
-  const [escalator, setEscalator] = useState(2.9%);
+  const [escalator, setEscalator] = useState(2.9);
 
   // VPP
   const [vppEnabled, setVppEnabled] = useState(false);
