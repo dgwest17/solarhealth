@@ -2,7 +2,10 @@ import React from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
-import { BatteryCharging, ShieldCheck, TrendingUp, Sun, Moon, AlertTriangle, DollarSign, CreditCard } from 'lucide-react';
+import {
+  BatteryCharging, ShieldCheck, TrendingUp, AlertTriangle, DollarSign, CreditCard,
+  Server, Cpu, Car, Zap, TrendingDown
+} from 'lucide-react';
 import { TOU_RATES } from '../utils/rateData';
 import {
   calculateCreditsRecovered,
@@ -12,21 +15,24 @@ import {
 } from './BatteryModel';
 
 /**
- * Section 4 — What a Battery Recovers (Energy Credits framing).
+ * Section 4 — Grid pressure, the cost of doing nothing, and what a battery
+ * recovers (Energy Credits framing).
  *
- * Key reframe: exporting banks ENERGY CREDITS (valued at the midday/export
- * rate), not cash. The only real money is $0.06/kWh on NET exported kWh at
- * year-end true-up. A gross over-producer can still owe a true-up because
- * daytime credits don't cover nighttime peak imports. A battery lets them
- * "sell to themselves," recovering credits at the peak rate.
+ * Order (per latest design):
+ *   1. Energy-credit reality + true-up (real for over-consumers; potential as NEM ends)
+ *   2. "The Grid Is Getting Worse" — large, with a graphic
+ *   3. "The Cost of Doing Nothing" — 10-yr escalating-loss chart
+ *   4. "Energy Credits Recovered" — what a battery wins back
  */
 const BatteryRecovery = ({ inputs, overlay }) => {
   const touRates = TOU_RATES[inputs.utility] || TOU_RATES.SCE;
+  const u = inputs.utility;
 
   const credits = calculateEnergyCredits(
     touRates,
     overlay.annualDaytimeOverproduction,
-    overlay.annualNighttimeImport
+    overlay.annualNighttimeImport,
+    u
   );
 
   const recovery = calculateCreditsRecovered(
@@ -34,7 +40,8 @@ const BatteryRecovery = ({ inputs, overlay }) => {
     overlay.annualDaytimeOverproduction,
     overlay.annualNighttimeImport,
     inputs.batteryCapacity,
-    inputs.batteryEfficiency
+    inputs.batteryEfficiency,
+    u
   );
 
   const loss = projectCreditLoss(
@@ -42,7 +49,8 @@ const BatteryRecovery = ({ inputs, overlay }) => {
     overlay.annualDaytimeOverproduction,
     overlay.annualNighttimeImport,
     8, // 8%/yr peak escalation
-    10
+    10,
+    u
   );
 
   const money = (v) => `$${Math.round(v).toLocaleString()}`;
@@ -52,14 +60,14 @@ const BatteryRecovery = ({ inputs, overlay }) => {
     <div className="bg-gradient-to-br from-[#102a1a] to-[#0a1628] border border-green-400/40 rounded-xl shadow-2xl p-6 md:p-8 mb-6">
       <h2 className="text-2xl font-bold text-green-300 flex items-center gap-2 mb-1">
         <BatteryCharging size={24} className="text-green-400" />
-        Energy Credits Recovered
+        Your Energy, Your Credits
       </h2>
       <p className="text-slate-300 text-sm mb-6">
         Selling to the grid doesn't pay you cash — it banks <strong className="text-green-300">energy credits</strong> at
-        the low midday rate. A battery lets you "sell to yourself," recovering that energy at the high peak rate instead.
+        the low export rate. The real money is only ${NET_COMPENSATION_RATE.toFixed(2)}/kWh on your net export at year end.
       </p>
 
-      {/* Credits vs. real money explainer */}
+      {/* 1. Credits vs. real money + true-up reality */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div className="bg-slate-900/50 rounded-lg p-5 border border-amber-400/30">
           <div className="flex items-center gap-2 text-amber-300 text-sm font-semibold mb-3">
@@ -70,74 +78,122 @@ const BatteryRecovery = ({ inputs, overlay }) => {
               <span className="text-slate-300">Credits earned exporting</span>
               <span className="text-amber-300 font-semibold">{money(credits.creditsEarned)}</span>
             </div>
-            <div className="text-xs text-slate-500">{overlay.annualDaytimeOverproduction.toLocaleString()} kWh × {rate(credits.exportRate)} (midday)</div>
+            <div className="text-xs text-slate-500">{overlay.annualDaytimeOverproduction.toLocaleString()} kWh × {rate(credits.exportRate)} (export rate)</div>
             <div className="flex justify-between pt-1">
-              <span className="text-slate-300">Credits burned importing at night</span>
+              <span className="text-slate-300">Cost of importing at night</span>
               <span className="text-red-400 font-semibold">{money(credits.importCost)}</span>
             </div>
             <div className="text-xs text-slate-500">{overlay.annualNighttimeImport.toLocaleString()} kWh × {rate(credits.importRate)} (peak)</div>
           </div>
-          {credits.trueUpOwed > 0 && (
-            <div className="mt-3 bg-red-900/30 border border-red-400/40 rounded p-3 flex items-start gap-2">
-              <AlertTriangle size={15} className="text-red-400 mt-0.5 shrink-0" />
-              <span className="text-sm text-red-200">
-                Even while over-producing, your credits don't cover your nighttime imports — leaving a
-                <strong className="text-red-300"> {money(credits.trueUpOwed)} true-up</strong> at year end.
-              </span>
-            </div>
-          )}
         </div>
 
-        <div className="bg-slate-900/50 rounded-lg p-5 border border-slate-700/50">
-          <div className="flex items-center gap-2 text-slate-200 text-sm font-semibold mb-3">
-            <DollarSign size={15} className="text-green-400" /> Real Money (year-end true-up)
+        {/* True-up: real (over-consumer) vs potential (post-NEM) side by side */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className={`rounded-lg p-4 border ${credits.isNetOverProducer ? 'bg-slate-900/40 border-slate-700/50' : 'bg-red-900/30 border-red-400/40'}`}>
+            <div className="text-xs text-slate-300 mb-1">True-Up Today</div>
+            {credits.isNetOverProducer ? (
+              <>
+                <div className="text-2xl font-bold text-green-400">{money(0)}</div>
+                <p className="text-[11px] text-slate-400 mt-2">
+                  You over-produce, so your credits net out the year. No real true-up — for now.
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-red-400">{money(credits.trueUpOwed)}</div>
+                <p className="text-[11px] text-red-200/80 mt-2">
+                  You consume more than you export — a real shortfall of {Math.round(credits.shortfallKwh).toLocaleString()} kWh billed at peak.
+                </p>
+              </>
+            )}
           </div>
-          {recovery.isNetOverProducer ? (
-            <>
-              <div className="text-3xl font-bold text-green-400">{money(recovery.realMoneyNetExport)}</div>
-              <div className="text-xs text-slate-500 mt-2">
-                {Math.round(recovery.netKwh).toLocaleString()} net kWh exported × ${NET_COMPENSATION_RATE.toFixed(2)}/kWh
-              </div>
-              <p className="text-xs text-slate-400 mt-3">
-                This is the only actual cash the utility pays you — regardless of how much credit value you banked.
-              </p>
-            </>
-          ) : (
-            <>
-              <div className="text-2xl font-bold text-orange-400">Net importer</div>
-              <p className="text-xs text-slate-400 mt-3">
-                You consume more than you export, so there's no net cash — and a battery can balance that excess
-                consumption even without adding solar.
-              </p>
-            </>
-          )}
+          <div className="rounded-lg p-4 border bg-orange-900/20 border-orange-400/40">
+            <div className="text-xs text-orange-200 mb-1 flex items-center gap-1">
+              <AlertTriangle size={12} /> If NEM Goes Away
+            </div>
+            <div className="text-2xl font-bold text-orange-400">{money(credits.potentialTrueUp)}</div>
+            <p className="text-[11px] text-orange-200/70 mt-2">
+              Lose net-metering credit netting and this is the annual gap you'd owe — even as an over-producer.
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Credits recovered headline */}
-      <div className="bg-green-400/10 border border-green-400/40 rounded-lg p-6 text-center mb-3">
-        <div className="text-sm text-green-200 uppercase tracking-wider flex items-center justify-center gap-2">
-          <TrendingUp size={16} /> Energy Credits Recovered Each Year
+      {/* Real money line */}
+      <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700/50 mb-8 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <DollarSign size={16} className="text-green-400" />
+          <span className="text-sm text-slate-200">Real cash the utility actually pays you (net export)</span>
         </div>
-        <div className="text-5xl font-extrabold text-green-300 mt-2">{money(recovery.creditsRecovered)}</div>
-        <div className="text-xs text-slate-400 mt-2">
-          By shifting {recovery.shiftedKwh.toLocaleString()} kWh from midday export ({rate(recovery.middayRate)}) to peak-rate use ({rate(recovery.peakRate)})
+        <span className="text-xl font-bold text-green-400">
+          {credits.isNetOverProducer ? `${money(credits.realMoney)}/yr` : 'Net importer — $0'}
+        </span>
+      </div>
+
+      {/* 2. THE GRID IS GETTING WORSE — large feature block with graphic */}
+      <div className="bg-gradient-to-br from-[#2a1410] to-[#0a1628] border-2 border-red-500/40 rounded-2xl p-6 md:p-8 mb-6">
+        <h3 className="text-2xl md:text-3xl font-extrabold text-red-300 flex items-center gap-2 mb-2">
+          <TrendingDown size={28} className="text-red-400" /> The Grid Is Getting Worse
+        </h3>
+        <p className="text-slate-300 text-sm md:text-base mb-6 max-w-3xl">
+          California's grid is under unprecedented strain. Soaring demand and an aging system mean
+          nighttime rates — the rates you pay most — climb relentlessly. The pressure is structural, and it's accelerating.
+        </p>
+
+        {/* Graphic: demand drivers feeding a rising-load grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-center mb-6">
+          <div className="lg:col-span-3 grid grid-cols-3 gap-3">
+            <DemandDriver icon={Server} label="Data Centers" stat="+160%" sub="load by 2030" />
+            <DemandDriver icon={Cpu} label="AI Compute" stat="3–4×" sub="power per query" />
+            <DemandDriver icon={Car} label="EV Charging" stat="+300%" sub="evening demand" />
+          </div>
+          <div className="lg:col-span-2">
+            <svg viewBox="0 0 240 140" className="w-full">
+              <defs>
+                <linearGradient id="gridRise" x1="0" y1="1" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#f59e0b" />
+                  <stop offset="100%" stopColor="#ef4444" />
+                </linearGradient>
+              </defs>
+              {/* axes */}
+              <line x1="30" y1="115" x2="225" y2="115" stroke="#475569" strokeWidth="1.5" />
+              <line x1="30" y1="15" x2="30" y2="115" stroke="#475569" strokeWidth="1.5" />
+              {/* rising demand curve */}
+              <path d="M30 105 Q90 100 130 75 T225 20" fill="none" stroke="url(#gridRise)" strokeWidth="3.5" />
+              {/* pylons */}
+              {[70, 120, 170].map((x, i) => (
+                <g key={i} stroke="#64748b" strokeWidth="1.4" fill="none">
+                  <line x1={x} y1="115" x2={x} y2="92" />
+                  <line x1={x - 9} y1="98" x2={x + 9} y2="98" />
+                  <line x1={x - 7} y1="103" x2={x + 7} y2="103" />
+                </g>
+              ))}
+              <circle cx="225" cy="20" r="5" fill="#ef4444">
+                <animate attributeName="r" values="4;7;4" dur="1.8s" repeatCount="indefinite" />
+              </circle>
+              <text x="34" y="28" fill="#94a3b8" fontSize="9">Rate $</text>
+              <text x="150" y="135" fill="#94a3b8" fontSize="9">Time →</text>
+            </svg>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <GridPoint icon={Zap} title="Aging Infrastructure" body="Decades-old transmission strains under load it was never built for, driving costly upgrades onto your bill." />
+          <GridPoint icon={TrendingUp} title="TOU Rates Climbing" body="Evening peak windows get pricier as utilities push you to pay the most exactly when solar can't help." />
+          <GridPoint icon={TrendingDown} title="Net Metering Shrinking" body="Each NEM revision pays you less for export — your banked credits are worth less every year." />
         </div>
       </div>
-      <p className="text-xs text-slate-500 text-center mb-6">
-        Raw storage figures shown. Actual delivery is ~90% of capacity after round-trip efficiency and your set reserve.
-      </p>
 
-      {/* 10-year escalating loss projection */}
-      <div className="bg-slate-900/60 rounded-lg p-5 border border-red-400/30 mb-6">
+      {/* 3. THE COST OF DOING NOTHING — 10-yr escalating loss (now under grid) */}
+      <div className="bg-slate-900/60 rounded-lg p-5 border border-red-400/30 mb-8">
         <h3 className="text-red-300 font-bold flex items-center gap-2 mb-1">
           <AlertTriangle size={18} /> The Cost of Doing Nothing
         </h3>
         <p className="text-slate-300 text-sm mb-4">
-          As data centers, AI, and EVs strain the grid, utilities keep raising nighttime rates. Here's the credit
-          value you stand to lose over 10 years if you stay exposed — modeled at {loss.peakEscalationPct}%/yr peak escalation.
+          Hold today's setup steady while peak rates escalate {loss.peakEscalationPct}%/yr, and here's the credit
+          value you stand to lose over the next 10 years.
         </p>
-        <ResponsiveContainer width="100%" height={200}>
+        <ResponsiveContainer width="100%" height={220}>
           <AreaChart data={loss.rows} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="lossGrad" x1="0" y1="0" x2="0" y2="1">
@@ -156,13 +212,28 @@ const BatteryRecovery = ({ inputs, overlay }) => {
           </AreaChart>
         </ResponsiveContainer>
         <div className="mt-3 text-center">
-          <span className="text-sm text-slate-300">Projected 10-year credit value lost: </span>
+          <span className="text-sm text-slate-300">Projected 10-year value lost: </span>
           <span className="text-2xl font-bold text-red-400">{money(loss.totalLost)}</span>
           <div className="text-xs text-slate-500 mt-1">
             Nighttime rate rising from {rate(touRates.peak)} to ~{rate(loss.finalYearRate)} by {loss.rows[loss.rows.length-1].year}
           </div>
         </div>
       </div>
+
+      {/* 4. ENERGY CREDITS RECOVERED — what a battery wins back */}
+      <div className="bg-green-400/10 border border-green-400/40 rounded-lg p-6 text-center mb-3">
+        <div className="text-sm text-green-200 uppercase tracking-wider flex items-center justify-center gap-2">
+          <TrendingUp size={16} /> Energy Credits Recovered Each Year
+        </div>
+        <div className="text-5xl font-extrabold text-green-300 mt-2">{money(recovery.creditsRecovered)}</div>
+        <div className="text-xs text-slate-400 mt-2">
+          By shifting {recovery.shiftedKwh.toLocaleString()} kWh from low-rate export ({rate(recovery.middayRate)}) to peak-rate use ({rate(recovery.peakRate)})
+        </div>
+      </div>
+      <p className="text-xs text-slate-500 text-center mb-6">
+        A battery lets you "sell to yourself" — recovering energy at the peak rate you'd otherwise pay. Raw storage
+        figures shown; actual delivery is ~90% of capacity after round-trip efficiency and your set reserve.
+      </p>
 
       {/* Backup value */}
       <div className="bg-slate-900/50 rounded-lg p-5 border border-slate-700/50 flex items-start gap-3">
@@ -182,5 +253,23 @@ const BatteryRecovery = ({ inputs, overlay }) => {
     </div>
   );
 };
+
+const DemandDriver = ({ icon: Icon, label, stat, sub }) => (
+  <div className="bg-slate-900/50 rounded-xl p-4 border border-red-400/20 text-center">
+    <Icon size={22} className="text-red-400 mx-auto mb-2" />
+    <div className="text-2xl font-extrabold text-red-300">{stat}</div>
+    <div className="text-xs text-slate-200 font-semibold mt-1">{label}</div>
+    <div className="text-[10px] text-slate-500">{sub}</div>
+  </div>
+);
+
+const GridPoint = ({ icon: Icon, title, body }) => (
+  <div className="bg-slate-900/40 rounded-lg p-4 border border-slate-700/50">
+    <div className="flex items-center gap-2 text-red-200 font-semibold text-sm mb-1">
+      <Icon size={15} className="text-red-400" /> {title}
+    </div>
+    <p className="text-xs text-slate-400">{body}</p>
+  </div>
+);
 
 export default BatteryRecovery;

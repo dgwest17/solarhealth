@@ -130,6 +130,17 @@ export const GRID_LOSS_PCT = 15;            // line/transmission loss
 export const NET_COMPENSATION_RATE = 0.06;  // $/kWh net export comp (NEM3-style)
 
 /**
+ * The rate at which exported daytime energy is CREDITED, by utility.
+ * Most CA TOU plans value midday export at the super-off-peak tier, but
+ * SDG&E credits daytime export at the OFF-PEAK tier (higher than super-off-peak).
+ * Centralizing this so every calc uses the correct per-utility export rate.
+ */
+export const getExportCreditRate = (touRates, utility) => {
+  if (utility === 'SDGE') return touRates.offPeak;
+  return touRates.superOffPeak;
+};
+
+/**
  * Hours considered "daytime" (production) vs "nighttime" (import).
  * Aligns with the production bell curve (~6am–7pm).
  */
@@ -174,7 +185,7 @@ export const calculateExportEconomics = (touRates, exportKwh, importKwh) => {
  * (a battery can't shift more than it stores or more than the home uses),
  * further capped by usable battery capacity over the year.
  */
-export const calculateBatteryRecovery = (touRates, exportKwh, importKwh, batteryCapacityKwh, batteryEfficiency = 90) => {
+export const calculateBatteryRecovery = (touRates, exportKwh, importKwh, batteryCapacityKwh, batteryEfficiency = 90, utility) => {
   // How much surplus a battery could realistically time-shift annually
   const maxShiftable = Math.min(exportKwh, importKwh);
 
@@ -184,8 +195,9 @@ export const calculateBatteryRecovery = (touRates, exportKwh, importKwh, battery
 
   const shiftedKwh = Math.min(maxShiftable, capacityCeiling);
 
-  // Without battery: that energy was sold low (midday) — value = shifted × midday
-  const withoutBatteryValue = shiftedKwh * touRates.superOffPeak;
+  const exportRate = getExportCreditRate(touRates, utility);
+  // Without battery: that energy was sold low (export rate) — value = shifted × export
+  const withoutBatteryValue = shiftedKwh * exportRate;
   // With battery: that energy offsets peak imports — value = shifted × peak
   const withBatteryValue = shiftedKwh * touRates.peak;
 
@@ -198,7 +210,7 @@ export const calculateBatteryRecovery = (touRates, exportKwh, importKwh, battery
     withBatteryValue,
     annualRecovered,
     peakRate: touRates.peak,
-    middayRate: touRates.superOffPeak
+    middayRate: exportRate
   };
 };
 
@@ -215,23 +227,37 @@ export const calculateBatteryRecovery = (touRates, exportKwh, importKwh, battery
 
 /**
  * Energy-credit economics without a battery.
- * - creditsEarned: value of exported kWh at the midday/export rate (bill credits)
- * - importCost:    value of imported kWh at the peak rate (what credits get burned on)
- * - netKwh:        export − import (positive = net over-producer)
- * - realMoney:     net kWh × $0.06 (the only actual cash, if net positive)
- * - trueUpOwed:    if import cost exceeds credits earned, the $ shortfall owed
+ *
+ * Reframed true-up logic:
+ *  - A NET OVER-PRODUCER (exports >= imports, by kWh) does NOT owe a real
+ *    true-up under current NEM 2.0/1.0 — their banked credits net out the
+ *    annual balance. We still surface the POTENTIAL true-up they'd face once
+ *    net-metering goes away (post-NEM), so they see the looming risk.
+ *  - A NET OVER-CONSUMER (imports > exports) owes a real true-up now:
+ *    the kWh shortfall billed at the import (peak) rate.
+ *
+ * export rate is per-utility (SDG&E credits daytime export at off-peak).
  */
-export const calculateEnergyCredits = (touRates, exportKwh, importKwh) => {
-  const exportRate = touRates.superOffPeak; // midday/export credit rate
+export const calculateEnergyCredits = (touRates, exportKwh, importKwh, utility) => {
+  const exportRate = getExportCreditRate(touRates, utility); // per-utility credit rate
   const importRate = touRates.peak;          // evening/peak import rate
 
   const creditsEarned = exportKwh * exportRate;
   const importCost = importKwh * importRate;
   const netKwh = exportKwh - importKwh;
+  const isNetOverProducer = netKwh >= 0;
 
+  // Real money paid to a net over-producer at year-end (NEM3-style net comp)
   const realMoney = netKwh > 0 ? netKwh * NET_COMPENSATION_RATE : 0;
-  const creditShortfall = importCost - creditsEarned; // >0 means a true-up bill
-  const trueUpOwed = creditShortfall > 0 ? creditShortfall : 0;
+
+  // REAL true-up today: only when they're a net over-CONSUMER (kWh shortfall).
+  const shortfallKwh = netKwh < 0 ? Math.abs(netKwh) : 0;
+  const trueUpOwed = shortfallKwh * importRate;
+
+  // POTENTIAL true-up if net metering disappears: even an over-producer loses
+  // the credit netting and pays the full dollar gap between high-rate imports
+  // and low-rate export compensation.
+  const potentialTrueUp = Math.max(0, importCost - creditsEarned);
 
   return {
     exportRate,
@@ -240,8 +266,10 @@ export const calculateEnergyCredits = (touRates, exportKwh, importKwh) => {
     importCost,
     netKwh,
     realMoney,
-    trueUpOwed,
-    isNetOverProducer: netKwh > 0
+    trueUpOwed,          // real, current — nonzero only for over-consumers
+    potentialTrueUp,     // looming risk as NEM is lost
+    shortfallKwh,
+    isNetOverProducer
   };
 };
 
@@ -250,17 +278,14 @@ export const calculateEnergyCredits = (touRates, exportKwh, importKwh) => {
  * With a battery the customer "sells to themselves": stored surplus offsets
  * peak imports, so the shifted kWh is effectively recovered at the PEAK rate
  * instead of being dumped at the midday rate.
- *
- * Returns the recovered credit value plus the real-money net-export figure
- * (still only $0.06 × net export for a gross over-producer).
  */
-export const calculateCreditsRecovered = (touRates, exportKwh, importKwh, batteryCapacityKwh, batteryEfficiency = 90) => {
-  const recovery = calculateBatteryRecovery(touRates, exportKwh, importKwh, batteryCapacityKwh, batteryEfficiency);
-  const credits = calculateEnergyCredits(touRates, exportKwh, importKwh);
+export const calculateCreditsRecovered = (touRates, exportKwh, importKwh, batteryCapacityKwh, batteryEfficiency = 90, utility) => {
+  const recovery = calculateBatteryRecovery(touRates, exportKwh, importKwh, batteryCapacityKwh, batteryEfficiency, utility);
+  const credits = calculateEnergyCredits(touRates, exportKwh, importKwh, utility);
 
   return {
     ...recovery,
-    creditsRecovered: recovery.annualRecovered, // peak − midday spread on shifted kWh
+    creditsRecovered: recovery.annualRecovered, // peak − export spread on shifted kWh
     realMoneyNetExport: credits.realMoney,       // $0.06 × net export (over-producers)
     isNetOverProducer: credits.isNetOverProducer,
     netKwh: credits.netKwh
@@ -277,11 +302,11 @@ export const calculateCreditsRecovered = (touRates, exportKwh, importKwh, batter
  * peakEscalationPct: annual % increase in peak import rate (default 8%).
  * Returns yearly rows + cumulative lost credit value over 10 years.
  */
-export const projectCreditLoss = (touRates, exportKwh, importKwh, peakEscalationPct = 8, years = 10) => {
+export const projectCreditLoss = (touRates, exportKwh, importKwh, peakEscalationPct = 8, years = 10, utility) => {
   const rows = [];
   let cumulative = 0;
   const baseImportRate = touRates.peak;
-  const exportRate = touRates.superOffPeak;
+  const exportRate = getExportCreditRate(touRates, utility);
 
   for (let y = 0; y < years; y++) {
     const escalatedImportRate = baseImportRate * Math.pow(1 + peakEscalationPct / 100, y);

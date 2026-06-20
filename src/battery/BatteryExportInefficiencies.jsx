@@ -119,34 +119,6 @@ const BatteryExportInefficiencies = ({ inputs, overlay }) => {
           </div>
         </div>
       </div>
-
-      {/* Grid Demand is Worsening */}
-      <div className="mt-6 bg-slate-900/60 rounded-lg p-5 border border-red-400/30">
-        <h3 className="text-red-300 font-bold flex items-center gap-2 mb-3">
-          <TrendingDown size={18} /> Grid Demand Is Worsening
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          <div className="flex items-start gap-2 text-slate-200">
-            <Zap size={15} className="text-red-400 mt-0.5 shrink-0" />
-            Aging grid infrastructure straining under loads it was never built for.
-          </div>
-          <div className="flex items-start gap-2 text-slate-200">
-            <Server size={15} className="text-red-400 mt-0.5 shrink-0" />
-            ~300% demand growth coming from data centers and EV adoption.
-          </div>
-          <div className="flex items-start gap-2 text-slate-200">
-            <AlertCircle size={15} className="text-red-400 mt-0.5 shrink-0" />
-            Time-of-Use rates keep climbing during evening peak hours.
-          </div>
-          <div className="flex items-start gap-2 text-slate-200">
-            <TrendingDown size={15} className="text-red-400 mt-0.5 shrink-0" />
-            Solar buyback rates have been repeatedly cut (NEM 3.0).
-          </div>
-        </div>
-        <p className="text-amber-200 text-sm mt-4 font-medium">
-          So what do the utilities want you to do? Keep sending them cheap daytime power — and keep buying it back at peak. A battery is how you opt out.
-        </p>
-      </div>
     </div>
   );
 };

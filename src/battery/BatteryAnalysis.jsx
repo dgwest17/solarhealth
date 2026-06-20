@@ -34,7 +34,8 @@ const BatteryAnalysis = ({ inputs }) => {
     overlay.annualDaytimeOverproduction,
     overlay.annualNighttimeImport,
     inputs.batteryCapacity,
-    inputs.batteryEfficiency
+    inputs.batteryEfficiency,
+    inputs.utility
   );
 
   return (
