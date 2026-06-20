@@ -86,3 +86,48 @@ export const API_PROVIDERS = [
   { value: 'tesla', label: 'Tesla (Powerwall)' },
   { value: 'manual', label: 'Manual Override' }
 ];
+
+// Installer options — Southern California.
+// Grouped: active installers, national financiers/installers, and
+// recently-defunct companies (warranty-orphaned customers — prime audit targets).
+// "defunct" flag lets the UI/audit highlight orphaned-warranty systems.
+export const INSTALLER_OPTIONS = [
+  // ---- Active regional / SoCal installers ----
+  { value: 'Baker Electric Home Energy', label: 'Baker Electric Home Energy', defunct: false },
+  { value: 'Stellar Solar', label: 'Stellar Solar', defunct: false },
+  { value: 'Semper Solaris', label: 'Semper Solaris', defunct: false },
+  { value: 'Sullivan Solar Power', label: 'Sullivan Solar Power', defunct: true },
+  { value: 'Sunline Energy', label: 'Sunline Energy', defunct: false },
+  { value: 'SolarTech', label: 'SolarTech', defunct: false },
+  { value: 'NRG Clean Power', label: 'NRG Clean Power', defunct: false },
+  { value: 'GC Electric Solar', label: 'GC Electric Solar', defunct: false },
+  { value: 'Ameco Solar', label: 'Ameco Solar', defunct: false },
+  { value: 'Sunlux', label: 'Sunlux', defunct: false },
+  { value: 'Action Solar', label: 'Action Solar', defunct: false },
+  { value: 'HES Solar', label: 'HES Solar', defunct: false },
+  { value: 'Sun Pacific Solar', label: 'Sun Pacific Solar', defunct: false },
+  { value: 'Solar Optimum', label: 'Solar Optimum', defunct: false },
+  { value: 'LA Solar Group', label: 'LA Solar Group', defunct: false },
+  { value: 'Forme Solar', label: 'Forme Solar', defunct: false },
+  { value: 'SunPower by (dealer)', label: 'SunPower (dealer install)', defunct: false },
+  { value: 'Freedom Forever', label: 'Freedom Forever', defunct: false },
+  { value: 'Tesla Energy', label: 'Tesla Energy', defunct: false },
+  { value: 'Sunrun', label: 'Sunrun', defunct: false },
+  { value: 'Aptos Solar', label: 'Aptos Solar', defunct: false },
+  { value: 'Barnes Solar', label: 'Barnes Solar', defunct: false },
+  { value: 'Renova Energy', label: 'Renova Energy', defunct: false },
+
+  // ---- Recently defunct / bankrupt (warranty-orphaned) ----
+  { value: 'SunPower (legacy corp.)', label: 'SunPower — legacy corp. (Ch.11 2024)', defunct: true },
+  { value: 'Sunnova', label: 'Sunnova (Ch.11 2025)', defunct: true },
+  { value: 'Titan Solar Power', label: 'Titan Solar Power (closed 2024)', defunct: true },
+  { value: 'ADT Solar', label: 'ADT Solar (exited 2024)', defunct: true },
+  { value: 'Sunpro Solar', label: 'Sunpro Solar (closed 2023)', defunct: true },
+  { value: 'Sunworks', label: 'Sunworks (Ch.7 2024)', defunct: true },
+  { value: 'Vivint Solar', label: 'Vivint Solar (absorbed by Sunrun)', defunct: true },
+  { value: 'Kuubix', label: 'Kuubix (closed)', defunct: true },
+  { value: 'Sungevity', label: 'Sungevity (defunct)', defunct: true },
+  { value: 'Petersen Dean', label: 'PetersenDean / PD Solar (closed)', defunct: true },
+
+  { value: 'Other', label: 'Other / Unknown', defunct: false },
+];
