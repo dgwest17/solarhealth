@@ -4,7 +4,7 @@ import { supabase, apiFetch } from './lib/supabaseClient';
 import LoginScreen from './components/LoginScreen';
 import ClientDashboard from './components/ClientDashboard';
 import SolarCalculator from './SolarCalculator';
-import { ArrowLeft, RefreshCw, AlertCircle } from 'lucide-react';
+import { ArrowLeft, RefreshCw, AlertCircle, FlaskConical } from 'lucide-react';
 
 /**
  * Top-level router for the Monitoring side.
@@ -23,6 +23,7 @@ export default function App() {
   const [loadingClient, setLoadingClient] = useState(false);
   const [clientError, setClientError] = useState('');
   const [role, setRole] = useState('client');
+  const [view, setView] = useState('clients'); // 'clients' | 'sandbox'
 
   const openClient = useCallback(async (id) => {
     setSelectedId(id);
@@ -123,13 +124,66 @@ export default function App() {
     }
   }
 
+  // ---- Authenticated: sandbox (no client attached) ----
+  if (view === 'sandbox') {
+    return (
+      <div>
+        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} />
+        <SolarCalculator />
+      </div>
+    );
+  }
+
   // ---- Authenticated: dashboard ----
   return (
-    <ClientDashboard
-      onOpen={openClient}
-      userEmail={user.email}
-      role={role}
-      onSignOut={signOut}
-    />
+    <div>
+      <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} />
+      <ClientDashboard
+        onOpen={openClient}
+        userEmail={user.email}
+        role={role}
+        onSignOut={signOut}
+        hideHeader
+      />
+    </div>
+  );
+}
+
+/**
+ * Top navigation bar: switch between the Clients dashboard and the
+ * standalone Sandbox (audit + battery tools with no client data).
+ */
+function NavBar({ view, setView, userEmail, onSignOut }) {
+  return (
+    <div className="bg-[#0a1628] border-b border-amber-400/20 px-6 py-3 flex items-center justify-between print:hidden">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setView('clients')}
+          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+            view === 'clients'
+              ? 'bg-amber-400 text-[#0a1628]'
+              : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
+          }`}
+        >
+          Clients
+        </button>
+        <button
+          onClick={() => setView('sandbox')}
+          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
+            view === 'sandbox'
+              ? 'bg-amber-400 text-[#0a1628]'
+              : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
+          }`}
+        >
+          <FlaskConical size={15} /> Sandbox
+        </button>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-slate-400 hidden sm:block">{userEmail}</span>
+        <button onClick={onSignOut} className="px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-600 text-slate-300 text-sm hover:text-amber-300">
+          Sign out
+        </button>
+      </div>
+    </div>
   );
 }
