@@ -6,7 +6,7 @@ import { apiFetch } from '../lib/supabaseClient';
  * Client Dashboard — pulls the caller's clients from /api/clients (role-scoped
  * server-side) and renders a searchable grid. Clicking a client calls onOpen.
  */
-const ClientDashboard = ({ onOpen, userEmail, role, onSignOut }) => {
+const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = false }) => {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -45,26 +45,40 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut }) => {
     <div className="min-h-screen bg-gradient-to-br from-[#0a1628] via-[#0f1e36] to-[#0a1628] p-6">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Users size={28} className="text-amber-400" />
-            <div>
-              <h1 className="text-2xl font-bold text-amber-300">Client Monitoring</h1>
-              <p className="text-slate-400 text-sm">
-                {role === 'admin' ? 'All clients' : 'Your clients'} · {clients.length} total
-              </p>
+        {!hideHeader ? (
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <Users size={28} className="text-amber-400" />
+              <div>
+                <h1 className="text-2xl font-bold text-amber-300">Client Monitoring</h1>
+                <p className="text-slate-400 text-sm">
+                  {role === 'admin' ? 'All clients' : 'Your clients'} · {clients.length} total
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-400 hidden sm:block">{userEmail}</span>
+              <button onClick={load} className="p-2 rounded-lg bg-slate-800/60 border border-slate-600 text-slate-300 hover:text-amber-300" title="Refresh">
+                <RefreshCw size={16} />
+              </button>
+              <button onClick={onSignOut} className="px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-600 text-slate-300 text-sm hover:text-amber-300">
+                Sign out
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-400 hidden sm:block">{userEmail}</span>
+        ) : (
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <Users size={24} className="text-amber-400" />
+              <h1 className="text-xl font-bold text-amber-300">
+                {role === 'admin' ? 'All clients' : 'Your clients'} · {clients.length}
+              </h1>
+            </div>
             <button onClick={load} className="p-2 rounded-lg bg-slate-800/60 border border-slate-600 text-slate-300 hover:text-amber-300" title="Refresh">
               <RefreshCw size={16} />
             </button>
-            <button onClick={onSignOut} className="px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-600 text-slate-300 text-sm hover:text-amber-300">
-              Sign out
-            </button>
           </div>
-        </div>
+        )}
 
         {/* Search + filter */}
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
@@ -107,7 +121,16 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut }) => {
             Loading clients…
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-20 text-slate-500">No clients match.</div>
+          <div className="text-center py-20 text-slate-500">
+            {clients.length === 0 ? (
+              <>
+                <p className="text-slate-300 mb-1">No clients found in Zoho yet.</p>
+                <p className="text-sm">Once you add Contacts in Zoho, they'll appear here. Use the Sandbox tab to explore the tools meanwhile.</p>
+              </>
+            ) : (
+              'No clients match your search.'
+            )}
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {filtered.map((c) => (
