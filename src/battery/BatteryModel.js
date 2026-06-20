@@ -155,8 +155,8 @@ const isDaytimeHour = (h) => h >= 6 && h <= 18;
  * Daytime sell rate = utility superOffPeak (midday, when solar dumps to grid).
  * Night buy rate     = utility peak (4-9pm+ when home pulls from grid).
  */
-export const calculateExportEconomics = (touRates, exportKwh, importKwh) => {
-  const daytimeSellRate = touRates.superOffPeak; // midday export value
+export const calculateExportEconomics = (touRates, exportKwh, importKwh, utility) => {
+  const daytimeSellRate = getExportCreditRate(touRates, utility); // per-utility export value
   const nightBuyRate = touRates.peak;            // evening/peak import cost
 
   const valueSold = exportKwh * daytimeSellRate;
