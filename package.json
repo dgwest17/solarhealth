@@ -10,10 +10,11 @@
     "lint": "eslint src --ext js,jsx"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.108.2",
+    "lucide-react": "^0.263.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "recharts": "^2.10.3",
-    "lucide-react": "^0.263.1"
+    "recharts": "^2.10.3"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",
