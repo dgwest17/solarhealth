@@ -128,6 +128,7 @@ export const buildDailyOverlay = (profileKey, annualUsageKwh, annualProductionKw
 // Hardcoded constants (from research / NEM rules). Override in code as needed.
 export const GRID_LOSS_PCT = 15;            // line/transmission loss
 export const NET_COMPENSATION_RATE = 0.06;  // $/kWh net export comp (NEM3-style)
+export const NEM3_EXPORT_RATE = 0.035;       // $/kWh daytime export once NEM ends (~$0.03–0.04)
 
 /**
  * The rate at which exported daytime energy is CREDITED, by utility.
@@ -254,10 +255,12 @@ export const calculateEnergyCredits = (touRates, exportKwh, importKwh, utility) 
   const shortfallKwh = netKwh < 0 ? Math.abs(netKwh) : 0;
   const trueUpOwed = shortfallKwh * importRate;
 
-  // POTENTIAL true-up if net metering disappears: even an over-producer loses
-  // the credit netting and pays the full dollar gap between high-rate imports
-  // and low-rate export compensation.
-  const potentialTrueUp = Math.max(0, importCost - creditsEarned);
+  // POTENTIAL true-up once net metering ends (NEM 3.0 reality): daytime export
+  // collapses to ~$0.03–0.04/kWh while imports stay at full nighttime peak.
+  // So the gap is imports-at-peak MINUS exports-at-the-tiny-NEM3-rate — far
+  // larger than today's credit shortfall.
+  const nem3CreditsEarned = exportKwh * NEM3_EXPORT_RATE;
+  const potentialTrueUp = Math.max(0, importCost - nem3CreditsEarned);
 
   return {
     exportRate,
