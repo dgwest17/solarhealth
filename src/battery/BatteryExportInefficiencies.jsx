@@ -19,7 +19,7 @@ const BatteryExportInefficiencies = ({ inputs, overlay }) => {
   const exportKwh = manual ? Number(manualExport) || 0 : overlay.annualDaytimeOverproduction;
   const importKwh = manual ? Number(manualImport) || 0 : overlay.annualNighttimeImport;
 
-  const econ = calculateExportEconomics(touRates, exportKwh, importKwh);
+  const econ = calculateExportEconomics(touRates, exportKwh, importKwh, inputs.utility);
   const money = (v) => `$${Math.round(v).toLocaleString()}`;
   const rate = (v) => `$${v.toFixed(3)}/kWh`;
 
@@ -90,7 +90,7 @@ const BatteryExportInefficiencies = ({ inputs, overlay }) => {
             <div className="flex justify-between items-center border-b border-slate-700/50 pb-3">
               <div>
                 <div className="text-slate-200 text-sm">Energy sold to grid</div>
-                <div className="text-xs text-slate-500">at daytime rate {rate(econ.daytimeSellRate)}</div>
+                <div className="text-xs text-slate-500">at off-peak rate {rate(econ.daytimeSellRate)}</div>
               </div>
               <div className="text-xl font-bold text-green-400">{money(econ.valueSold)}</div>
             </div>
