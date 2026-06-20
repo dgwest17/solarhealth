@@ -1,0 +1,152 @@
+/**
+ * GET /api/client?id=<contactId>
+ * Returns one Contact + their linked Solar_Projects, mapped into the
+ * input shape the audit engine (calculations.js / DEFAULT_INPUTS) expects.
+ *
+ * Security: a 'client' role may ONLY fetch the contact whose Email matches
+ * their login. Admin may fetch anyone. Enforced server-side below.
+ *
+ * Read-only.
+ */
+import { zohoFetch } from './_zoho.js';
+import { requireUser, sendError } from './_auth.js';
+
+// Map Zoho Utility_Provider picklist -> audit engine utility keys
+const UTILITY_MAP = {
+  'PG&E': 'PGE', 'PGE': 'PGE',
+  'SCE': 'SCE',
+  'SDG&E': 'SDGE', 'SDGE': 'SDGE',
+  'SMUD': 'SMUD',
+  'LADWP': 'SCE', // no LADWP model yet; fall back so math still runs
+  'IID': 'SCE'
+};
+const NEM_MAP = {
+  'NEM 1.0': 'NEM1', 'NEM1': 'NEM1',
+  'NEM 2.0': 'NEM2', 'NEM2': 'NEM2',
+  'NEM 3.0': 'NEM3', 'NEM3': 'NEM3'
+};
+const PURCHASE_MAP = {
+  'Cash': 'Cash', 'PPA': 'PPA', 'Lease': 'PPA', 'Loan': 'Loan', 'Hybrid': 'Loan'
+};
+
+function num(v, fallback = 0) {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function parseYearMonth(dateStr) {
+  // Zoho dates are YYYY-MM-DD
+  if (!dateStr) return { year: null, month: null };
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
+  if (!m) return { year: null, month: null };
+  return { year: parseInt(m[1], 10), month: parseInt(m[2], 10) };
+}
+
+export default async function handler(req, res) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const user = await requireUser(req);
+    const contactId = (req.query.id || '').trim();
+    if (!contactId) {
+      return res.status(400).json({ error: 'Missing client id' });
+    }
+
+    // Fetch the contact
+    const contactRes = await zohoFetch(`/crm/v2/Contacts/${encodeURIComponent(contactId)}`);
+    const contact = (contactRes.data && contactRes.data[0]) || null;
+    if (!contact) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    // SECURITY: client role can only see their own record
+    if (user.role !== 'admin') {
+      const contactEmail = (contact.Email || '').toLowerCase();
+      if (contactEmail !== user.email) {
+        const err = new Error('Forbidden');
+        err.status = 403;
+        throw err;
+      }
+    }
+
+    // Fetch linked Solar_Projects via COQL on the Contact lookup
+    const projQuery = `select id, Name, System_Size_kW, Annual_System_Production, ` +
+      `Annual_Usage_at_Install_kWh, Current_Annual_Usage_kWh, Utility_Provider, ` +
+      `NEM_Version, Export_Rate, On_CARE_Program, Battery_Capacity_kWh, ` +
+      `Monthly_Payment, Term, Escalator_or_Interest, Purchase_Type, ` +
+      `Contract_Value, Install_Date, PTO_Date, Project_Status, ` +
+      `Battery_Manufacturer, Inverter_Type, Number_of_Modules, Panel_Model ` +
+      `from Solar_Projects where Contact = ${contactId}`;
+
+    let projects = [];
+    try {
+      const projRes = await zohoFetch('/crm/v2/coql', {
+        method: 'POST',
+        body: JSON.stringify({ select_query: projQuery })
+      });
+      projects = projRes.data || [];
+    } catch (e) {
+      // No projects is fine — return contact with empty project
+      projects = [];
+    }
+
+    const primary = projects[0] || {};
+    const install = parseYearMonth(primary.Install_Date);
+
+    // Map into the audit engine input shape (mirrors DEFAULT_INPUTS keys)
+    const auditInputs = {
+      installedYear: install.year || 2020,
+      installedMonth: install.month || 1,
+      utility: UTILITY_MAP[primary.Utility_Provider] || 'SCE',
+      systemSize: num(primary.System_Size_kW, 8.0),
+      annualUsageAtInstall: num(primary.Annual_Usage_at_Install_kWh, 10000),
+      currentAnnualUsage: num(primary.Current_Annual_Usage_kWh, 11500),
+      annualProduction: num(primary.Annual_System_Production, 12000),
+      program: PURCHASE_MAP[primary.Purchase_Type] || 'Loan',
+      nemVersion: NEM_MAP[primary.NEM_Version] || 'NEM2',
+      exportRate: num(primary.Export_Rate, 0.07),
+      onCareProgram: !!primary.On_CARE_Program,
+      hasBattery: num(primary.Battery_Capacity_kWh, 0) > 0,
+      batteryCapacity: num(primary.Battery_Capacity_kWh, 13.5),
+      monthlyPayment: num(primary.Monthly_Payment, 0),
+      loanInitialPayment: num(primary.Monthly_Payment, 150),
+      loanTerm: primary.Term ? Math.round(num(primary.Term) / 12) : 20,
+      contractValue: num(primary.Contract_Value, 0)
+    };
+
+    res.status(200).json({
+      role: user.role,
+      contact: {
+        id: contact.id,
+        firstName: contact.First_Name || '',
+        lastName: contact.Last_Name || '',
+        fullName: contact.Full_Name || '',
+        email: contact.Email || '',
+        phone: contact.Phone || '',
+        street: contact.Mailing_Street || '',
+        city: contact.Mailing_City || '',
+        state: contact.Mailing_State || '',
+        zip: contact.Mailing_Zip || '',
+        sendAnnualReport: !!contact.Send_Annual_Report,
+        lastReportSent: contact.Last_Report_Sent || null
+      },
+      project: primary.id ? {
+        id: primary.id,
+        name: primary.Name || '',
+        status: primary.Project_Status || '',
+        ptoDate: primary.PTO_Date || null,
+        installDate: primary.Install_Date || null,
+        batteryManufacturer: primary.Battery_Manufacturer || '',
+        inverterType: primary.Inverter_Type || '',
+        numberOfModules: primary.Number_of_Modules || null,
+        panelModel: primary.Panel_Model || ''
+      } : null,
+      projectCount: projects.length,
+      auditInputs
+    });
+  } catch (e) {
+    sendError(res, e);
+  }
+}
