@@ -6,7 +6,7 @@ import {
   BatteryCharging, ShieldCheck, TrendingUp, AlertTriangle, DollarSign, CreditCard,
   Server, Cpu, Car, Zap, TrendingDown
 } from 'lucide-react';
-import { TOU_RATES } from '../utils/rateData';
+import { TOU_RATES, UTILITY_OPTIONS } from '../utils/rateData';
 import {
   calculateCreditsRecovered,
   calculateEnergyCredits,
@@ -56,6 +56,16 @@ const BatteryRecovery = ({ inputs, overlay }) => {
   const money = (v) => `$${Math.round(v).toLocaleString()}`;
   const rate = (v) => `$${v.toFixed(3)}/kWh`;
 
+  // Short utility name for emotional copy: prefer the parenthetical short form
+  // in the label (e.g. "San Diego Gas & Electric (SDG&E)" -> "SDG&E"),
+  // else the full label, else the raw key.
+  const utilOpt = UTILITY_OPTIONS.find((o) => o.value === inputs.utility);
+  const utilName = (() => {
+    if (!utilOpt) return inputs.utility || 'your utility';
+    const m = /\(([^)]+)\)/.exec(utilOpt.label);
+    return m ? m[1] : utilOpt.label;
+  })();
+
   return (
     <div className="bg-gradient-to-br from-[#102a1a] to-[#0a1628] border border-green-400/40 rounded-xl shadow-2xl p-6 md:p-8 mb-6">
       <h2 className="text-2xl font-bold text-green-300 flex items-center gap-2 mb-1">
@@ -87,46 +97,53 @@ const BatteryRecovery = ({ inputs, overlay }) => {
           </div>
         </div>
 
-        {/* True-up: real (over-consumer) vs potential (post-NEM) side by side */}
+        {/* True-up: emotional framing — owe vs paid, plus post-NEM risk */}
         <div className="grid grid-cols-2 gap-3">
-          <div className={`rounded-lg p-4 border ${credits.isNetOverProducer ? 'bg-slate-900/40 border-slate-700/50' : 'bg-red-900/30 border-red-400/40'}`}>
-            <div className="text-xs text-slate-300 mb-1">True-Up Today</div>
+          <div className={`rounded-lg p-4 border ${credits.isNetOverProducer ? 'bg-green-900/20 border-green-400/40' : 'bg-red-900/30 border-red-400/50'}`}>
             {credits.isNetOverProducer ? (
               <>
-                <div className="text-2xl font-bold text-green-400">{money(0)}</div>
-                <p className="text-[11px] text-slate-400 mt-2">
-                  You over-produce, so your credits net out the year. No real true-up — for now.
+                <div className="text-xs text-green-200 mb-1 font-semibold uppercase tracking-wide">{utilName} Pays You</div>
+                <div className="text-3xl font-extrabold text-green-400">{money(credits.realMoney)}<span className="text-base font-normal text-slate-400">/yr</span></div>
+                <p className="text-[11px] text-green-200/80 mt-2">
+                  {utilName} pays you for that surplus energy every year. Real money in your pocket.
                 </p>
               </>
             ) : (
               <>
-                <div className="text-2xl font-bold text-red-400">{money(credits.trueUpOwed)}</div>
+                <div className="text-xs text-red-200 mb-1 font-semibold uppercase tracking-wide">You Owe {utilName}</div>
+                <div className="text-3xl font-extrabold text-red-400">{money(credits.trueUpOwed)}<span className="text-base font-normal text-slate-400">/yr</span></div>
                 <p className="text-[11px] text-red-200/80 mt-2">
-                  You consume more than you export — a real shortfall of {Math.round(credits.shortfallKwh).toLocaleString()} kWh billed at peak.
+                  You burn more than you bank — so {utilName} sends you a true-up bill for the {Math.round(credits.shortfallKwh).toLocaleString()} kWh shortfall, at peak rates.
                 </p>
               </>
             )}
           </div>
           <div className="rounded-lg p-4 border bg-orange-900/20 border-orange-400/40">
-            <div className="text-xs text-orange-200 mb-1 flex items-center gap-1">
-              <AlertTriangle size={12} /> If NEM Goes Away
+            <div className="text-xs text-orange-200 mb-1 flex items-center gap-1 font-semibold uppercase tracking-wide">
+              <AlertTriangle size={12} /> When NEM Ends
             </div>
-            <div className="text-2xl font-bold text-orange-400">{money(credits.potentialTrueUp)}</div>
+            <div className="text-3xl font-extrabold text-orange-400">{money(credits.potentialTrueUp)}<span className="text-base font-normal text-slate-400">/yr</span></div>
             <p className="text-[11px] text-orange-200/70 mt-2">
-              Lose net-metering credit netting and this is the annual gap you'd owe — even as an over-producer.
+              {credits.isNetOverProducer
+                ? `When net metering ends, even over-producing won't save you — this is what you'd owe ${utilName}.`
+                : `As net metering shrinks, your bill to ${utilName} climbs to this.`}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Real money line */}
-      <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700/50 mb-8 flex items-center justify-between">
+      {/* Emotional summary line */}
+      <div className={`rounded-lg p-4 border mb-8 flex items-center justify-between ${credits.isNetOverProducer ? 'bg-slate-900/50 border-slate-700/50' : 'bg-red-900/20 border-red-400/40'}`}>
         <div className="flex items-center gap-2">
-          <DollarSign size={16} className="text-green-400" />
-          <span className="text-sm text-slate-200">Real cash the utility actually pays you (net export)</span>
+          <DollarSign size={16} className={credits.isNetOverProducer ? 'text-green-400' : 'text-red-400'} />
+          <span className="text-sm text-slate-200">
+            {credits.isNetOverProducer
+              ? `What ${utilName} actually pays you for your energy each year`
+              : `What you hand ${utilName} every year at true-up`}
+          </span>
         </div>
-        <span className="text-xl font-bold text-green-400">
-          {credits.isNetOverProducer ? `${money(credits.realMoney)}/yr` : 'Net importer — $0'}
+        <span className={`text-xl font-bold ${credits.isNetOverProducer ? 'text-green-400' : 'text-red-400'}`}>
+          {credits.isNetOverProducer ? `${money(credits.realMoney)}/yr` : `${money(credits.trueUpOwed)}/yr`}
         </span>
       </div>
 
