@@ -1,6 +1,6 @@
 import React from 'react';
 import { Database, RefreshCw, AlertCircle, Battery } from 'lucide-react';
-import { UTILITY_OPTIONS, NEM_OPTIONS, PROGRAM_OPTIONS, API_PROVIDERS, TOU_RATES, PPA_ESCALATOR_OPTIONS } from '../utils/rateData';
+import { UTILITY_OPTIONS, NEM_OPTIONS, PROGRAM_OPTIONS, API_PROVIDERS, TOU_RATES, PPA_ESCALATOR_OPTIONS, INSTALLER_OPTIONS } from '../utils/rateData';
 import { calculateMonthlyPayment } from '../utils/loanCalculations';
 
 const InputSection = ({ 
@@ -311,6 +311,42 @@ const InputSection = ({
             ))}
           </select>
         </div>
+      </div>
+
+      {/* Installer Selection */}
+      <div className="mb-6">
+        <label className="block text-sm text-cyan-300 mb-2">Installer</label>
+        <select
+          value={inputs.installer || ''}
+          onChange={(e) => onInputChange('installer', e.target.value)}
+          className="w-full md:w-1/2 px-4 py-3 border-2 border-cyan-400/50 rounded-lg bg-slate-900/60 text-cyan-300 text-lg font-medium"
+        >
+          <option value="">Select installer…</option>
+          <optgroup label="Active installers">
+            {INSTALLER_OPTIONS.filter(i => !i.defunct).map(i => (
+              <option key={i.value} value={i.value}>{i.label}</option>
+            ))}
+          </optgroup>
+          <optgroup label="No longer in business">
+            {INSTALLER_OPTIONS.filter(i => i.defunct).map(i => (
+              <option key={i.value} value={i.value}>{i.label}</option>
+            ))}
+          </optgroup>
+        </select>
+        {(() => {
+          const sel = INSTALLER_OPTIONS.find(i => i.value === inputs.installer);
+          if (sel && sel.defunct) {
+            return (
+              <div className="mt-2 bg-orange-500/15 border border-orange-400/40 rounded-lg p-3 flex items-start gap-2">
+                <AlertCircle size={16} className="text-orange-400 mt-0.5 shrink-0" />
+                <span className="text-sm text-orange-200">
+                  This installer is no longer in business — the system likely has an <strong>orphaned workmanship warranty</strong> and no active monitoring support. A strong reason for an audit and a monitoring/service plan.
+                </span>
+              </div>
+            );
+          }
+          return null;
+        })()}
       </div>
 
       {/* Solar Program Selection */}
