@@ -13,8 +13,8 @@ import PDFReportGenerator from './components/PDFReportGenerator';
 import SystemSpecsSheet from './components/SystemSpecsSheet';
 import BatteryAnalysis from './battery/BatteryAnalysis';
 
-const SolarCalculator = () => {
-  const [inputs, setInputs] = useState(DEFAULT_INPUTS);
+const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = null }) => {
+  const [inputs, setInputs] = useState(prefilledInputs ? { ...DEFAULT_INPUTS, ...prefilledInputs } : DEFAULT_INPUTS);
   const [dataSource, setDataSource] = useState('manual');
   const [apiStatus, setApiStatus] = useState(DEFAULT_API_STATUS);
   const [showHistoricalRates, setShowHistoricalRates] = useState(false);
@@ -24,7 +24,7 @@ const SolarCalculator = () => {
   const [narrative, setNarrative] = useState(null);
 
   // Client name shown on the printed report header
-  const [clientName, setClientName] = useState('');
+  const [clientName, setClientName] = useState(clientLabel || '');
 
   // Tab switcher: 'audit' (the financial audit) | 'battery' (battery analysis)
   const [activeTab, setActiveTab] = useState('audit');
