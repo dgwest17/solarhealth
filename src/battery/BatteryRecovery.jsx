@@ -122,7 +122,7 @@ const BatteryRecovery = ({ inputs, overlay }) => {
             <div className="text-xs text-orange-200 mb-1 flex items-center gap-1 font-semibold uppercase tracking-wide">
               <AlertTriangle size={12} /> When NEM Ends
             </div>
-            <div className="text-3xl font-extrabold text-orange-400">{money(credits.potentialTrueUp)}<span className="text-base font-normal text-slate-400">/yr</span></div>
+            <div className="text-3xl font-extrabold text-orange-400">{money(Math.max(0, credits.potentialTrueUp))}<span className="text-base font-normal text-slate-400">/yr</span></div>
             <p className="text-[11px] text-orange-200/70 mt-2">
               {credits.isNetOverProducer
                 ? `When net metering ends, even over-producing won't save you — this is what you'd owe ${utilName}.`
