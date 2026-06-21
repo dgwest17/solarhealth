@@ -255,12 +255,12 @@ export const calculateEnergyCredits = (touRates, exportKwh, importKwh, utility) 
   const shortfallKwh = netKwh < 0 ? Math.abs(netKwh) : 0;
   const trueUpOwed = shortfallKwh * importRate;
 
-  // POTENTIAL true-up once net metering ends (NEM 3.0 reality): daytime export
+  // ANNUAL TRUE-UP once net metering ends (NEM 3.0 reality): daytime export
   // collapses to ~$0.03–0.04/kWh while imports stay at full nighttime peak.
-  // So the gap is imports-at-peak MINUS exports-at-the-tiny-NEM3-rate — far
-  // larger than today's credit shortfall.
+  //   true-up = (peak rate × imported kWh) − (NEM3 rate × exported kWh)
+  // This is what they'd owe per year with no battery once NEM is gone.
   const nem3CreditsEarned = exportKwh * NEM3_EXPORT_RATE;
-  const potentialTrueUp = Math.max(0, importCost - nem3CreditsEarned);
+  const potentialTrueUp = importCost - nem3CreditsEarned;
 
   return {
     exportRate,
