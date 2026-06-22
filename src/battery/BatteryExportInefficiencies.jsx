@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { TrendingDown, Server, Zap, AlertCircle } from 'lucide-react';
 import { TOU_RATES } from '../utils/rateData';
 import { calculateExportEconomics, NET_COMPENSATION_RATE } from './BatteryModel';
@@ -9,15 +9,23 @@ import { calculateExportEconomics, NET_COMPENSATION_RATE } from './BatteryModel'
  * Right column: $ sold daytime, $ bought night, net annual compensation.
  * Below: "Grid Demand is Worsening" persuasion block.
  */
-const BatteryExportInefficiencies = ({ inputs, overlay }) => {
-  const [manual, setManual] = useState(false);
-  const [manualExport, setManualExport] = useState(overlay.annualDaytimeOverproduction);
-  const [manualImport, setManualImport] = useState(overlay.annualNighttimeImport);
-
+const BatteryExportInefficiencies = ({
+  inputs, overlay,
+  manualMode, setManualMode,
+  exportKwh: exportKwhProp, setExportKwh,
+  importKwh: importKwhProp, setImportKwh,
+  effExport, effImport
+}) => {
   const touRates = TOU_RATES[inputs.utility] || TOU_RATES.SCE;
 
-  const exportKwh = manual ? Number(manualExport) || 0 : overlay.annualDaytimeOverproduction;
-  const importKwh = manual ? Number(manualImport) || 0 : overlay.annualNighttimeImport;
+  // Shared (lifted) state drives both this section and §4.
+  const manual = manualMode;
+  const setManual = setManualMode;
+  const manualExport = exportKwhProp;
+  const manualImport = importKwhProp;
+
+  const exportKwh = effExport != null ? effExport : overlay.annualDaytimeOverproduction;
+  const importKwh = effImport != null ? effImport : overlay.annualNighttimeImport;
 
   const econ = calculateExportEconomics(touRates, exportKwh, importKwh, inputs.utility);
   const money = (v) => `$${Math.round(v).toLocaleString()}`;
@@ -53,7 +61,7 @@ const BatteryExportInefficiencies = ({ inputs, overlay }) => {
                 <input
                   type="number"
                   value={manualExport}
-                  onChange={(e) => setManualExport(e.target.value)}
+                  onChange={(e) => setExportKwh(e.target.value)}
                   className="w-full px-3 py-2 border border-amber-400/40 rounded-lg bg-slate-900/70 text-amber-200 text-xl font-bold"
                 />
               ) : (
@@ -67,7 +75,7 @@ const BatteryExportInefficiencies = ({ inputs, overlay }) => {
                 <input
                   type="number"
                   value={manualImport}
-                  onChange={(e) => setManualImport(e.target.value)}
+                  onChange={(e) => setImportKwh(e.target.value)}
                   className="w-full px-3 py-2 border border-orange-400/40 rounded-lg bg-slate-900/70 text-orange-300 text-xl font-bold"
                 />
               ) : (
