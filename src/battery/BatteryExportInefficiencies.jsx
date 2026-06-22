@@ -1,7 +1,7 @@
 import React from 'react';
 import { TrendingDown, Server, Zap, AlertCircle } from 'lucide-react';
 import { TOU_RATES } from '../utils/rateData';
-import { calculateExportEconomics, NET_COMPENSATION_RATE } from './BatteryModel';
+import { calculateExportEconomics, calculateEnergyCredits, NET_COMPENSATION_RATE } from './BatteryModel';
 
 /**
  * Section 3 — Export Inefficiencies.
@@ -28,6 +28,7 @@ const BatteryExportInefficiencies = ({
   const importKwh = effImport != null ? effImport : overlay.annualNighttimeImport;
 
   const econ = calculateExportEconomics(touRates, exportKwh, importKwh, inputs.utility);
+  const credits = calculateEnergyCredits(touRates, exportKwh, importKwh, inputs.utility);
   const money = (v) => `$${Math.round(v).toLocaleString()}`;
   const rate = (v) => `$${v.toFixed(3)}/kWh`;
 
@@ -112,13 +113,27 @@ const BatteryExportInefficiencies = ({
             </div>
 
             <div className="flex justify-between items-center pt-1">
-              <div>
-                <div className="text-slate-200 text-sm font-semibold">Annual compensation to you</div>
-                <div className="text-xs text-slate-500">(export − import) × ${NET_COMPENSATION_RATE.toFixed(2)}</div>
-              </div>
-              <div className={`text-2xl font-bold ${econ.netCompensation >= 0 ? 'text-amber-300' : 'text-red-400'}`}>
-                {money(econ.netCompensation)}
-              </div>
+              {credits.isNetOverProducer ? (
+                <>
+                  <div>
+                    <div className="text-slate-200 text-sm font-semibold">Annual compensation to you</div>
+                    <div className="text-xs text-slate-500">(export − import) × ${NET_COMPENSATION_RATE.toFixed(2)}</div>
+                  </div>
+                  <div className="text-2xl font-bold text-amber-300">
+                    {money(econ.netCompensation)}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <div className="text-slate-200 text-sm font-semibold">Your annual true-up</div>
+                    <div className="text-xs text-slate-500">{Math.round(credits.shortfallKwh).toLocaleString()} kWh shortfall × peak {rate(credits.importRate)}</div>
+                  </div>
+                  <div className="text-2xl font-bold text-red-400">
+                    {money(credits.trueUpOwed)}
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
