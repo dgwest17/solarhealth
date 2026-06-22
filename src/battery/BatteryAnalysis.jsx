@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Battery } from 'lucide-react';
 import { buildDailyOverlay, calculateCreditsRecovered } from './BatteryModel';
 import { TOU_RATES } from '../utils/rateData';
@@ -27,12 +27,31 @@ const BatteryAnalysis = ({ inputs }) => {
     inputs.annualProduction
   );
 
-  // Energy Credits Recovered / year — shared with the stabilization ROI math
+  // Shared export/import figures — lifted here so §3 (Export Inefficiencies)
+  // and §4 (Your Energy, Your Credits) always compute from the SAME numbers.
+  // Default to the overlay; §3's manual toggle updates these for both sections.
+  const [manualMode, setManualMode] = useState(false);
+  const [exportKwh, setExportKwh] = useState(overlay.annualDaytimeOverproduction);
+  const [importKwh, setImportKwh] = useState(overlay.annualNighttimeImport);
+
+  // When the profile changes (and not in manual mode), follow the overlay.
+  useEffect(() => {
+    if (!manualMode) {
+      setExportKwh(overlay.annualDaytimeOverproduction);
+      setImportKwh(overlay.annualNighttimeImport);
+    }
+  }, [overlay.annualDaytimeOverproduction, overlay.annualNighttimeImport, manualMode]);
+
+  const effExport = manualMode ? (Number(exportKwh) || 0) : overlay.annualDaytimeOverproduction;
+  const effImport = manualMode ? (Number(importKwh) || 0) : overlay.annualNighttimeImport;
+
+  // Energy Credits Recovered / year — shared with the stabilization ROI math,
+  // now using the SAME effective export/import as §3 and §4.
   const touRates = TOU_RATES[inputs.utility] || TOU_RATES.SCE;
   const recovery = calculateCreditsRecovered(
     touRates,
-    overlay.annualDaytimeOverproduction,
-    overlay.annualNighttimeImport,
+    effExport,
+    effImport,
     inputs.batteryCapacity,
     inputs.batteryEfficiency,
     inputs.utility
@@ -59,9 +78,25 @@ const BatteryAnalysis = ({ inputs }) => {
 
       <BatteryEnergyLoss />
 
-      <BatteryExportInefficiencies inputs={inputs} overlay={overlay} />
+      <BatteryExportInefficiencies
+        inputs={inputs}
+        overlay={overlay}
+        manualMode={manualMode}
+        setManualMode={setManualMode}
+        exportKwh={exportKwh}
+        setExportKwh={setExportKwh}
+        importKwh={importKwh}
+        setImportKwh={setImportKwh}
+        effExport={effExport}
+        effImport={effImport}
+      />
 
-      <BatteryRecovery inputs={inputs} overlay={overlay} />
+      <BatteryRecovery
+        inputs={inputs}
+        overlay={overlay}
+        effExport={effExport}
+        effImport={effImport}
+      />
 
       <BatteryStabilization
         recoveredValuePerYear={recovery.creditsRecovered}
