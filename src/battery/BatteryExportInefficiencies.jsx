@@ -1,6 +1,6 @@
 import React from 'react';
 import { TrendingDown, Server, Zap, AlertCircle } from 'lucide-react';
-import { TOU_RATES } from '../utils/rateData';
+import { TOU_RATES, UTILITY_OPTIONS } from '../utils/rateData';
 import { calculateExportEconomics, calculateEnergyCredits, NET_COMPENSATION_RATE } from './BatteryModel';
 
 /**
@@ -14,9 +14,16 @@ const BatteryExportInefficiencies = ({
   manualMode, setManualMode,
   exportKwh: exportKwhProp, setExportKwh,
   importKwh: importKwhProp, setImportKwh,
-  effExport, effImport
+  effExport, effImport,
+  annualTrueUp = 0, annualCheck = 0, owesUtility = false
 }) => {
   const touRates = TOU_RATES[inputs.utility] || TOU_RATES.SCE;
+  const utilName = (() => {
+    const o = UTILITY_OPTIONS.find((x) => x.value === inputs.utility);
+    if (!o) return inputs.utility || 'your utility';
+    const m = /\(([^)]+)\)/.exec(o.label);
+    return m ? m[1] : o.label;
+  })();
 
   // Shared (lifted) state drives both this section and §4.
   const manual = manualMode;
@@ -113,24 +120,24 @@ const BatteryExportInefficiencies = ({
             </div>
 
             <div className="flex justify-between items-center pt-1">
-              {credits.isNetOverProducer ? (
+              {!owesUtility ? (
                 <>
                   <div>
-                    <div className="text-slate-200 text-sm font-semibold">Annual compensation to you</div>
-                    <div className="text-xs text-slate-500">(export − import) × ${NET_COMPENSATION_RATE.toFixed(2)}</div>
+                    <div className="text-slate-200 text-sm font-semibold">{utilName} pays you</div>
+                    <div className="text-xs text-slate-500">annual check for your net surplus</div>
                   </div>
                   <div className="text-2xl font-bold text-amber-300">
-                    {money(econ.netCompensation)}
+                    {money(annualCheck)}
                   </div>
                 </>
               ) : (
                 <>
                   <div>
-                    <div className="text-slate-200 text-sm font-semibold">Your annual true-up</div>
-                    <div className="text-xs text-slate-500">{Math.round(credits.shortfallKwh).toLocaleString()} kWh shortfall × peak {rate(credits.importRate)}</div>
+                    <div className="text-slate-200 text-sm font-semibold">You pay {utilName} — annual true-up</div>
+                    <div className="text-xs text-slate-500">from your full usage vs production at real rates</div>
                   </div>
                   <div className="text-2xl font-bold text-red-400">
-                    {money(credits.trueUpOwed)}
+                    {money(annualTrueUp)}
                   </div>
                 </>
               )}
