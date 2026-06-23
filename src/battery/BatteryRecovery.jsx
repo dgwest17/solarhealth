@@ -24,7 +24,11 @@ import {
  *   3. "The Cost of Doing Nothing" — 10-yr escalating-loss chart
  *   4. "Energy Credits Recovered" — what a battery wins back
  */
-const BatteryRecovery = ({ inputs, overlay, effExport, effImport }) => {
+const BatteryRecovery = ({
+  inputs, overlay, effExport, effImport,
+  annualTrueUp = 0, annualCheck = 0, owesUtility = false,
+  avoidedTrueUp = 0, arbitrageRecovered = null, totalRecoveredPerYear = null
+}) => {
   const expKwh = effExport != null ? effExport : overlay.annualDaytimeOverproduction;
   const impKwh = effImport != null ? effImport : overlay.annualNighttimeImport;
   const touRates = TOU_RATES[inputs.utility] || TOU_RATES.SCE;
@@ -58,15 +62,17 @@ const BatteryRecovery = ({ inputs, overlay, effExport, effImport }) => {
   const money = (v) => `$${Math.round(v).toLocaleString()}`;
   const rate = (v) => `$${v.toFixed(3)}/kWh`;
 
-  // Short utility name for emotional copy: prefer the parenthetical short form
-  // in the label (e.g. "San Diego Gas & Electric (SDG&E)" -> "SDG&E"),
-  // else the full label, else the raw key.
+  // Short utility name for emotional copy.
   const utilOpt = UTILITY_OPTIONS.find((o) => o.value === inputs.utility);
   const utilName = (() => {
     if (!utilOpt) return inputs.utility || 'your utility';
     const m = /\(([^)]+)\)/.exec(utilOpt.label);
     return m ? m[1] : utilOpt.label;
   })();
+
+  // Total recovered per year = arbitrage spread + avoided true-up (capped upstream)
+  const arbRecovered = arbitrageRecovered != null ? arbitrageRecovered : recovery.creditsRecovered;
+  const totalRecovered = totalRecoveredPerYear != null ? totalRecoveredPerYear : arbRecovered;
 
   return (
     <div className="bg-gradient-to-br from-[#102a1a] to-[#0a1628] border border-green-400/40 rounded-xl shadow-2xl p-6 md:p-8 mb-6">
@@ -75,47 +81,51 @@ const BatteryRecovery = ({ inputs, overlay, effExport, effImport }) => {
         Your Energy, Your Credits
       </h2>
       <p className="text-slate-300 text-sm mb-6">
-        Selling to the grid doesn't pay you cash — it banks <strong className="text-green-300">energy credits</strong> at
-        the low export rate. The real money is only ${NET_COMPENSATION_RATE.toFixed(2)}/kWh on your net export at year end.
+        With the utility, your solar energy earns <strong className="text-amber-300">credits — monopoly money</strong> you
+        can only spend in their system. You bank credits selling power by <strong className="text-amber-300">day</strong>, then
+        spend them buying it back at <strong className="text-red-300">night</strong>. The gap is real cash out of your pocket.
       </p>
 
-      {/* 1. Credits vs. real money + true-up reality */}
+      {/* 1. The monopoly-money credit story — sold by day, bought by night */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div className="bg-slate-900/50 rounded-lg p-5 border border-amber-400/30">
           <div className="flex items-center gap-2 text-amber-300 text-sm font-semibold mb-3">
-            <CreditCard size={15} /> Energy Credits (bill credits — not cash)
+            <CreditCard size={15} /> Energy Credits — "Monopoly Money"
           </div>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-slate-300">Credits earned exporting</span>
+              <span className="text-slate-300">☀️ Credits earned selling by day</span>
               <span className="text-amber-300 font-semibold">{money(credits.creditsEarned)}</span>
             </div>
-            <div className="text-xs text-slate-500">{expKwh.toLocaleString()} kWh × {rate(credits.exportRate)} (export rate)</div>
+            <div className="text-xs text-slate-500">{expKwh.toLocaleString()} kWh exported × {rate(credits.exportRate)}</div>
             <div className="flex justify-between pt-1">
-              <span className="text-slate-300">Cost of importing at night</span>
+              <span className="text-slate-300">🌙 Credits spent buying at night</span>
               <span className="text-red-400 font-semibold">{money(credits.importCost)}</span>
             </div>
-            <div className="text-xs text-slate-500">{impKwh.toLocaleString()} kWh × {rate(credits.importRate)} (peak)</div>
+            <div className="text-xs text-slate-500">{impKwh.toLocaleString()} kWh imported × {rate(credits.importRate)}</div>
+          </div>
+          <div className="mt-3 pt-3 border-t border-slate-700/50 text-xs text-amber-200/80">
+            You sell low and buy high — in their currency. That spread is the grid's profit, not yours.
           </div>
         </div>
 
-        {/* True-up: emotional framing — owe vs paid, plus post-NEM risk */}
+        {/* True-up: authoritative (from full annual usage vs production at real rate) */}
         <div className="grid grid-cols-2 gap-3">
-          <div className={`rounded-lg p-4 border ${credits.isNetOverProducer ? 'bg-green-900/20 border-green-400/40' : 'bg-red-900/30 border-red-400/50'}`}>
-            {credits.isNetOverProducer ? (
+          <div className={`rounded-lg p-4 border ${!owesUtility ? 'bg-green-900/20 border-green-400/40' : 'bg-red-900/30 border-red-400/50'}`}>
+            {!owesUtility ? (
               <>
                 <div className="text-xs text-green-200 mb-1 font-semibold uppercase tracking-wide">{utilName} Pays You</div>
-                <div className="text-3xl font-extrabold text-green-400">{money(credits.realMoney)}<span className="text-base font-normal text-slate-400">/yr</span></div>
+                <div className="text-3xl font-extrabold text-green-400">{money(annualCheck)}<span className="text-base font-normal text-slate-400">/yr</span></div>
                 <p className="text-[11px] text-green-200/80 mt-2">
-                  {utilName} pays you for that surplus energy every year. Real money in your pocket.
+                  You produce more than you use, so {utilName} cuts you a check each year for the surplus.
                 </p>
               </>
             ) : (
               <>
-                <div className="text-xs text-red-200 mb-1 font-semibold uppercase tracking-wide">You Owe {utilName}</div>
-                <div className="text-3xl font-extrabold text-red-400">{money(credits.trueUpOwed)}<span className="text-base font-normal text-slate-400">/yr</span></div>
+                <div className="text-xs text-red-200 mb-1 font-semibold uppercase tracking-wide">You Pay {utilName}</div>
+                <div className="text-3xl font-extrabold text-red-400">{money(annualTrueUp)}<span className="text-base font-normal text-slate-400">/yr</span></div>
                 <p className="text-[11px] text-red-200/80 mt-2">
-                  You burn more than you bank — so {utilName} sends you a true-up bill for the {Math.round(credits.shortfallKwh).toLocaleString()} kWh shortfall, at peak rates.
+                  {utilName} does not pay you — you owe them this true-up every single year, and it only grows.
                 </p>
               </>
             )}
@@ -126,26 +136,26 @@ const BatteryRecovery = ({ inputs, overlay, effExport, effImport }) => {
             </div>
             <div className="text-3xl font-extrabold text-orange-400">{money(Math.max(0, credits.potentialTrueUp))}<span className="text-base font-normal text-slate-400">/yr</span></div>
             <p className="text-[11px] text-orange-200/70 mt-2">
-              {credits.isNetOverProducer
+              {!owesUtility
                 ? `When net metering ends, even over-producing won't save you — this is what you'd owe ${utilName}.`
-                : `As net metering shrinks, your bill to ${utilName} climbs to this.`}
+                : `As net metering shrinks, your bill to ${utilName} climbs even higher — to this.`}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Emotional summary line */}
-      <div className={`rounded-lg p-4 border mb-8 flex items-center justify-between ${credits.isNetOverProducer ? 'bg-slate-900/50 border-slate-700/50' : 'bg-red-900/20 border-red-400/40'}`}>
+      {/* Authoritative bottom line — matches the audit tool exactly */}
+      <div className={`rounded-lg p-4 border mb-8 flex items-center justify-between ${!owesUtility ? 'bg-slate-900/50 border-slate-700/50' : 'bg-red-900/20 border-red-400/40'}`}>
         <div className="flex items-center gap-2">
-          <DollarSign size={16} className={credits.isNetOverProducer ? 'text-green-400' : 'text-red-400'} />
+          <DollarSign size={16} className={!owesUtility ? 'text-green-400' : 'text-red-400'} />
           <span className="text-sm text-slate-200">
-            {credits.isNetOverProducer
-              ? `What ${utilName} actually pays you for your energy each year`
-              : `What you hand ${utilName} every year at true-up`}
+            {!owesUtility
+              ? `What ${utilName} pays you for your energy each year`
+              : `What you pay ${utilName} every year — with no battery`}
           </span>
         </div>
-        <span className={`text-xl font-bold ${credits.isNetOverProducer ? 'text-green-400' : 'text-red-400'}`}>
-          {credits.isNetOverProducer ? `${money(credits.realMoney)}/yr` : `${money(credits.trueUpOwed)}/yr`}
+        <span className={`text-xl font-bold ${!owesUtility ? 'text-green-400' : 'text-red-400'}`}>
+          {!owesUtility ? `${money(annualCheck)}/yr` : `${money(annualTrueUp)}/yr`}
         </span>
       </div>
 
@@ -239,19 +249,27 @@ const BatteryRecovery = ({ inputs, overlay, effExport, effImport }) => {
         </div>
       </div>
 
-      {/* 4. ENERGY CREDITS RECOVERED — what a battery wins back */}
+      {/* 4. VALUE RECOVERED — arbitrage spread + avoided true-up */}
       <div className="bg-green-400/10 border border-green-400/40 rounded-lg p-6 text-center mb-3">
         <div className="text-sm text-green-200 uppercase tracking-wider flex items-center justify-center gap-2">
-          <TrendingUp size={16} /> Energy Credits Recovered Each Year
+          <TrendingUp size={16} /> Value Recovered Each Year With a Battery
         </div>
-        <div className="text-5xl font-extrabold text-green-300 mt-2">{money(recovery.creditsRecovered)}</div>
-        <div className="text-xs text-slate-400 mt-2">
-          By shifting {recovery.shiftedKwh.toLocaleString()} kWh from low-rate export ({rate(recovery.middayRate)}) to peak-rate use ({rate(recovery.peakRate)})
+        <div className="text-5xl font-extrabold text-green-300 mt-2">{money(totalRecovered)}</div>
+        <div className="text-xs text-slate-400 mt-3 space-y-1">
+          <div>
+            <span className="text-green-300 font-semibold">{money(arbRecovered)}</span> recovered by shifting {recovery.shiftedKwh.toLocaleString()} kWh from low export ({rate(recovery.middayRate)}) to peak use ({rate(recovery.peakRate)})
+          </div>
+          {avoidedTrueUp > 0 && (
+            <div>
+              <span className="text-green-300 font-semibold">+ {money(avoidedTrueUp)}</span> of the true-up you pay {utilName} today, erased by self-consuming instead of owing
+            </div>
+          )}
         </div>
       </div>
       <p className="text-xs text-slate-500 text-center mb-6">
-        A battery lets you "sell to yourself" — recovering energy at the peak rate you'd otherwise pay. Raw storage
-        figures shown; actual delivery is ~90% of capacity after round-trip efficiency and your set reserve.
+        A battery lets you "sell to yourself" — recovering energy at the peak rate you'd otherwise pay, and cutting the
+        true-up you currently owe. Raw storage figures shown; actual delivery is ~90% of capacity after round-trip
+        efficiency and your set reserve.
       </p>
 
       {/* Backup value */}
