@@ -113,7 +113,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         {/* BATTERY ANALYSIS TAB */}
         {activeTab === 'battery' && (
           <div className="print:hidden">
-            <BatteryAnalysis inputs={inputs} />
+            <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} />
           </div>
         )}
 
