@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Battery } from 'lucide-react';
 import { buildDailyOverlay, calculateCreditsRecovered } from './BatteryModel';
 import { TOU_RATES } from '../utils/rateData';
+import { calculateNEMImpact, getUtilityRate } from '../utils/calculations';
 import BatteryConsumptionProduction from './BatteryConsumptionProduction';
 import BatteryEnergyLoss from './BatteryEnergyLoss';
 import BatteryExportInefficiencies from './BatteryExportInefficiencies';
@@ -18,8 +19,24 @@ import BatteryStabilization from './BatteryStabilization';
  * The overlay (built from the selected profile + the client's system data)
  * is computed once here and shared, so every section stays in sync.
  */
-const BatteryAnalysis = ({ inputs }) => {
+const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null }) => {
   const [profileKey, setProfileKey] = useState('evening_heavy');
+
+  // AUTHORITATIVE true-up / annual-check — from full annual usage vs production
+  // at the real utility rate. Prefer the value computed by the audit tool
+  // (passed in) so both tools ALWAYS agree; fall back to computing it here
+  // (e.g. sandbox mode) using the same function the audit uses.
+  const nemImpact = nemImpactProp || calculateNEMImpact(
+    inputs.annualProduction,
+    inputs.currentAnnualUsage,
+    getUtilityRate(inputs.nowYear || new Date().getFullYear(), inputs.utility, inputs.onCareProgram),
+    inputs.nemVersion,
+    inputs.exportRate
+  );
+  // Normalized: positive owe = true-up, positive credit = utility pays them.
+  const annualTrueUp = nemImpact.type === 'trueup' ? nemImpact.amount : 0;
+  const annualCheck = nemImpact.type === 'credit' ? nemImpact.amount : 0;
+  const owesUtility = nemImpact.type === 'trueup';
 
   const overlay = buildDailyOverlay(
     profileKey,
@@ -45,8 +62,8 @@ const BatteryAnalysis = ({ inputs }) => {
   const effExport = manualMode ? (Number(exportKwh) || 0) : overlay.annualDaytimeOverproduction;
   const effImport = manualMode ? (Number(importKwh) || 0) : overlay.annualNighttimeImport;
 
-  // Energy Credits Recovered / year — shared with the stabilization ROI math,
-  // now using the SAME effective export/import as §3 and §4.
+  // Energy Credits Recovered / year — the overlay-driven time-shift value (the
+  // rate-arbitrage spread a battery claws back). Kept exactly as designed.
   const touRates = TOU_RATES[inputs.utility] || TOU_RATES.SCE;
   const recovery = calculateCreditsRecovered(
     touRates,
@@ -56,6 +73,14 @@ const BatteryAnalysis = ({ inputs }) => {
     inputs.batteryEfficiency,
     inputs.utility
   );
+
+  // If they currently OWE a true-up, a battery that self-consumes also erases
+  // (part of) that true-up — so recovered value = arbitrage spread + avoided
+  // true-up, capped by what the battery can physically shift.
+  const arbitrageRecovered = recovery.creditsRecovered;
+  const shiftRatio = effImport > 0 ? Math.min(1, recovery.shiftedKwh / effImport) : 0;
+  const avoidedTrueUp = annualTrueUp * shiftRatio;
+  const totalRecoveredPerYear = arbitrageRecovered + avoidedTrueUp;
 
   return (
     <div>
@@ -89,6 +114,9 @@ const BatteryAnalysis = ({ inputs }) => {
         setImportKwh={setImportKwh}
         effExport={effExport}
         effImport={effImport}
+        annualTrueUp={annualTrueUp}
+        annualCheck={annualCheck}
+        owesUtility={owesUtility}
       />
 
       <BatteryRecovery
@@ -96,10 +124,16 @@ const BatteryAnalysis = ({ inputs }) => {
         overlay={overlay}
         effExport={effExport}
         effImport={effImport}
+        annualTrueUp={annualTrueUp}
+        annualCheck={annualCheck}
+        owesUtility={owesUtility}
+        avoidedTrueUp={avoidedTrueUp}
+        arbitrageRecovered={arbitrageRecovered}
+        totalRecoveredPerYear={totalRecoveredPerYear}
       />
 
       <BatteryStabilization
-        recoveredValuePerYear={recovery.creditsRecovered}
+        recoveredValuePerYear={totalRecoveredPerYear}
         overlay={overlay}
         inputs={inputs}
       />
