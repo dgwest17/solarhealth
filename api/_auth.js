@@ -42,7 +42,14 @@ export async function requireUser(req) {
   });
 
   if (!resp.ok) {
-    const err = new Error('Invalid or expired session');
+    let detail = '';
+    try {
+      const body = await resp.json();
+      detail = body.msg || body.message || body.error_description || body.error || '';
+    } catch {
+      try { detail = await resp.text(); } catch {}
+    }
+    const err = new Error(`Session check failed (${resp.status})${detail ? ': ' + detail : ''}`);
     err.status = 401;
     throw err;
   }
