@@ -16,7 +16,7 @@ const NEMStatusCard = ({ currentNEMImpact, nemVersion, cumulativeNEMCredits, cum
         {isCredit ? (
           <>
             <DollarSign className="text-green-600" size={24} />
-            Net Metering Credit (Overproducing)
+            Net Metering Credit (Over-producing)
           </>
         ) : (
           <>
