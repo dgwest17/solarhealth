@@ -86,7 +86,18 @@ export default async function handler(req, res) {
     let whereClause;
     if (user.role === 'admin') {
       whereClause = 'Email is not null';
+    } else if (user.role === 'rep') {
+      // Reps don't yet own real clients (ownership + write-back come later).
+      // For now each rep sees a shared TEST client so they can exercise the
+      // dashboard → audit flow. Point REP_TEST_CLIENT_EMAIL at a demo Contact.
+      const testEmail = (process.env.REP_TEST_CLIENT_EMAIL || '').replace(/'/g, '').toLowerCase();
+      if (!testEmail) {
+        // No test client configured yet — return an empty, friendly list.
+        return res.status(200).json({ role: user.role, count: 0, clients: [] });
+      }
+      whereClause = `Email = '${testEmail}'`;
     } else {
+      // client: only their own record by email match
       const safeEmail = user.email.replace(/'/g, '');
       whereClause = `Email = '${safeEmail}'`;
     }
