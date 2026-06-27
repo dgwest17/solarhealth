@@ -143,6 +143,7 @@ export default function App() {
         userEmail={user.email}
         role={role}
         onSignOut={signOut}
+        onRole={setRole}
         hideHeader
       />
     </div>
