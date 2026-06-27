@@ -61,10 +61,20 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'Client not found' });
     }
 
-    // SECURITY: client role can only see their own record
+    // SECURITY: enforce per-role access.
+    //  - admin: any contact
+    //  - rep:   only the designated test client (REP_TEST_CLIENT_EMAIL)
+    //  - client: only the contact whose email matches their login
     if (user.role !== 'admin') {
       const contactEmail = (contact.Email || '').toLowerCase();
-      if (contactEmail !== user.email) {
+      let allowed = false;
+      if (user.role === 'rep') {
+        const testEmail = (process.env.REP_TEST_CLIENT_EMAIL || '').toLowerCase();
+        allowed = testEmail && contactEmail === testEmail;
+      } else {
+        allowed = contactEmail === user.email;
+      }
+      if (!allowed) {
         const err = new Error('Forbidden');
         err.status = 403;
         throw err;
