@@ -9,7 +9,7 @@ import { apiFetch } from '../lib/supabaseClient';
  * Client Dashboard — pulls the caller's clients from /api/clients (role-scoped
  * server-side), then sorts/filters client-side. Clicking a client calls onOpen.
  */
-const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = false }) => {
+const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = false, onRole }) => {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -25,6 +25,7 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
     try {
       const data = await apiFetch('/api/clients');
       setClients(data.clients || []);
+      if (onRole && data.role) onRole(data.role);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -90,7 +91,7 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
               <div>
                 <h1 className="text-2xl font-bold text-amber-300">Client Monitoring</h1>
                 <p className="text-slate-400 text-sm">
-                  {role === 'admin' ? 'All clients' : 'Your clients'} · {clients.length} total
+                  {role === 'admin' ? 'All clients' : role === 'rep' ? 'Your test client (more coming soon)' : 'Your clients'} · {clients.length} total
                 </p>
               </div>
             </div>
