@@ -15,6 +15,8 @@
  * role is derived here from the verified token, never trusted from the client.
  */
 
+import { zohoFetch } from './_zoho.js';
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
@@ -70,10 +72,25 @@ export async function requireUser(req) {
   let role = 'client';
   if (adminEmails.includes(email)) {
     role = 'admin';
+  } else {
+    // Rep detection: look the email up in Zoho Recruits and check the
+    // Engineer boolean. Engineer == true  ->  'rep'. Otherwise 'client'.
+    // Recruits is the single source of truth for who is a rep.
+    try {
+      const safeEmail = email.replace(/'/g, '');
+      const q = `select id, Email, Engineer from Recruits where Email = '${safeEmail}' limit 1`;
+      const result = await zohoFetch('/crm/v2/coql', {
+        method: 'POST',
+        body: JSON.stringify({ select_query: q })
+      });
+      const rec = result.data && result.data[0];
+      if (rec && rec.Engineer === true) {
+        role = 'rep';
+      }
+    } catch (e) {
+      // If the Recruits lookup fails, fall back to 'client' (least privilege).
+    }
   }
-  // NOTE: rep detection (Zoho Recruits Engineer==true) is wired in a later
-  // phase. For now, non-admins are treated as 'client' and scoped to their
-  // own email. Until you create rep/client users, only your admin login exists.
 
   return { email, role, supabaseUserId: user.id };
 }
