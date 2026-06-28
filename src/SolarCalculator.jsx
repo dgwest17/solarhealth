@@ -12,6 +12,7 @@ import AINarrative from './components/AINarrative';
 import PDFReportGenerator from './components/PDFReportGenerator';
 import SystemSpecsSheet from './components/SystemSpecsSheet';
 import BatteryAnalysis from './battery/BatteryAnalysis';
+import LoadSimulator from './simulator/LoadSimulator';
 
 const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = null }) => {
   const [inputs, setInputs] = useState(prefilledInputs ? { ...DEFAULT_INPUTS, ...prefilledInputs } : DEFAULT_INPUTS);
@@ -28,6 +29,20 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
 
   // Tab switcher: 'audit' (the financial audit) | 'battery' (battery analysis)
   const [activeTab, setActiveTab] = useState('audit');
+
+  // The simulator adds load on top of a base. Snapshot the usage that was in
+  // effect the first time the simulator is opened, so toggling loads on/off is
+  // reversible and layered on the real number (not compounding).
+  const [simBaseUsage, setSimBaseUsage] = useState(null);
+
+  const openSimulator = () => {
+    if (simBaseUsage == null) setSimBaseUsage(inputs.currentAnnualUsage);
+    setActiveTab('simulator');
+  };
+
+  const handleSimulatorUsage = (newUsage) => {
+    setInputs((prev) => ({ ...prev, currentAnnualUsage: newUsage }));
+  };
 
   // Auto-update current date on mount
   useEffect(() => {
@@ -108,12 +123,33 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
           >
             Battery Analysis
           </button>
+          <button
+            onClick={openSimulator}
+            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+              activeTab === 'simulator'
+                ? 'bg-amber-400 text-slate-900'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            Load Simulator
+          </button>
         </div>
 
         {/* BATTERY ANALYSIS TAB */}
         {activeTab === 'battery' && (
           <div className="print:hidden">
             <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} />
+          </div>
+        )}
+
+        {/* LOAD SIMULATOR TAB */}
+        {activeTab === 'simulator' && (
+          <div className="print:hidden">
+            <LoadSimulator
+              baseUsage={simBaseUsage != null ? simBaseUsage : inputs.currentAnnualUsage}
+              production={inputs.annualProduction}
+              onUsageChange={handleSimulatorUsage}
+            />
           </div>
         )}
 
