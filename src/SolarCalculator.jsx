@@ -149,6 +149,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
               baseUsage={simBaseUsage != null ? simBaseUsage : inputs.currentAnnualUsage}
               production={inputs.annualProduction}
               onUsageChange={handleSimulatorUsage}
+              nemImpact={calculations.currentNEMImpact}
             />
           </div>
         )}
