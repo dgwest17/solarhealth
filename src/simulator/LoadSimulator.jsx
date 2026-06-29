@@ -23,7 +23,7 @@ const ICONS = {
   pool: Waves, appliance: Plug, plus: Plus
 };
 
-const LoadSimulator = ({ baseUsage = 10000, production = 12000, onUsageChange }) => {
+const LoadSimulator = ({ baseUsage = 10000, production = 12000, onUsageChange, nemImpact = null }) => {
   // activeLoads: { [id]: kWh }. Absent = not added.
   const [activeLoads, setActiveLoads] = useState({});
 
@@ -58,6 +58,25 @@ const LoadSimulator = ({ baseUsage = 10000, production = 12000, onUsageChange })
 
   const money = (v) => `$${Math.round(v).toLocaleString()}`;
 
+  // Live year-end position, from the SAME authoritative calc the audit uses.
+  // nemImpact recalculates upstream as added load raises usage, so this
+  // reflects the simulated scenario in real time.
+  //   type 'credit'  -> utility pays them (green)
+  //   type 'trueup'  -> they owe (red)
+  const isCredit = nemImpact ? nemImpact.type === 'credit' : true;
+  const trueUpAmount = nemImpact ? Math.round(nemImpact.amount) : 0;
+  const owed = !isCredit ? trueUpAmount : 0;
+
+  // Recommendation tiers, driven by the amount OWED (a credit recommends nothing):
+  //   owe $1..$1000     -> "Battery Recommended"
+  //   owe > $1000       -> "Battery + Solar Recommended"
+  let recommendation = null;
+  if (owed > 0 && owed <= 1000) {
+    recommendation = { text: 'Battery Recommended', level: 'battery' };
+  } else if (owed > 1000) {
+    recommendation = { text: 'Battery + Solar Recommended', level: 'both' };
+  }
+
   return (
     <div className="bg-gradient-to-br from-[#0e1f38] to-[#0a1628] border border-cyan-400/30 rounded-xl shadow-2xl p-6 md:p-8 mb-6">
       <div className="flex items-center justify-between mb-1">
@@ -86,6 +105,50 @@ const LoadSimulator = ({ baseUsage = 10000, production = 12000, onUsageChange })
 
         {/* Live impact panel */}
         <div className="lg:col-span-2 space-y-3">
+          {/* Year-end position — green credit / red owed, recalculates live */}
+          <div className={`rounded-xl p-5 border-2 transition-colors ${
+            isCredit
+              ? 'bg-green-500/10 border-green-400/50'
+              : 'bg-red-500/10 border-red-400/50'
+          }`}>
+            <div className="text-xs uppercase tracking-wider mb-1 flex items-center gap-1.5"
+              style={{ color: isCredit ? '#86efac' : '#fca5a5' }}>
+              {isCredit ? <TrendingUp size={13} /> : <Zap size={13} />}
+              {isCredit ? 'Year-End Credit' : 'Year-End True-Up'}
+            </div>
+            <div className={`text-4xl font-extrabold ${isCredit ? 'text-green-400' : 'text-red-400'}`}>
+              {isCredit ? '+' : '\u2212'}{money(trueUpAmount)}<span className="text-base font-normal text-slate-400">/yr</span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              {isCredit
+                ? 'Your system over-produces — the utility pays you.'
+                : 'You owe the utility this at year-end true-up.'}
+            </p>
+          </div>
+
+          {/* Flashing recommendation banner */}
+          {recommendation && (
+            <div className={`rounded-xl p-4 border-2 animate-pulse flex items-center gap-2 ${
+              recommendation.level === 'both'
+                ? 'bg-red-500/20 border-red-400/70'
+                : 'bg-amber-500/20 border-amber-400/70'
+            }`}>
+              <Zap size={20} className={recommendation.level === 'both' ? 'text-red-300' : 'text-amber-300'} />
+              <div>
+                <div className={`font-extrabold text-lg leading-tight ${
+                  recommendation.level === 'both' ? 'text-red-200' : 'text-amber-200'
+                }`}>
+                  {recommendation.text}
+                </div>
+                <div className="text-[11px] text-slate-300/80">
+                  {recommendation.level === 'both'
+                    ? 'Your true-up is steep — storage plus more panels closes the gap.'
+                    : 'A battery would recover most of this annual cost.'}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="bg-slate-900/60 rounded-xl p-5 border border-cyan-400/20">
             <div className="text-xs text-cyan-200 uppercase tracking-wider mb-3">Live Impact</div>
 
@@ -100,19 +163,6 @@ const LoadSimulator = ({ baseUsage = 10000, production = 12000, onUsageChange })
               </div>
             </div>
           </div>
-
-          {/* Upsell nudge when they tip into heavy over-consumption */}
-          {added > 0 && offsetAfter < 100 && (
-            <div className="bg-amber-500/10 border border-amber-400/40 rounded-xl p-4 flex items-start gap-2">
-              <Zap size={16} className="text-amber-400 mt-0.5 shrink-0" />
-              <p className="text-sm text-amber-100/90">
-                With these additions your system now covers <strong>{offsetAfter}%</strong> of your usage.
-                {offsetBefore >= 100 && offsetAfter < 100
-                  ? ' You were over-producing before — now you\u2019ll start pulling from the grid. A battery or a few more panels would close the gap.'
-                  : ' Adding storage or panels would help you keep up with the new demand.'}
-              </p>
-            </div>
-          )}
 
           {/* Per-load fine-tuning */}
           {Object.keys(activeLoads).length > 0 && (
