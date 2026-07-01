@@ -15,7 +15,8 @@ const BatteryExportInefficiencies = ({
   exportKwh: exportKwhProp, setExportKwh,
   importKwh: importKwhProp, setImportKwh,
   effExport, effImport,
-  annualTrueUp = 0, annualCheck = 0, owesUtility = false
+  annualTrueUp = 0, annualCheck = 0, owesUtility = false,
+  extraUsage = null
 }) => {
   const touRates = TOU_RATES[inputs.utility] || TOU_RATES.SCE;
   const utilName = (() => {
@@ -143,6 +144,27 @@ const BatteryExportInefficiencies = ({
               )}
             </div>
           </div>
+
+          {extraUsage && extraUsage.cost > 0 && (
+            <div className="mt-4 bg-red-500/10 border-2 border-red-400/40 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs uppercase tracking-wider text-red-300 mb-1">
+                    ⚡ Extra Usage True-Up (from Load Simulator)
+                  </div>
+                  <div className="text-sm text-slate-300">
+                    {extraUsage.addedKwh.toLocaleString()} kWh added · {extraUsage.billableKwh.toLocaleString()} kWh over production, billed at time-of-use
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    A battery shifts this load off peak — recovering most of this added cost.
+                  </div>
+                </div>
+                <div className="text-2xl font-bold text-red-400 whitespace-nowrap">
+                  −{money(extraUsage.cost)}<span className="text-xs font-normal text-slate-400">/yr</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="mt-4 bg-amber-400/10 border border-amber-400/30 rounded-lg p-3 text-sm text-amber-100">
             You sell at the <strong>day rate to your neighbors</strong>, then import back at <strong>peak rates</strong>. The spread is the grid's profit — not yours.
