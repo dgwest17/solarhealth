@@ -27,22 +27,13 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
   // Client name shown on the printed report header
   const [clientName, setClientName] = useState(clientLabel || '');
 
-  // Tab switcher: 'audit' (the financial audit) | 'battery' (battery analysis)
+  // Tab switcher: 'audit' | 'battery' | 'simulator'
   const [activeTab, setActiveTab] = useState('audit');
 
-  // The simulator adds load on top of a base. Snapshot the usage that was in
-  // effect the first time the simulator is opened, so toggling loads on/off is
-  // reversible and layered on the real number (not compounding).
-  const [simBaseUsage, setSimBaseUsage] = useState(null);
-
-  const openSimulator = () => {
-    if (simBaseUsage == null) setSimBaseUsage(inputs.currentAnnualUsage);
-    setActiveTab('simulator');
-  };
-
-  const handleSimulatorUsage = (newUsage) => {
-    setInputs((prev) => ({ ...prev, currentAnnualUsage: newUsage }));
-  };
+  // The Load Simulator is NON-DESTRUCTIVE. It never changes currentAnnualUsage.
+  // Instead it reports an additive "extra usage" result, shown as a separate
+  // line on the audit + battery tabs. Baselines/profile stay static.
+  const [extraUsage, setExtraUsage] = useState({ addedKwh: 0, billableKwh: 0, cost: 0, daytimePct: 0 });
 
   // Auto-update current date on mount
   useEffect(() => {
@@ -124,7 +115,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
             Battery Analysis
           </button>
           <button
-            onClick={openSimulator}
+            onClick={() => setActiveTab('simulator')}
             className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
               activeTab === 'simulator'
                 ? 'bg-amber-400 text-slate-900'
@@ -138,7 +129,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         {/* BATTERY ANALYSIS TAB */}
         {activeTab === 'battery' && (
           <div className="print:hidden">
-            <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} />
+            <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} extraUsage={extraUsage} />
           </div>
         )}
 
@@ -146,10 +137,11 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         {activeTab === 'simulator' && (
           <div className="print:hidden">
             <LoadSimulator
-              baseUsage={simBaseUsage != null ? simBaseUsage : inputs.currentAnnualUsage}
+              baseUsage={inputs.currentAnnualUsage}
               production={inputs.annualProduction}
-              onUsageChange={handleSimulatorUsage}
-              nemImpact={calculations.currentNEMImpact}
+              utility={inputs.utility}
+              currentNemImpact={calculations.currentNEMImpact}
+              onExtraUsageChange={setExtraUsage}
             />
           </div>
         )}
@@ -188,10 +180,26 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
           cumulativeTrueUpCharges={calculations.cumulativeTrueUpCharges}
         />
 
-        <SystemHealthAlert
-          systemHealth={calculations.systemHealth}
-          annualProduction={inputs.annualProduction}
-        />
+        {/* Extra Usage True-Up — from the Load Simulator, shown SEPARATELY so it
+            never alters the real current true-up/credit above. */}
+        {extraUsage && extraUsage.cost > 0 && (
+          <div className="bg-red-500/10 border-2 border-red-400/40 rounded-xl p-5 mb-6 flex items-center justify-between print:hidden">
+            <div>
+              <div className="text-xs uppercase tracking-wider text-red-300 flex items-center gap-1.5 mb-1">
+                ⚡ Extra Usage True-Up (from Load Simulator)
+              </div>
+              <p className="text-sm text-slate-300">
+                {extraUsage.addedKwh.toLocaleString()} kWh of added load · {extraUsage.billableKwh.toLocaleString()} kWh billed at time-of-use
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-3xl font-extrabold text-red-400">
+                −${Math.round(extraUsage.cost).toLocaleString()}<span className="text-sm font-normal text-slate-400">/yr</span>
+              </div>
+              <div className="text-[11px] text-slate-500">on top of your current position</div>
+            </div>
+          </div>
+        )}
 
         {/* Savings/Payback summary (the 4 KPI cards) — last thing on PDF page 1 */}
         <ResultsDashboard calculations={calculations} />
