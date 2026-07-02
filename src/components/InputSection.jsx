@@ -1,5 +1,5 @@
-import React from 'react';
-import { Database, RefreshCw, AlertCircle, Battery } from 'lucide-react';
+import React, { useState } from 'react';
+import { Database, RefreshCw, AlertCircle, Battery, ChevronDown, ChevronRight } from 'lucide-react';
 import { UTILITY_OPTIONS, NEM_OPTIONS, PROGRAM_OPTIONS, API_PROVIDERS, TOU_RATES, PPA_ESCALATOR_OPTIONS, INSTALLER_OPTIONS } from '../utils/rateData';
 import { calculateMonthlyPayment } from '../utils/loanCalculations';
 
@@ -67,14 +67,58 @@ const InputSection = ({
     }
   }
 
+  // ---- Collapsible sections ----
+  // 'system' open by default; the rest collapsed so the form doesn't swallow
+  // the whole screen. Each collapsed header shows a live summary of its values.
+  const [openSections, setOpenSections] = useState({ system: true, financing: false, battery: false });
+  const toggleSection = (id) => setOpenSections((p) => ({ ...p, [id]: !p[id] }));
+
+  const utilShort = (UTILITY_OPTIONS.find((u) => u.value === inputs.utility)?.label.match(/\(([^)]+)\)/)?.[1]) || inputs.utility;
+  const nemShort = (NEM_OPTIONS.find((n) => n.value === inputs.nemVersion)?.label) || inputs.nemVersion;
+  const systemSummary = `${inputs.systemSize} kW · ${Number(inputs.annualProduction).toLocaleString()} kWh/yr · ${utilShort} · ${nemShort} · ${inputs.installedYear}`;
+  const financingSummary = inputs.program === 'PPA'
+    ? `PPA/Lease · $${inputs.ppaInitialRate}/kWh · ${inputs.escalator}% esc`
+    : inputs.program === 'Loan'
+      ? `Loan · $${Number(inputs.loanPrincipal).toLocaleString()} @ ${inputs.loanInterestRate || 5.99}% · ${inputs.loanTerm} yr`
+      : inputs.program === 'Cash'
+        ? `Cash · $${Number(inputs.cashNetCost).toLocaleString()} net`
+        : 'Other';
+  const batterySummary = [
+    inputs.hasBattery ? `${inputs.batteryCapacity} kWh battery` : 'No battery',
+    inputs.useTOU ? 'TOU on' : null,
+    inputs.nemVersion === 'NEM2' ? `export $${inputs.exportRate}/kWh` : null
+  ].filter(Boolean).join(' · ');
+
+  // Plain render function (NOT a nested component — keeps input focus stable).
+  const renderSection = (id, title, summary, content) => {
+    const open = openSections[id];
+    return (
+      <div className="border border-cyan-500/20 rounded-xl mb-3 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => toggleSection(id)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-slate-900/50 hover:bg-slate-900/80 transition-colors text-left"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            {open ? <ChevronDown size={16} className="text-cyan-400 shrink-0" /> : <ChevronRight size={16} className="text-cyan-400 shrink-0" />}
+            <span className="font-semibold text-cyan-300 text-sm">{title}</span>
+            {!open && <span className="text-xs text-slate-400 truncate ml-2">{summary}</span>}
+          </div>
+          {!open && <span className="text-[10px] text-cyan-500/70 shrink-0 ml-2">edit</span>}
+        </button>
+        {open && <div className="px-4 pt-4 pb-1">{content}</div>}
+      </div>
+    );
+  };
+
   return (
-    <div className="bg-slate-800/60 backdrop-blur-md border border-cyan-500/30 rounded-xl shadow-2xl p-8 mb-6">
-      <div className="flex justify-between items-start mb-6">
+    <div className="bg-slate-800/60 backdrop-blur-md border border-cyan-500/30 rounded-xl shadow-2xl p-5 md:p-6 mb-6">
+      <div className="flex justify-between items-start mb-4">
         <div>
-          <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 mb-2 flex items-center gap-2">
+          <h1 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 mb-1 flex items-center gap-2">
             ⚡ California Solar Audit
           </h1>
-          <p className="text-cyan-300 text-sm">NEM Analysis • Real Utility Rates • CARE Program Support</p>
+          <p className="text-cyan-300 text-xs">NEM Analysis • Real Utility Rates • CARE Program Support</p>
         </div>
         
         <div className="bg-slate-900/60 rounded-lg p-1 flex gap-1 border border-cyan-500/30">
@@ -153,6 +197,8 @@ const InputSection = ({
         </div>
       )}
 
+      {/* ============ SECTION: SYSTEM & SITE ============ */}
+      {renderSection('system', '🏠 System & Site', systemSummary, (<>
       {/* Date Inputs - NOW WITH DROPDOWNS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         <div className="space-y-4">
@@ -348,7 +394,10 @@ const InputSection = ({
           return null;
         })()}
       </div>
+      </>))}
 
+      {/* ============ SECTION: FINANCING ============ */}
+      {renderSection('financing', '💳 Financing', financingSummary, (<>
       {/* Solar Program Selection */}
       <div className="mb-6">
         <label className="block text-sm text-cyan-300 mb-2">Solar Program</label>
@@ -611,7 +660,10 @@ const InputSection = ({
           </div>
         </div>
       )}
+      </>))}
 
+      {/* ============ SECTION: NEM EXPORT, BATTERY & TOU ============ */}
+      {renderSection('battery', '🔋 NEM Export, Battery & TOU', batterySummary, (<>
       {/* NEM 2.0 Export Rate */}
       {inputs.nemVersion === 'NEM2' && (
         <div className="mb-6">
@@ -721,6 +773,7 @@ const InputSection = ({
           )}
         </div>
       )}
+      </>))}
 
       {/* Update System Data Button */}
       <div className="flex justify-center">
