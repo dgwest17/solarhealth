@@ -13,6 +13,7 @@ import PDFReportGenerator from './components/PDFReportGenerator';
 import SystemSpecsSheet from './components/SystemSpecsSheet';
 import BatteryAnalysis from './battery/BatteryAnalysis';
 import LoadSimulator from './simulator/LoadSimulator';
+import GreenButtonUpload from './greenbutton/GreenButtonUpload';
 
 const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = null }) => {
   const [inputs, setInputs] = useState(prefilledInputs ? { ...DEFAULT_INPUTS, ...prefilledInputs } : DEFAULT_INPUTS);
@@ -34,6 +35,20 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
   // Instead it reports an additive "extra usage" result, shown as a separate
   // line on the audit + battery tabs. Baselines/profile stay static.
   const [extraUsage, setExtraUsage] = useState({ addedKwh: 0, billableKwh: 0, cost: 0, daytimePct: 0 });
+
+  // Green Button measured profile. STATIC once applied — the authoritative
+  // consumption baseline (the thing the simulator layers extra usage onto).
+  const [gbProfile, setGbProfile] = useState(null);
+  const [gbApplied, setGbApplied] = useState(false);
+
+  const handleGreenButtonApply = (profile, derivedUsage) => {
+    setGbProfile(profile);
+    setGbApplied(true);
+    if (derivedUsage != null) {
+      // Total house consumption derived from measured grid flows + production.
+      setInputs((prev) => ({ ...prev, currentAnnualUsage: derivedUsage }));
+    }
+  };
 
   // Auto-update current date on mount
   useEffect(() => {
@@ -129,7 +144,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         {/* BATTERY ANALYSIS TAB */}
         {activeTab === 'battery' && (
           <div className="print:hidden">
-            <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} extraUsage={extraUsage} />
+            <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} extraUsage={extraUsage} measured={gbApplied ? gbProfile : null} />
           </div>
         )}
 
@@ -159,6 +174,14 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
           calculations={calculations}
           onUpdate={handleUpdateSystem}
           isUpdating={isUpdating}
+        />
+
+        {/* Green Button measured data — upload + apply */}
+        <GreenButtonUpload
+          utility={inputs.utility}
+          annualProduction={inputs.annualProduction}
+          onApply={handleGreenButtonApply}
+          applied={gbApplied}
         />
         </div>
 
