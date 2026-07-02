@@ -62,14 +62,31 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
   // MEASURED DATA: when a Green Button profile has been applied, its real
   // annual import/export replace the overlay estimates. Manual mode is
   // switched on so both §3 and §4 run off the measured numbers.
+  const [useMeasured, setUseMeasured] = useState(false);
   useEffect(() => {
     if (measured && measured.ok) {
+      setUseMeasured(true);
       setManualMode(true);
       setExportKwh(measured.annualExportKwh);
       setImportKwh(measured.annualImportKwh);
+    } else {
+      setUseMeasured(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [measured]);
+
+  const toggleMeasured = (checked) => {
+    setUseMeasured(checked);
+    if (checked && measured && measured.ok) {
+      // Re-apply the measured numbers.
+      setManualMode(true);
+      setExportKwh(measured.annualExportKwh);
+      setImportKwh(measured.annualImportKwh);
+    } else {
+      // Hand control back to the consumption-profile overlay / manual sliders.
+      setManualMode(false);
+    }
+  };
 
   const effExport = manualMode ? (Number(exportKwh) || 0) : overlay.annualDaytimeOverproduction;
   const effImport = manualMode ? (Number(importKwh) || 0) : overlay.annualNighttimeImport;
@@ -96,6 +113,31 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
 
   return (
     <div>
+      {measured && measured.ok && (
+        <div className={`mb-4 rounded-xl border-2 p-4 flex items-start justify-between gap-3 ${
+          useMeasured ? 'bg-emerald-500/10 border-emerald-400/50' : 'bg-slate-800/60 border-slate-600/60'
+        }`}>
+          <div>
+            <div className={`font-semibold text-sm flex items-center gap-2 ${useMeasured ? 'text-emerald-300' : 'text-slate-300'}`}>
+              📊 {useMeasured ? 'Consumption Profile Overridden by Data Upload' : 'Measured data available (not applied)'}
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              {useMeasured
+                ? `Import/export figures use the client's measured Green Button data (${measured.annualImportKwh.toLocaleString()} kWh in · ${measured.annualExportKwh.toLocaleString()} kWh out, annualized from ${measured.days} days). Uncheck to adjust the consumption/production profile manually.`
+                : 'Check to use the uploaded Green Button figures instead of the modeled profile.'}
+            </p>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer shrink-0 mt-0.5">
+            <input
+              type="checkbox"
+              checked={useMeasured}
+              onChange={(e) => toggleMeasured(e.target.checked)}
+              className="w-4 h-4 accent-emerald-400"
+            />
+            <span className="text-xs text-slate-300">Use measured data</span>
+          </label>
+        </div>
+      )}
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-amber-500 flex items-center gap-2">
           <Battery size={30} className="text-amber-400" />
