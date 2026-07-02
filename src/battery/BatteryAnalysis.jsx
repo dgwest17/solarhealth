@@ -19,7 +19,7 @@ import BatteryStabilization from './BatteryStabilization';
  * The overlay (built from the selected profile + the client's system data)
  * is computed once here and shared, so every section stays in sync.
  */
-const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage = null }) => {
+const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null }) => {
   const [profileKey, setProfileKey] = useState('evening_heavy');
 
   // AUTHORITATIVE true-up / annual-check — from full annual usage vs production
@@ -58,6 +58,18 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
       setImportKwh(overlay.annualNighttimeImport);
     }
   }, [overlay.annualDaytimeOverproduction, overlay.annualNighttimeImport, manualMode]);
+
+  // MEASURED DATA: when a Green Button profile has been applied, its real
+  // annual import/export replace the overlay estimates. Manual mode is
+  // switched on so both §3 and §4 run off the measured numbers.
+  useEffect(() => {
+    if (measured && measured.ok) {
+      setManualMode(true);
+      setExportKwh(measured.annualExportKwh);
+      setImportKwh(measured.annualImportKwh);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [measured]);
 
   const effExport = manualMode ? (Number(exportKwh) || 0) : overlay.annualDaytimeOverproduction;
   const effImport = manualMode ? (Number(importKwh) || 0) : overlay.annualNighttimeImport;
