@@ -16,12 +16,23 @@ export const LOAD_TYPES = [
     id: 'ev',
     label: 'Electric Vehicle',
     icon: 'car',
-    blurb: 'Charging at home — the single biggest load most homes add.',
+    blurb: 'Charging at home — pick the EV and how many miles you\u2019ll charge here.',
     defaultKwh: 3500,
-    minKwh: 2000,
-    maxKwh: 6000,
+    minKwh: 500,
+    maxKwh: 12000,
     defaultDaytimePct: 30, // most people charge overnight
-    note: 'Based on ~12,000 miles/year. A second EV roughly doubles this.'
+    note: 'Calculated from the vehicle\u2019s efficiency and your home-charged miles.'
+  },
+  {
+    id: 'hottub',
+    label: 'Hot Tub / Spa',
+    icon: 'hottub',
+    blurb: 'Heating + pumps — scales with tub size and daily soak time.',
+    defaultKwh: 2200,
+    minKwh: 800,
+    maxKwh: 8000,
+    defaultDaytimePct: 25, // evening soaks dominate
+    note: 'Calculated from tub size and hours of use per day.'
   },
   {
     id: 'heatpump',
@@ -100,6 +111,52 @@ export function totalAddedKwh(activeLoads) {
 
 export function getLoadType(id) {
   return LOAD_TYPES.find((l) => l.id === id) || null;
+}
+
+/**
+ * EV catalog — miles-per-kWh efficiency for the common home-charged vehicles.
+ * 'custom' lets the user type their own conversion (plug-in hybrids, unusual
+ * EVs). Annual kWh = home-charged miles ÷ (mi/kWh), divided by ~0.90 charger
+ * efficiency (wall-to-battery losses).
+ */
+export const EV_MODELS = [
+  { id: 'model3', label: 'Tesla Model 3', miPerKwh: 4.0 },
+  { id: 'modely', label: 'Tesla Model Y', miPerKwh: 3.6 },
+  { id: 'ioniq5', label: 'Hyundai Ioniq 5', miPerKwh: 3.3 },
+  { id: 'leaf', label: 'Nissan Leaf', miPerKwh: 3.3 },
+  { id: 'bolt', label: 'Chevy Bolt / Equinox EV', miPerKwh: 3.5 },
+  { id: 'mache', label: 'Ford Mustang Mach-E', miPerKwh: 3.0 },
+  { id: 'r1t', label: 'Rivian R1T / R1S', miPerKwh: 2.1 },
+  { id: 'lightning', label: 'Ford F-150 Lightning', miPerKwh: 2.0 },
+  { id: 'phev', label: 'Plug-in Hybrid (typical)', miPerKwh: 3.0 },
+  { id: 'custom', label: 'Custom / enter efficiency', miPerKwh: 3.0 }
+];
+
+export const CHARGER_EFFICIENCY = 0.90; // wall-to-battery losses
+
+export function evAnnualKwh(milesPerYear, miPerKwh) {
+  const mi = Number(milesPerYear) || 0;
+  const eff = Number(miPerKwh) || 3.0;
+  if (mi <= 0 || eff <= 0) return 0;
+  return Math.round(mi / eff / CHARGER_EFFICIENCY);
+}
+
+/**
+ * Hot tub sizes. Daily energy = standby heat-keeping (baseDailyKwh, scales
+ * with water volume/surface) + per-hour-of-use energy (heater recovery +
+ * jets). Annual = daily × 365.
+ */
+export const HOTTUB_SIZES = [
+  { id: 'small', label: 'Small (2–3 person, ~250 gal)', baseDailyKwh: 2.5, perHourKwh: 1.2 },
+  { id: 'medium', label: 'Medium (4–5 person, ~350 gal)', baseDailyKwh: 3.5, perHourKwh: 1.6 },
+  { id: 'large', label: 'Large (6–7 person, ~450 gal)', baseDailyKwh: 4.5, perHourKwh: 2.0 },
+  { id: 'swimspa', label: 'Swim spa (~1,200+ gal)', baseDailyKwh: 8.0, perHourKwh: 2.8 }
+];
+
+export function hottubAnnualKwh(sizeId, hoursPerDay) {
+  const size = HOTTUB_SIZES.find((s) => s.id === sizeId) || HOTTUB_SIZES[1];
+  const hrs = Math.max(0, Number(hoursPerDay) || 0);
+  return Math.round((size.baseDailyKwh + size.perHourKwh * hrs) * 365);
 }
 
 /**
