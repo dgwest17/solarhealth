@@ -53,8 +53,10 @@ export const calculatePaymentAfterTaxCredit = (
   termYears,
   monthsBeforeCredit = 18
 ) => {
-  // New principal after tax credit reduces the loan
-  const newPrincipal = originalPrincipal - taxCredit;
+  // CORRECTED: the credit reduces the balance remaining AFTER the payments
+  // already made, not the original principal.
+  const balanceAtCredit = calculateRemainingPrincipal(originalPrincipal, annualRate, termYears, monthsBeforeCredit);
+  const newPrincipal = Math.max(0, balanceAtCredit - taxCredit);
   
   // Remaining months after tax credit is applied
   const remainingMonths = (termYears * 12) - monthsBeforeCredit;
