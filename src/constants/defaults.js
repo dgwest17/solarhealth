@@ -57,7 +57,7 @@ export const DEFAULT_INPUTS = {
   
   hasBattery: false,
   nemVersion: 'NEM2',
-  exportRate: 0.07,
+  exportRate: 0.06,
   onCareProgram: false,
   batteryCapacity: 13.5,
   batteryEfficiency: 90,
