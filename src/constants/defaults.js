@@ -21,10 +21,10 @@ export const DEFAULT_INPUTS = {
   nowMonth: currentDate.month,
   utility: 'SDGE',
   installer: '',
-  systemSize: 8.0,
-  annualUsageAtInstall: 10000,
-  currentAnnualUsage: 11500,
-  annualProduction: 12000,
+  systemSize: 7.0,
+  annualUsageAtInstall: 7500,
+  currentAnnualUsage: 9500,
+  annualProduction: 10000,
   
   // Program-specific fields
   program: 'Loan',
