@@ -171,11 +171,16 @@ export const calculateLoanPaymentStructure = (
 ) => {
   if (taxCreditApplied) {
     // Tax credit APPLIED to loan at month 18
-    // Customer pays HIGHER for 18 months, then principal is reduced and payment LOWERS
+    // Customer pays the original payment for 18 months; the credit then pays
+    // down the loan and the payment re-amortizes.
     const initialPayment = calculateMonthlyPayment(loanPrincipal, loanInterestRate, loanTerm);
-    
-    // After 18 months, principal is reduced by tax credit
-    const reducedPrincipal = loanPrincipal - taxCredit;
+
+    // CORRECTED: the credit reduces the BALANCE AT MONTH 18 (after 18 payments
+    // of principal paydown), not the original principal. Using the original
+    // principal overstates the balance and the re-amortized payment — the
+    // error grows as the term shortens.
+    const balanceAt18 = calculateRemainingPrincipal(loanPrincipal, loanInterestRate, loanTerm, 18);
+    const reducedPrincipal = Math.max(0, balanceAt18 - taxCredit);
     const remainingYears = loanTerm - 1.5; // 18 months = 1.5 years
     const paymentAfter18Months = calculateMonthlyPayment(reducedPrincipal, loanInterestRate, remainingYears);
     
@@ -398,6 +403,7 @@ export const calculateComprehensiveSavings = (inputs) => {
   }
   
   let cumulativeSavings = 0;
+  let cumulativeGrossBenefit = 0;
   let cumulativeCost = 0;
   let cumulativeBatteryCost = 0;
   let cumulativeArbitrageSavings = 0;
@@ -487,11 +493,20 @@ export const calculateComprehensiveSavings = (inputs) => {
     } else {
       monthlySavings = utilityWouldPay - solarCost - batteryCost - connectionFee + arbitrageSavings - monthlyNEMImpact;
     }
-    
+
+    // GROSS solar benefit (for payback): what the system delivers before any
+    // financing payments — avoided utility cost ± NEM position. Excludes
+    // solar/battery payments (those ARE the investment being paid back) and
+    // battery arbitrage (a battery benefit, not a solar one).
+    const grossMonthlyBenefit = nemImpact.type === 'credit'
+      ? utilityWouldPay + monthlyNEMImpact
+      : utilityWouldPay - monthlyNEMImpact;
+
     const monthsInYear = year === Math.floor(yearsSinceInstall) ? (monthsSinceInstall % 12 || 12) : 12;
-    
+
     for (let m = 0; m < monthsInYear; m++) {
       cumulativeSavings += monthlySavings;
+      cumulativeGrossBenefit += grossMonthlyBenefit;
       cumulativeCost += solarCost;
       cumulativeBatteryCost += batteryCost;
       cumulativeArbitrageSavings += arbitrageSavings;
@@ -562,7 +577,25 @@ export const calculateComprehensiveSavings = (inputs) => {
     totalInvestment += cumulativeBatteryCost;
   }
   
-  const paybackYears = totalInvestment / (cumulativeSavings / yearsSinceInstall);
+  // PAYBACK (corrected): "when does the system pay for itself" =
+  //   net system cost ÷ gross annual benefit.
+  // The old formula divided payments-made-to-date by NET savings, which
+  // double-counted loan payments (subtracted from savings AND counted as
+  // investment) and drifted with time. Net cost is what was actually
+  // invested after the tax credit; gross benefit is what the system
+  // delivers each year before financing payments.
+  let netSystemCost;
+  if (inputs.program === 'Cash') {
+    netSystemCost = inputs.cashNetCost; // already net of tax credit
+  } else if (inputs.program === 'Loan') {
+    netSystemCost = inputs.loanPrincipal + inputs.loanDownpayment - calculatedTaxCredit;
+  } else if (inputs.program === 'PPA') {
+    netSystemCost = inputs.ppaDownpayment; // no ownership investment beyond down
+  } else {
+    netSystemCost = totalInvestment;
+  }
+  const grossAnnualBenefit = yearsSinceInstall > 0 ? cumulativeGrossBenefit / yearsSinceInstall : 0;
+  const paybackYears = grossAnnualBenefit > 0 ? Math.max(0, netSystemCost) / grossAnnualBenefit : 0;
   const offsetPercentage = (getDegradedProduction(inputs.annualProduction, yearsSinceInstall) / inputs.currentAnnualUsage) * 100;
   const roi = ((cumulativeSavings / totalInvestment) * 100);
   
