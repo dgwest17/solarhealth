@@ -47,7 +47,13 @@ export const DEFAULT_INPUTS = {
   loanPaidOffYear: currentDate.year,  // NEW: Year loan was paid off
   
   // Cash specific
+  cashGrossCost: 24000, // total system cost before incentives
   cashNetCost: 16800, // After 30% tax credit
+
+  // Equipment (drives the report's warranty/service schedule)
+  panelManufacturer: '',
+  inverterManufacturer: '',
+  batteryManufacturer: '',
   
   hasBattery: false,
   nemVersion: 'NEM2',
