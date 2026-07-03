@@ -1,199 +1,279 @@
-import React, { useState, useEffect } from 'react';
-import { Battery } from 'lucide-react';
-import { buildDailyOverlay, calculateCreditsRecovered } from './BatteryModel';
-import { TOU_RATES } from '../utils/rateData';
-import { calculateNEMImpact, getUtilityRate } from '../utils/calculations';
-import BatteryConsumptionProduction from './BatteryConsumptionProduction';
-import BatteryEnergyLoss from './BatteryEnergyLoss';
-import BatteryExportInefficiencies from './BatteryExportInefficiencies';
-import BatteryRecovery from './BatteryRecovery';
-import BatteryStabilization from './BatteryStabilization';
+import React, { useState, useMemo, useEffect } from 'react';
+import { calculateComprehensiveSavings } from './utils/calculations';
+import { DEFAULT_INPUTS, DEFAULT_API_STATUS } from './constants/defaults';
+import InputSection from './components/InputSection';
+import ResultsDashboard from './components/ResultsDashboard';
+import NEMStatusCard from './components/NEMStatusCard';
+import SystemHealthAlert from './components/SystemHealthAlert';
+import ChartsSection from './components/ChartsSection';
+import SummaryTables from './components/SummaryTables';
+import SystemScore from './components/SystemScore';
+import AINarrative from './components/AINarrative';
+import PDFReportGenerator from './components/PDFReportGenerator';
+import SystemSpecsSheet from './components/SystemSpecsSheet';
+import BatteryAnalysis from './battery/BatteryAnalysis';
+import LoadSimulator from './simulator/LoadSimulator';
+import GreenButtonUpload from './greenbutton/GreenButtonUpload';
 
-/**
- * Battery Analysis tab — four stacked sections:
- *   1. Production / Consumption overlay (profile dropdown)
- *   2. Energy Loss day/night graphic
- *   3. Export Inefficiencies (economics + grid demand)
- *   4. Battery Recovery (value recovered + backup)
- *
- * The overlay (built from the selected profile + the client's system data)
- * is computed once here and shared, so every section stays in sync.
- */
-const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null }) => {
-  const [profileKey, setProfileKey] = useState('evening_heavy');
+const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = null }) => {
+  const [inputs, setInputs] = useState(prefilledInputs ? { ...DEFAULT_INPUTS, ...prefilledInputs } : DEFAULT_INPUTS);
+  const [dataSource, setDataSource] = useState('manual');
+  const [apiStatus, setApiStatus] = useState(DEFAULT_API_STATUS);
+  const [showHistoricalRates, setShowHistoricalRates] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
-  // AUTHORITATIVE true-up / annual-check — from full annual usage vs production
-  // at the real utility rate. Prefer the value computed by the audit tool
-  // (passed in) so both tools ALWAYS agree; fall back to computing it here
-  // (e.g. sandbox mode) using the same function the audit uses.
-  const nemImpact = nemImpactProp || calculateNEMImpact(
-    inputs.annualProduction,
-    inputs.currentAnnualUsage,
-    getUtilityRate(inputs.nowYear || new Date().getFullYear(), inputs.utility, inputs.onCareProgram),
-    inputs.nemVersion,
-    inputs.exportRate
-  );
-  // Normalized: positive owe = true-up, positive credit = utility pays them.
-  const annualTrueUp = nemImpact.type === 'trueup' ? nemImpact.amount : 0;
-  const annualCheck = nemImpact.type === 'credit' ? nemImpact.amount : 0;
-  const owesUtility = nemImpact.type === 'trueup';
+  // Phase 2: AI-generated narrative (shared between the UI card and the PDF)
+  const [narrative, setNarrative] = useState(null);
 
-  const overlay = buildDailyOverlay(
-    profileKey,
-    inputs.currentAnnualUsage,
-    inputs.annualProduction
-  );
+  // Client name shown on the printed report header
+  const [clientName, setClientName] = useState(clientLabel || '');
 
-  // Shared export/import figures — lifted here so §3 (Export Inefficiencies)
-  // and §4 (Your Energy, Your Credits) always compute from the SAME numbers.
-  // Default to the overlay; §3's manual toggle updates these for both sections.
-  const [manualMode, setManualMode] = useState(false);
-  const [exportKwh, setExportKwh] = useState(overlay.annualDaytimeOverproduction);
-  const [importKwh, setImportKwh] = useState(overlay.annualNighttimeImport);
+  // Tab switcher: 'audit' | 'battery' | 'simulator'
+  const [activeTab, setActiveTab] = useState('audit');
 
-  // When the profile changes (and not in manual mode), follow the overlay.
-  useEffect(() => {
-    if (!manualMode) {
-      setExportKwh(overlay.annualDaytimeOverproduction);
-      setImportKwh(overlay.annualNighttimeImport);
-    }
-  }, [overlay.annualDaytimeOverproduction, overlay.annualNighttimeImport, manualMode]);
+  // The Load Simulator is NON-DESTRUCTIVE. It never changes currentAnnualUsage.
+  // Instead it reports an additive "extra usage" result, shown as a separate
+  // line on the audit + battery tabs. Baselines/profile stay static.
+  const [extraUsage, setExtraUsage] = useState({ addedKwh: 0, billableKwh: 0, cost: 0, daytimePct: 0 });
 
-  // MEASURED DATA: when a Green Button profile has been applied, its real
-  // annual import/export replace the overlay estimates. Manual mode is
-  // switched on so both §3 and §4 run off the measured numbers.
-  const [useMeasured, setUseMeasured] = useState(false);
-  useEffect(() => {
-    if (measured && measured.ok) {
-      setUseMeasured(true);
-      setManualMode(true);
-      setExportKwh(measured.annualExportKwh);
-      setImportKwh(measured.annualImportKwh);
-    } else {
-      setUseMeasured(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [measured]);
+  // Green Button measured profile. STATIC once applied — the authoritative
+  // consumption baseline (the thing the simulator layers extra usage onto).
+  const [gbProfile, setGbProfile] = useState(null);
+  const [gbApplied, setGbApplied] = useState(false);
 
-  const toggleMeasured = (checked) => {
-    setUseMeasured(checked);
-    if (checked && measured && measured.ok) {
-      // Re-apply the measured numbers.
-      setManualMode(true);
-      setExportKwh(measured.annualExportKwh);
-      setImportKwh(measured.annualImportKwh);
-    } else {
-      // Hand control back to the consumption-profile overlay / manual sliders.
-      setManualMode(false);
+  const handleGreenButtonApply = (profile, derivedUsage) => {
+    setGbProfile(profile);
+    setGbApplied(true);
+    if (derivedUsage != null) {
+      // Total house consumption derived from measured grid flows + production.
+      setInputs((prev) => ({ ...prev, currentAnnualUsage: derivedUsage }));
     }
   };
 
-  const effExport = manualMode ? (Number(exportKwh) || 0) : overlay.annualDaytimeOverproduction;
-  const effImport = manualMode ? (Number(importKwh) || 0) : overlay.annualNighttimeImport;
+  // Auto-update current date on mount
+  useEffect(() => {
+    const now = new Date();
+    setInputs(prev => ({
+      ...prev,
+      nowYear: now.getFullYear(),
+      nowMonth: now.getMonth() + 1
+    }));
+  }, []);
 
-  // Energy Credits Recovered / year — the overlay-driven time-shift value (the
-  // rate-arbitrage spread a battery claws back). Kept exactly as designed.
-  const touRates = TOU_RATES[inputs.utility] || TOU_RATES.SCE;
-  const recovery = calculateCreditsRecovered(
-    touRates,
-    effExport,
-    effImport,
-    inputs.batteryCapacity,
-    inputs.batteryEfficiency,
-    inputs.utility
+  const calculations = useMemo(
+    () => calculateComprehensiveSavings(inputs),
+    [inputs]
   );
 
-  // If they currently OWE a true-up, a battery that self-consumes also erases
-  // (part of) that true-up — so recovered value = arbitrage spread + avoided
-  // true-up, capped by what the battery can physically shift.
-  const arbitrageRecovered = recovery.creditsRecovered;
-  const shiftRatio = effImport > 0 ? Math.min(1, recovery.shiftedKwh / effImport) : 0;
-  const avoidedTrueUp = annualTrueUp * shiftRatio;
-  const totalRecoveredPerYear = arbitrageRecovered + avoidedTrueUp;
+  const handleInputChange = (field, value) => {
+    setInputs(prev => ({ ...prev, [field]: value }));
+    // Audit data changed — any existing narrative is now stale
+    setNarrative(null);
+  };
+
+  const handleApiConnect = () => {
+    setApiStatus({ connected: false, lastSync: null, error: 'Connecting...' });
+    setTimeout(() => {
+      if (inputs.apiKey && inputs.systemId) {
+        setApiStatus({ connected: true, lastSync: new Date().toISOString(), error: null });
+      } else {
+        setApiStatus({ connected: false, lastSync: null, error: 'Invalid API credentials' });
+      }
+    }, 1500);
+  };
+
+  const handleUpdateSystem = () => {
+    setIsUpdating(true);
+    const now = new Date();
+    setInputs(prev => ({
+      ...prev,
+      nowYear: now.getFullYear(),
+      nowMonth: now.getMonth() + 1
+    }));
+    setTimeout(() => setIsUpdating(false), 1500);
+  };
 
   return (
-    <div>
-      {measured && measured.ok && (
-        <div className={`mb-4 rounded-xl border-2 p-4 flex items-start justify-between gap-3 ${
-          useMeasured ? 'bg-emerald-500/10 border-emerald-400/50' : 'bg-slate-800/60 border-slate-600/60'
-        }`}>
-          <div>
-            <div className={`font-semibold text-sm flex items-center gap-2 ${useMeasured ? 'text-emerald-300' : 'text-slate-300'}`}>
-              📊 {useMeasured ? 'Consumption Profile Overridden by Data Upload' : 'Measured data available (not applied)'}
+    <div className="app-root min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Print-only report header */}
+        <div className="hidden print:block mb-4 pb-3 border-b-2 border-amber-500">
+          <div className="flex justify-between items-end">
+            <h1 className="text-2xl font-bold text-slate-900">California Solar Audit</h1>
+            <div className="text-right text-xs text-slate-600">
+              {clientName && <p>Prepared for: <strong>{clientName}</strong></p>}
+              <p>{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
             </div>
-            <p className="text-xs text-slate-400 mt-1">
-              {useMeasured
-                ? `Import/export figures use the client's measured Green Button data (${measured.annualImportKwh.toLocaleString()} kWh in · ${measured.annualExportKwh.toLocaleString()} kWh out, annualized from ${measured.days} days). Uncheck to adjust the consumption/production profile manually.`
-                : 'Check to use the uploaded Green Button figures instead of the modeled profile.'}
-            </p>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer shrink-0 mt-0.5">
-            <input
-              type="checkbox"
-              checked={useMeasured}
-              onChange={(e) => toggleMeasured(e.target.checked)}
-              className="w-4 h-4 accent-emerald-400"
-            />
-            <span className="text-xs text-slate-300">Use measured data</span>
-          </label>
         </div>
-      )}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-amber-500 flex items-center gap-2">
-          <Battery size={30} className="text-amber-400" />
-          Battery Analysis
-        </h1>
-        <p className="text-slate-300 text-sm mt-1">
-          See how your system behaves over a day — and what a battery would recover.
-        </p>
+
+        {/* Tab navigation (hidden in print) */}
+        <div className="print:hidden flex gap-2 mb-6 bg-slate-900/60 p-1.5 rounded-xl border border-slate-700/50 w-fit">
+          <button
+            onClick={() => setActiveTab('audit')}
+            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+              activeTab === 'audit'
+                ? 'bg-amber-400 text-slate-900'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            Financial Audit
+          </button>
+          <button
+            onClick={() => setActiveTab('battery')}
+            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+              activeTab === 'battery'
+                ? 'bg-amber-400 text-slate-900'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            Battery Analysis
+          </button>
+          <button
+            onClick={() => setActiveTab('simulator')}
+            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+              activeTab === 'simulator'
+                ? 'bg-amber-400 text-slate-900'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            Load Simulator
+          </button>
+        </div>
+
+        {/* BATTERY ANALYSIS TAB */}
+        {activeTab === 'battery' && (
+          <div className="print:hidden">
+            <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} extraUsage={extraUsage} measured={gbApplied ? gbProfile : null} />
+          </div>
+        )}
+
+        {/* LOAD SIMULATOR TAB */}
+        {activeTab === 'simulator' && (
+          <div className="print:hidden">
+            <LoadSimulator
+              baseUsage={inputs.currentAnnualUsage}
+              production={inputs.annualProduction}
+              utility={inputs.utility}
+              currentNemImpact={calculations.currentNEMImpact}
+              onExtraUsageChange={setExtraUsage}
+            />
+          </div>
+        )}
+
+        {/* FINANCIAL AUDIT TAB */}
+        <div style={{ display: activeTab === 'audit' ? 'block' : 'none' }}>
+        <div className="print:hidden">
+        <InputSection
+          inputs={inputs}
+          onInputChange={handleInputChange}
+          dataSource={dataSource}
+          setDataSource={setDataSource}
+          apiStatus={apiStatus}
+          onApiConnect={handleApiConnect}
+          calculations={calculations}
+          onUpdate={handleUpdateSystem}
+          isUpdating={isUpdating}
+        />
+
+        {/* Green Button measured data — upload + apply */}
+        <GreenButtonUpload
+          utility={inputs.utility}
+          annualProduction={inputs.annualProduction}
+          onApply={handleGreenButtonApply}
+          applied={gbApplied}
+        />
+        </div>
+
+        {/* Sections render in natural source order. In print, page breaks
+            (.print-break-before) split them into the client-facing PDF pages
+            without affecting the on-screen layout. */}
+
+        {/* System Score */}
+        <SystemScore
+          calculations={calculations}
+          inputs={inputs}
+        />
+
+        {/* NEM Analysis */}
+        <NEMStatusCard
+          currentNEMImpact={calculations.currentNEMImpact}
+          nemVersion={inputs.nemVersion}
+          cumulativeNEMCredits={calculations.cumulativeNEMCredits}
+          cumulativeTrueUpCharges={calculations.cumulativeTrueUpCharges}
+        />
+
+        {/* Extra Usage True-Up — from the Load Simulator, shown SEPARATELY so it
+            never alters the real current true-up/credit above. */}
+        {extraUsage && extraUsage.cost > 0 && (
+          <div className="bg-red-500/10 border-2 border-red-400/40 rounded-xl p-5 mb-6 flex items-center justify-between print:hidden">
+            <div>
+              <div className="text-xs uppercase tracking-wider text-red-300 flex items-center gap-1.5 mb-1">
+                ⚡ Extra Usage True-Up (from Load Simulator)
+              </div>
+              <p className="text-sm text-slate-300">
+                {extraUsage.addedKwh.toLocaleString()} kWh of added load · {extraUsage.billableKwh.toLocaleString()} kWh billed at time-of-use
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-3xl font-extrabold text-red-400">
+                −${Math.round(extraUsage.cost).toLocaleString()}<span className="text-sm font-normal text-slate-400">/yr</span>
+              </div>
+              <div className="text-[11px] text-slate-500">on top of your current position</div>
+            </div>
+          </div>
+        )}
+
+        {/* Savings/Payback summary (the 4 KPI cards) — last thing on PDF page 1 */}
+        <ResultsDashboard calculations={calculations} />
+
+        {/* AI Narrative — on screen only, excluded from the PDF (print:hidden) */}
+        <div className="print:hidden">
+        <AINarrative
+          inputs={inputs}
+          calculations={calculations}
+          narrative={narrative}
+          onNarrativeGenerated={setNarrative}
+        />
+        </div>
+
+        {/* PDF: hidden (config UI, not for clients) */}
+        <PDFReportGenerator
+          clientName={clientName}
+          setClientName={setClientName}
+          inputs={inputs}
+          calculations={calculations}
+          extraUsage={extraUsage}
+          gbProfile={gbApplied ? gbProfile : null}
+        />
+
+        {/* Charts — priority two on page 1, rest flow to page 2 (handled in print CSS) */}
+        <ChartsSection
+          yearlyData={calculations.yearlyData}
+          inputs={inputs}
+          showHistoricalRates={showHistoricalRates}
+          setShowHistoricalRates={setShowHistoricalRates}
+        />
+
+        {/* PDF page 2: Financial Summary + System Metrics */}
+        <SummaryTables calculations={calculations} inputs={inputs} />
+
+        {/* PDF page 3: System Specifications (print-only, has its own page break) */}
+        <SystemSpecsSheet inputs={inputs} />
+
+        <div className="print:hidden bg-slate-800/50 border border-cyan-500/30 rounded-lg p-4 text-sm text-cyan-300/80">
+          <p className="font-semibold mb-2 text-cyan-400">Data Sources:</p>
+          <ul className="list-disc list-inside space-y-1">
+            <li>Utility rates: CPUC reports with updated 2025 rates (PG&E: $0.48/kWh, SDG&E: $0.52/kWh, SCE: $0.314/kWh)</li>
+            <li>NEM calculations: Retail rate (NEM 1.0), wholesale rate (NEM 2.0), reduced rate (NEM 3.0)</li>
+            <li>CARE Program: 30% discount applied to all utility rates</li>
+            <li>Performance: California average 1400 kWh/kW/year</li>
+          </ul>
+        </div>
+        </div>
       </div>
-
-      <BatteryConsumptionProduction
-        inputs={inputs}
-        profileKey={profileKey}
-        setProfileKey={setProfileKey}
-        overlay={overlay}
-      />
-
-      <BatteryEnergyLoss />
-
-      <BatteryExportInefficiencies
-        inputs={inputs}
-        overlay={overlay}
-        manualMode={manualMode}
-        setManualMode={setManualMode}
-        exportKwh={exportKwh}
-        setExportKwh={setExportKwh}
-        importKwh={importKwh}
-        setImportKwh={setImportKwh}
-        effExport={effExport}
-        effImport={effImport}
-        annualTrueUp={annualTrueUp}
-        annualCheck={annualCheck}
-        owesUtility={owesUtility}
-        extraUsage={extraUsage}
-      />
-
-      <BatteryRecovery
-        inputs={inputs}
-        overlay={overlay}
-        effExport={effExport}
-        effImport={effImport}
-        annualTrueUp={annualTrueUp}
-        annualCheck={annualCheck}
-        owesUtility={owesUtility}
-        avoidedTrueUp={avoidedTrueUp}
-        arbitrageRecovered={arbitrageRecovered}
-        totalRecoveredPerYear={totalRecoveredPerYear}
-      />
-
-      <BatteryStabilization
-        recoveredValuePerYear={totalRecoveredPerYear}
-        overlay={overlay}
-        inputs={inputs}
-      />
     </div>
   );
 };
 
-export default BatteryAnalysis;
+export default SolarCalculator;
