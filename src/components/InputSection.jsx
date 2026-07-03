@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Database, RefreshCw, AlertCircle, Battery, ChevronDown, ChevronRight } from 'lucide-react';
 import { UTILITY_OPTIONS, NEM_OPTIONS, PROGRAM_OPTIONS, API_PROVIDERS, TOU_RATES, PPA_ESCALATOR_OPTIONS, INSTALLER_OPTIONS } from '../utils/rateData';
 import { calculateMonthlyPayment } from '../utils/loanCalculations';
+import { PANEL_MANUFACTURERS, INVERTER_MANUFACTURERS, BATTERY_MANUFACTURERS } from '../data/equipmentData';
 
 const InputSection = ({ 
   inputs, 
@@ -394,6 +395,49 @@ const InputSection = ({
           return null;
         })()}
       </div>
+
+      {/* Equipment (drives warranty/service schedule on the report) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div>
+          <label className="block text-sm text-cyan-300 mb-1">Panel Manufacturer</label>
+          <select
+            value={inputs.panelManufacturer || ''}
+            onChange={(e) => onInputChange('panelManufacturer', e.target.value)}
+            className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
+          >
+            <option value="">Select…</option>
+            {PANEL_MANUFACTURERS.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}{m.defunct ? ' ⚠' : ''}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm text-cyan-300 mb-1">Inverter Manufacturer</label>
+          <select
+            value={inputs.inverterManufacturer || ''}
+            onChange={(e) => onInputChange('inverterManufacturer', e.target.value)}
+            className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
+          >
+            <option value="">Select…</option>
+            {INVERTER_MANUFACTURERS.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}{m.defunct ? ' ⚠' : ''}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm text-cyan-300 mb-1">Battery Manufacturer</label>
+          <select
+            value={inputs.batteryManufacturer || ''}
+            onChange={(e) => onInputChange('batteryManufacturer', e.target.value)}
+            className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
+          >
+            <option value="">Select…</option>
+            {BATTERY_MANUFACTURERS.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}{m.defunct ? ' ⚠' : ''}</option>
+            ))}
+          </select>
+        </div>
+      </div>
       </>))}
 
       {/* ============ SECTION: FINANCING ============ */}
@@ -634,30 +678,38 @@ const InputSection = ({
       {inputs.program === 'Cash' && (
         <div className="bg-blue-900/20 border-2 border-blue-400/50 rounded-lg p-6 mb-6">
           <h3 className="font-semibold text-blue-300 mb-4 text-lg">Cash Purchase Details</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm text-blue-200 mb-1">
-                Net Project Cost ($)
-                <span className="ml-2 text-xs text-green-400 font-semibold">After Tax Credits & Rebates</span>
+                Total System Cost ($)
+                <span className="ml-2 text-xs text-blue-300/70">Before incentives</span>
               </label>
               <input
                 type="number"
-                value={inputs.cashNetCost}
-                onChange={(e) => onInputChange('cashNetCost', parseFloat(e.target.value))}
+                value={inputs.cashGrossCost ?? Math.round((inputs.cashNetCost || 0) / 0.70)}
+                onChange={(e) => {
+                  const gross = parseFloat(e.target.value) || 0;
+                  onInputChange('cashGrossCost', gross);
+                  onInputChange('taxCredit', Math.round(gross * 0.30));
+                  onInputChange('cashNetCost', Math.round(gross * 0.70));
+                }}
                 className="w-full px-3 py-2 border border-blue-400/30 rounded-lg bg-slate-900/60 text-blue-300 text-lg"
               />
             </div>
             <div>
-              <label className="block text-sm text-blue-200 mb-1">Tax Credit Received (30%)</label>
-              <input
-                type="number"
-                value={inputs.taxCredit}
-                onChange={(e) => onInputChange('taxCredit', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-blue-400/30 rounded-lg bg-slate-900/60 text-blue-300 text-lg"
-                placeholder={((inputs.cashNetCost / 0.70) * 0.30).toFixed(2)}
-              />
+              <label className="block text-sm text-blue-200 mb-1">Federal Tax Credit (30%)</label>
+              <div className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-green-500/20 font-semibold text-green-400 text-lg">
+                −${Number(inputs.taxCredit || 0).toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm text-blue-200 mb-1">Net Cost After Credit</label>
+              <div className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-cyan-500/20 font-semibold text-cyan-400 text-lg">
+                ${Number(inputs.cashNetCost || 0).toLocaleString()}
+              </div>
             </div>
           </div>
+          <p className="text-xs text-blue-300/60 mt-2">Tax credit and net cost are calculated automatically from the total system cost.</p>
         </div>
       )}
       </>))}
