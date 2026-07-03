@@ -4,18 +4,18 @@ import { openConsultationReport } from '../report/ConsultationReport';
 
 /**
  * Customer Report card.
- *
- * Two outputs:
- *  1. Consultation Report (primary) — a dedicated, print-clean leave-behind
- *     that follows the consultation flow: system snapshot → financial
- *     position → measured data → load simulation → battery impact →
- *     recommendations, with the estimates-only disclaimer. Independent of
- *     the on-screen layout.
+ *  1. Consultation Report (primary) — the dedicated, sellable leave-behind:
+ *     hero graphic, equipment/warranty schedule, savings history + projection,
+ *     NEM expiration outlook, load-sim results, battery impact,
+ *     recommendations, manufacturer contacts, contact banner, disclaimer.
  *  2. Dashboard print — saves the live dashboard exactly as shown.
  */
 const PDFReportGenerator = ({ clientName, setClientName, branding, inputs, calculations, extraUsage, gbProfile }) => {
   const handleConsultationReport = () => {
-    openConsultationReport({ clientName, inputs, calculations, extraUsage, gbProfile });
+    openConsultationReport({
+      clientName, inputs, calculations, extraUsage, gbProfile,
+      contact: branding ? { company: branding.company_name, phone: branding.phone, email: branding.email } : {}
+    });
   };
 
   return (
@@ -25,8 +25,9 @@ const PDFReportGenerator = ({ clientName, setClientName, branding, inputs, calcu
         Customer Report
       </h2>
       <p className="text-slate-300 text-sm mb-5">
-        The Consultation Report is a clean leave-behind that walks through the system, any usage
-        changes explored, battery impact, and recommendations — with the estimates disclaimer built in.
+        The Consultation Report is the client leave-behind: equipment & warranty schedule, savings
+        history and 10-year outlook, NEM expiration, battery impact, and recommendations — with the
+        estimates disclaimer built in.
       </p>
 
       <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-end">
@@ -57,9 +58,8 @@ const PDFReportGenerator = ({ clientName, setClientName, branding, inputs, calcu
         </button>
       </div>
       <p className="text-xs text-slate-400 mt-3">
-        The report opens in a new tab — use "Save as PDF" in the print dialog. It automatically includes
-        measured Green Button data and load-simulator results when they're present.
-        {branding?.company_name ? ` Your ${branding.company_name} branding appears in the header.` : ''}
+        Opens in a new tab — use "Save as PDF". Equipment details come from the manufacturer dropdowns
+        in System & Site; measured Green Button data and load-simulator results are included automatically.
       </p>
     </div>
   );
