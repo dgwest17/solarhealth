@@ -78,7 +78,6 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
   const toggleMeasured = (checked) => {
     setUseMeasured(checked);
     if (checked && measured && measured.ok) {
-      // Re-apply the measured numbers.
       setManualMode(true);
       setExportKwh(measured.annualExportKwh);
       setImportKwh(measured.annualImportKwh);
