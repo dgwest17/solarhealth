@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
   Car, Thermometer, Droplets, Snowflake, Waves, Plug, Plus,
-  Zap, TrendingUp, RotateCcw, Home, Sun, Moon
+  Zap, TrendingUp, RotateCcw, Home, Sun, Moon, Bath
 } from 'lucide-react';
 import { TOU_RATES } from '../utils/rateData';
-import { LOAD_TYPES, totalAddedKwh, getLoadType, blendedDaytimePct, calcExtraUsageCost } from './LoadModel';
+import {
+  LOAD_TYPES, totalAddedKwh, getLoadType, blendedDaytimePct, calcExtraUsageCost,
+  EV_MODELS, evAnnualKwh, HOTTUB_SIZES, hottubAnnualKwh
+} from './LoadModel';
 
 /**
  * Load Simulator tab.
@@ -28,7 +31,7 @@ import { LOAD_TYPES, totalAddedKwh, getLoadType, blendedDaytimePct, calcExtraUsa
  */
 const ICONS = {
   car: Car, thermostat: Thermometer, water: Droplets, snow: Snowflake,
-  pool: Waves, appliance: Plug, plus: Plus
+  pool: Waves, appliance: Plug, plus: Plus, hottub: Bath
 };
 
 const LoadSimulator = ({
@@ -50,14 +53,26 @@ const LoadSimulator = ({
   const projectedUsage = baseUsage + added;
   const offsetProjected = projectedUsage > 0 ? Math.round((production / projectedUsage) * 100) : 0;
 
-  // Emit the extra-usage result up so audit + battery can show it separately.
+  // Emit the extra-usage result up so audit + battery + report can use it.
   useEffect(() => {
     if (onExtraUsageChange) {
       onExtraUsageChange({
         addedKwh: added,
         billableKwh: extra.billableKwh,
         cost: extra.cost,
-        daytimePct: dayPct
+        daytimePct: dayPct,
+        loads: Object.entries(activeLoads).map(([id, l]) => {
+          const lt = getLoadType(id);
+          let detail = '';
+          if (id === 'ev') {
+            const m = EV_MODELS.find((e) => e.id === l.evModel);
+            detail = `${m ? m.label : 'EV'} · ${Number(l.milesPerYear || 0).toLocaleString()} mi/yr home-charged`;
+          } else if (id === 'hottub') {
+            const s = HOTTUB_SIZES.find((x) => x.id === l.tubSize);
+            detail = `${s ? s.label.split(' (')[0] : 'Hot tub'} · ${l.hoursPerDay} hr/day`;
+          }
+          return { id, label: lt ? lt.label : id, kwh: Number(l.kwh) || 0, daytimePct: l.daytimePct, detail };
+        })
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -69,13 +84,39 @@ const LoadSimulator = ({
       if (id in next) delete next[id];
       else {
         const lt = getLoadType(id);
-        next[id] = { kwh: lt.defaultKwh, daytimePct: lt.defaultDaytimePct };
+        if (id === 'ev') {
+          const m = EV_MODELS[0];
+          next[id] = { kwh: evAnnualKwh(12000, m.miPerKwh), daytimePct: lt.defaultDaytimePct, evModel: m.id, milesPerYear: 12000, miPerKwh: m.miPerKwh };
+        } else if (id === 'hottub') {
+          next[id] = { kwh: hottubAnnualKwh('medium', 1), daytimePct: lt.defaultDaytimePct, tubSize: 'medium', hoursPerDay: 1 };
+        } else {
+          next[id] = { kwh: lt.defaultKwh, daytimePct: lt.defaultDaytimePct };
+        }
       }
       return next;
     });
   };
   const setKwh = (id, kwh) => setActiveLoads((p) => ({ ...p, [id]: { ...p[id], kwh } }));
   const setDay = (id, daytimePct) => setActiveLoads((p) => ({ ...p, [id]: { ...p[id], daytimePct } }));
+
+  // EV config: recompute derived kWh whenever the model/miles/efficiency change.
+  const setEv = (patch) => setActiveLoads((p) => {
+    const cur = { ...p.ev, ...patch };
+    if (patch.evModel) {
+      const m = EV_MODELS.find((e) => e.id === patch.evModel);
+      if (m && patch.evModel !== 'custom') cur.miPerKwh = m.miPerKwh;
+    }
+    cur.kwh = evAnnualKwh(cur.milesPerYear, cur.miPerKwh);
+    return { ...p, ev: cur };
+  });
+
+  // Hot tub config: derived from size + daily hours.
+  const setTub = (patch) => setActiveLoads((p) => {
+    const cur = { ...p.hottub, ...patch };
+    cur.kwh = hottubAnnualKwh(cur.tubSize, cur.hoursPerDay);
+    return { ...p, hottub: cur };
+  });
+
   const reset = () => setActiveLoads({});
 
   const money = (v) => `$${Math.round(Math.abs(v)).toLocaleString()}`;
@@ -226,9 +267,59 @@ const LoadSimulator = ({
                         <span className="text-slate-200">{lt.label}</span>
                         <span className="text-cyan-300 font-semibold">{Number(l.kwh).toLocaleString()} kWh</span>
                       </div>
-                      <input type="range" min={lt.minKwh} max={lt.maxKwh} step={100}
-                        value={l.kwh} onChange={(e) => setKwh(id, Number(e.target.value))}
-                        className="w-full accent-cyan-400" />
+
+                      {id === 'ev' ? (
+                        <div className="space-y-1.5 mb-1">
+                          <select
+                            value={l.evModel}
+                            onChange={(e) => setEv({ evModel: e.target.value })}
+                            className="w-full px-2 py-1.5 text-xs border border-slate-600 rounded-lg bg-slate-900/70 text-slate-200"
+                          >
+                            {EV_MODELS.map((m) => (
+                              <option key={m.id} value={m.id}>{m.label}{m.id !== 'custom' ? ` (${m.miPerKwh} mi/kWh)` : ''}</option>
+                            ))}
+                          </select>
+                          <div className="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Home-charged miles/yr</span>
+                            <span className="text-cyan-300 font-semibold">{Number(l.milesPerYear).toLocaleString()} mi</span>
+                          </div>
+                          <input type="range" min={1000} max={30000} step={500}
+                            value={l.milesPerYear} onChange={(e) => setEv({ milesPerYear: Number(e.target.value) })}
+                            className="w-full accent-cyan-400" />
+                          {(l.evModel === 'custom' || l.evModel === 'phev') && (
+                            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                              <span>Efficiency (mi/kWh):</span>
+                              <input type="number" min={0.5} max={6} step={0.1} value={l.miPerKwh}
+                                onChange={(e) => setEv({ miPerKwh: Number(e.target.value) })}
+                                className="w-20 px-2 py-1 border border-slate-600 rounded bg-slate-900/70 text-cyan-300" />
+                            </div>
+                          )}
+                        </div>
+                      ) : id === 'hottub' ? (
+                        <div className="space-y-1.5 mb-1">
+                          <select
+                            value={l.tubSize}
+                            onChange={(e) => setTub({ tubSize: e.target.value })}
+                            className="w-full px-2 py-1.5 text-xs border border-slate-600 rounded-lg bg-slate-900/70 text-slate-200"
+                          >
+                            {HOTTUB_SIZES.map((s) => (
+                              <option key={s.id} value={s.id}>{s.label}</option>
+                            ))}
+                          </select>
+                          <div className="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Use per day</span>
+                            <span className="text-cyan-300 font-semibold">{l.hoursPerDay} hr</span>
+                          </div>
+                          <input type="range" min={0} max={6} step={0.5}
+                            value={l.hoursPerDay} onChange={(e) => setTub({ hoursPerDay: Number(e.target.value) })}
+                            className="w-full accent-cyan-400" />
+                        </div>
+                      ) : (
+                        <input type="range" min={lt.minKwh} max={lt.maxKwh} step={100}
+                          value={l.kwh} onChange={(e) => setKwh(id, Number(e.target.value))}
+                          className="w-full accent-cyan-400" />
+                      )}
+
                       <div className="flex items-center justify-between text-[11px] mt-1 mb-0.5">
                         <span className="flex items-center gap-1 text-amber-200"><Sun size={11} /> Day {l.daytimePct}%</span>
                         <span className="flex items-center gap-1 text-red-200">Night {100 - l.daytimePct}% <Moon size={11} /></span>
@@ -374,6 +465,19 @@ const HouseGraphic = ({ activeLoads, onToggle }) => {
           <circle cx="294" cy="226" r="4" fill="none" stroke="#22d3ee" strokeWidth="1.5" />
         </g>
         <text x="283" y="254" textAnchor="middle" fontSize="8" fill={on('appliances') ? '#67e8f9' : '#64748b'}>Appliances</text>
+      </g>
+
+      {/* Hot tub — round tub with steam, left of the pool */}
+      <g onClick={() => onToggle('hottub')} style={{ cursor: 'pointer' }}>
+        <ellipse cx="285" cy="322" rx="24" ry="12" fill="#0f2438" stroke={stroke('hottub')} strokeWidth="2" opacity={on('hottub') ? 1 : 0.5} />
+        <g opacity={glow('hottub')}>
+          <ellipse cx="285" cy="320" rx="17" ry="7" fill="none" stroke="#22d3ee" strokeWidth="1.5" />
+          {/* steam wisps */}
+          <path d="M277 310 q2 -4 0 -8" fill="none" stroke="#22d3ee" strokeWidth="1.2" opacity="0.8" />
+          <path d="M285 308 q2 -4 0 -8" fill="none" stroke="#22d3ee" strokeWidth="1.2" opacity="0.6" />
+          <path d="M293 310 q2 -4 0 -8" fill="none" stroke="#22d3ee" strokeWidth="1.2" opacity="0.8" />
+        </g>
+        <text x="285" y="345" textAnchor="middle" fontSize="9" fill={on('hottub') ? '#67e8f9' : '#64748b'}>Hot Tub</text>
       </g>
 
       {/* Pool */}
