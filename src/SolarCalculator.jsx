@@ -27,6 +27,8 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
 
   // Client name shown on the printed report header
   const [clientName, setClientName] = useState(clientLabel || '');
+  const [clientAddress, setClientAddress] = useState('');
+  const [repName, setRepName] = useState('');
 
   // Tab switcher: 'audit' | 'battery' | 'simulator'
   const [activeTab, setActiveTab] = useState('audit');
@@ -241,6 +243,10 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         <PDFReportGenerator
           clientName={clientName}
           setClientName={setClientName}
+          clientAddress={clientAddress}
+          setClientAddress={setClientAddress}
+          repName={repName}
+          setRepName={setRepName}
           inputs={inputs}
           calculations={calculations}
           extraUsage={extraUsage}
