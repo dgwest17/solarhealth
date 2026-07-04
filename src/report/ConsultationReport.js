@@ -15,7 +15,7 @@ import {
   calculateCreditsRecovered,
   NEM3_EXPORT_RATE
 } from '../battery/BatteryModel';
-import { buildEquipmentSchedule } from '../tech/equipmentData';
+import { buildEquipmentSchedule } from '../tech/EquipmentData';
 import { calculateSystemScore } from '../tech/systemScore';
 import { getBatteryIncentives } from '../tech/incentives';
 import { BRANDING } from '../config/branding';
@@ -134,6 +134,13 @@ export function openConsultationReport({ clientName, clientAddress, repName, inp
 
   const score = calculateSystemScore(calculations, inputs);
   const incentives = getBatteryIncentives(inputs.utility);
+
+  // "If you never went solar" bill comparison: usage x utility rate, then vs now.
+  const initRate = parseFloat(calculations.initialUtilityRate) || 0;
+  const nowRate = parseFloat(calculations.currentUtilityRate) || 0;
+  const billAtInstall = (Number(inputs.annualUsageAtInstall) || 0) * initRate / 12;
+  const billNowNoSolar = (Number(inputs.currentAnnualUsage) || 0) * nowRate / 12;
+  const billJumpPct = billAtInstall > 0 ? Math.round(((billNowNoSolar - billAtInstall) / billAtInstall) * 100) : 0;
 
   const nemExpires = inputs.nemVersion === 'NEM3' ? null : inputs.installedYear + 20;
   const postNemTrueUp = Math.max(0, impKwh * touRates.peak - expKwh * NEM3_EXPORT_RATE);
@@ -266,6 +273,13 @@ ${row('Current utility rate', '$' + calculations.currentUtilityRate + '/kWh')}
 ${row('Payback', calculations.paybackYears + ' years')}
 </table>
 </div>
+
+<div class="hero" style="margin-top:14px">
+  <div class="cell"><div class="v">${money(billAtInstall)}/mo</div><div class="note">UTILITY BILL AT INSTALL (${inputs.installedYear}, NO SOLAR)</div></div>
+  <div class="cell"><div class="v red">${money(billNowNoSolar)}/mo</div><div class="note">WHAT YOU'D PAY TODAY WITHOUT SOLAR</div></div>
+  <div class="cell"><div class="v red">+${billJumpPct}%</div><div class="note">RATE & USAGE INCREASE SINCE INSTALL</div></div>
+</div>
+<p class="note" style="margin-bottom:2px">Based on your usage at each point in time and ${esc(utilShort)}'s published rates ($${initRate.toFixed(3)} → $${nowRate.toFixed(3)}/kWh). Every month without solar, this is the bill.</p>
 
 ${schedule.items.length ? `
 <h2>${S()} · Equipment, Warranty & Service Schedule</h2>
