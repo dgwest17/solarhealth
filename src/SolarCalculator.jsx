@@ -10,12 +10,13 @@ import SummaryTables from './components/SummaryTables';
 import SystemScore from './components/SystemScore';
 import AINarrative from './components/AINarrative';
 import PDFReportGenerator from './components/PDFReportGenerator';
+import SaveToCRM from './components/SaveToCRM';
 import SystemSpecsSheet from './components/SystemSpecsSheet';
 import BatteryAnalysis from './battery/BatteryAnalysis';
 import LoadSimulator from './simulator/LoadSimulator';
 import GreenButtonUpload from './greenbutton/GreenButtonUpload';
 
-const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = null }) => {
+const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = null, clientContext = null }) => {
   const [inputs, setInputs] = useState(prefilledInputs ? { ...DEFAULT_INPUTS, ...prefilledInputs } : DEFAULT_INPUTS);
   const [dataSource, setDataSource] = useState('manual');
   const [apiStatus, setApiStatus] = useState(DEFAULT_API_STATUS);
@@ -166,6 +167,8 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         {/* FINANCIAL AUDIT TAB */}
         <div style={{ display: activeTab === 'audit' ? 'block' : 'none' }}>
         <div className="print:hidden">
+        <SaveToCRM inputs={inputs} clientContext={clientContext} clientLabel={clientLabel} />
+
         <InputSection
           inputs={inputs}
           onInputChange={handleInputChange}
