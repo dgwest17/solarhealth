@@ -17,10 +17,10 @@
  */
 
 const FEDERAL_ITC = {
-  name: 'Federal Investment Tax Credit (ITC)',
-  value: '30% of battery cost',
-  blurb: 'Standalone or paired battery storage (3 kWh+) qualifies for the 30% federal tax credit.',
-  urgency: 'Locked at 30% for now — but federal energy policy shifts with administrations. Installing while the full credit stands removes that risk.',
+  name: 'Federal Energy Investment Credit',
+  value: '30-40% of battery cost',
+  blurb: 'Standalone or paired battery storage (3 kWh+) qualifies for the federal energy credit.',
+  urgency: 'Ranges from 30-40% for now until end of 2027. Installing while the full credit stands removes the risk it goes away.',
   approx: false
 };
 
@@ -46,7 +46,7 @@ export const INCENTIVES_BY_UTILITY = {
     SGIP,
     {
       name: 'SDCP battery rebate (San Diego Community Power)',
-      value: 'up to ~$2,000 (income-qualified more)',
+      value: 'up to ~$5,000 (CARE-qualified more)',
       blurb: 'SDCP customers in SDG&E territory can stack a community-power battery rebate on top of SGIP and the federal credit.',
       urgency: 'Program budgets are annual and first-come, first-served.',
       approx: true
@@ -59,7 +59,7 @@ export const INCENTIVES_BY_UTILITY = {
     FEDERAL_ITC,
     {
       name: 'SMUD battery storage incentive (My Energy Optimizer)',
-      value: 'up to ~$2,500 upfront + ongoing',
+      value: 'up to ~$10,000 upfront + ongoing',
       blurb: 'SMUD pays an upfront battery incentive plus annual participation payments for grid-support enrollment.',
       urgency: 'Capacity-limited program years — enrollment closes when the target is met.',
       approx: true
