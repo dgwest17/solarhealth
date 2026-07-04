@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Database, RefreshCw, AlertCircle, Battery, ChevronDown, ChevronRight } from 'lucide-react';
 import { UTILITY_OPTIONS, NEM_OPTIONS, PROGRAM_OPTIONS, API_PROVIDERS, TOU_RATES, PPA_ESCALATOR_OPTIONS, INSTALLER_OPTIONS } from '../utils/rateData';
 import { calculateMonthlyPayment } from '../utils/loanCalculations';
-import { PANEL_MANUFACTURERS, INVERTER_MANUFACTURERS, BATTERY_MANUFACTURERS } from '../tech/equipmentData';
+import { PANEL_MANUFACTURERS, INVERTER_MANUFACTURERS, BATTERY_MANUFACTURERS } from '../tech/EquipmentData';
 import { BRANDING } from '../config/branding';
 
 const InputSection = ({ 
