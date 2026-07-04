@@ -118,6 +118,10 @@ export default function App() {
           <SolarCalculator
             prefilledInputs={clientData.auditInputs}
             clientLabel={label}
+            clientContext={role === 'admin' && clientData.project ? {
+              contactId: clientData.contact?.id,
+              projectId: clientData.project.id
+            } : null}
           />
         </div>
       );
