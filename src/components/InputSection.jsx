@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Database, RefreshCw, AlertCircle, Battery, ChevronDown, ChevronRight } from 'lucide-react';
 import { UTILITY_OPTIONS, NEM_OPTIONS, PROGRAM_OPTIONS, API_PROVIDERS, TOU_RATES, PPA_ESCALATOR_OPTIONS, INSTALLER_OPTIONS } from '../utils/rateData';
 import { calculateMonthlyPayment } from '../utils/loanCalculations';
-import { PANEL_MANUFACTURERS, INVERTER_MANUFACTURERS, BATTERY_MANUFACTURERS } from '../tech/EquipmentData';
+import { PANEL_MANUFACTURERS, INVERTER_MANUFACTURERS, BATTERY_MANUFACTURERS } from '../tech/equipmentData';
+import { BRANDING } from '../config/branding';
 
 const InputSection = ({ 
   inputs, 
@@ -117,7 +118,7 @@ const InputSection = ({
       <div className="flex justify-between items-start mb-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 mb-1 flex items-center gap-2">
-            ⚡ California Solar Audit
+            ⚡ {BRANDING.appName}
           </h1>
           <p className="text-cyan-300 text-xs">NEM Analysis • Real Utility Rates • CARE Program Support</p>
         </div>
