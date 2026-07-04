@@ -15,7 +15,10 @@ import {
   calculateCreditsRecovered,
   NEM3_EXPORT_RATE
 } from '../battery/BatteryModel';
-import { buildEquipmentSchedule } from '../tech/EquipmentData';
+import { buildEquipmentSchedule } from '../tech/equipmentData';
+import { calculateSystemScore } from '../tech/systemScore';
+import { getBatteryIncentives } from '../tech/incentives';
+import { BRANDING } from '../config/branding';
 
 const DISCLAIMER =
   'This report is provided for informational and educational purposes only. All figures are estimates ' +
@@ -101,7 +104,7 @@ function heroSvg() {
   </svg>`;
 }
 
-export function openConsultationReport({ clientName, inputs, calculations, extraUsage, gbProfile, contact = {} }) {
+export function openConsultationReport({ clientName, clientAddress, repName, inputs, calculations, extraUsage, gbProfile, contact = {} }) {
   const utilLabel = labelFor(UTILITY_OPTIONS, inputs.utility);
   const utilShort = (/\(([^)]+)\)/.exec(utilLabel) || [null, utilLabel])[1];
   const nemLabel = labelFor(NEM_OPTIONS, inputs.nemVersion);
@@ -128,6 +131,9 @@ export function openConsultationReport({ clientName, inputs, calculations, extra
     hasBattery: inputs.hasBattery,
     batteryInstalledYear: inputs.installedYear
   });
+
+  const score = calculateSystemScore(calculations, inputs);
+  const incentives = getBatteryIncentives(inputs.utility);
 
   const nemExpires = inputs.nemVersion === 'NEM3' ? null : inputs.installedYear + 20;
   const postNemTrueUp = Math.max(0, impKwh * touRates.peak - expKwh * NEM3_EXPORT_RATE);
@@ -217,8 +223,12 @@ export function openConsultationReport({ clientName, inputs, calculations, extra
 </style></head><body>
 <div class="noprint printbar"><button onclick="window.print()">Save as PDF</button></div>
 <header>
-  <div><div class="brand">SolarHealth</div><h1>Solar System Analysis</h1></div>
-  <div class="meta">${clientName ? `Prepared for <strong style="color:#fff">${esc(clientName)}</strong><br>` : ''}${today}<br>${esc(utilShort)} · ${esc(nemLabel)}</div>
+  <div><div class="brand">${esc(BRANDING.appName)}</div><h1>Solar System Analysis</h1></div>
+  <div class="meta">
+    ${clientName ? `Prepared for: <strong style="color:#fff">${esc(clientName)}</strong>${clientAddress ? ', ' + esc(clientAddress) : ''}<br>` : ''}
+    Developed by: <strong style="color:#fff">${esc(repName || BRANDING.brandName)}</strong> — ${esc(contact.company || BRANDING.brandName)}${(contact.phone || BRANDING.phone) ? ' · ' + esc(contact.phone || BRANDING.phone) : ''}${(contact.email || BRANDING.email) ? ' · ' + esc(contact.email || BRANDING.email) : ''}<br>
+    ${today} · ${esc(utilShort)} · ${esc(nemLabel)}
+  </div>
 </header>
 
 ${heroSvg()}
@@ -227,6 +237,16 @@ ${heroSvg()}
   <div class="cell"><div class="v ${isCredit ? 'green' : 'red'}">${isCredit ? '+' : '\u2212'}${money(nem ? nem.amount : 0)}/yr</div><div class="note">CURRENT ${isCredit ? 'ANNUAL CREDIT' : 'ANNUAL TRUE-UP'}</div></div>
   <div class="cell"><div class="v">${calculations.offsetPercentage}%</div><div class="note">SOLAR OFFSET OF USAGE</div></div>
   <div class="cell"><div class="v green">${money(calculations.cumulativeSavings)}</div><div class="note">EST. SAVINGS TO DATE</div></div>
+</div>
+
+<div class="panelbox" style="display:flex;align-items:center;gap:16px;border-color:${score.hex}">
+  <div style="min-width:84px;height:84px;border-radius:16px;background:${score.hex}22;border:2px solid ${score.hex};display:flex;align-items:center;justify-content:center;">
+    <span style="font-size:44px;font-weight:900;color:${score.hex}">${score.grade}</span>
+  </div>
+  <div>
+    <div style="font-size:14px;font-weight:800;color:#fff;letter-spacing:.5px">SYSTEM SCORE: ${esc(score.label).toUpperCase()} ${score.icon}</div>
+    <p class="note" style="margin-top:3px">${esc(score.recommendation)}</p>
+  </div>
 </div>
 
 <h2>${S()} · System Snapshot</h2>
@@ -309,6 +329,19 @@ ${row('Est. value lost to sell-low / buy-high spread', money(spreadLoss) + '/yr'
 ${row('Est. recoverable with a ' + batteryCap + ' kWh battery', money(recovery.creditsRecovered) + '/yr')}
 </table>
 
+<h2>${S()} · Battery Incentives Available Now</h2>
+<div class="panelbox" style="border-color:var(--gold)">
+${incentives.map((p) => `<div style="display:flex;justify-content:space-between;gap:14px;padding:7px 2px;border-bottom:1px solid var(--line)">
+  <div>
+    <div style="font-weight:800;color:#fff">${esc(p.name)}</div>
+    <div class="note">${esc(p.blurb)}</div>
+    <div class="note" style="color:#e8b93e">⏳ ${esc(p.urgency)}</div>
+  </div>
+  <div style="min-width:170px;text-align:right;font-weight:800;color:var(--gold)">${esc(p.value)}${p.approx ? '<div class="note" style="font-weight:400">verify current amount</div>' : ''}</div>
+</div>`).join('')}
+</div>
+<p class="note">Incentive amounts and funding availability change frequently and are subject to program rules and eligibility — confirm current figures before relying on them.</p>
+
 <h2>${S()} · Recommendations</h2>
 ${recs.map((r) => `<div class="rec"><b>${esc(r.title)}</b>${esc(r.body)}</div>`).join('')}
 
@@ -326,13 +359,13 @@ ${schedule.items.map((i) => `<tr>
 ` : ''}
 
 <div class="contactbar">
-  <h3>⚡ Keep this system earning for the next 20 years</h3>
+  <h3>⚡ ${esc(BRANDING.tagline)}</h3>
   <p>Monitoring, inspections, orphaned-warranty coverage, battery health checks, and end-of-life recycling — one plan, everything handled.</p>
-  <span class="cta">${esc(contact.company || 'SolarHealth')} · ${esc(contact.phone || 'Call or text to schedule your service consultation')}${contact.email ? ' · ' + esc(contact.email) : ''}</span>
+  <span class="cta">${esc(contact.company || BRANDING.brandName)} · ${esc(contact.phone || BRANDING.phone || 'Call or text to schedule your service consultation')}${(contact.email || BRANDING.email) ? ' · ' + esc(contact.email || BRANDING.email) : ''}</span>
 </div>
 
 <div class="disclaimer"><strong style="color:var(--ink)">Important — estimates only.</strong> ${DISCLAIMER}</div>
-<footer><span>SolarHealth · System Analysis</span><span>${today}</span></footer>
+<footer><span>${esc(BRANDING.appName)} · System Analysis · Prepared by ${esc(BRANDING.brandName)}, a service of ${esc(BRANDING.legalName)}</span><span>${today}</span></footer>
 </body></html>`;
 
   const w = window.open('', '_blank');
