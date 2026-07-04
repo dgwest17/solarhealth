@@ -10,10 +10,10 @@ import { openConsultationReport } from '../report/ConsultationReport';
  *     recommendations, manufacturer contacts, contact banner, disclaimer.
  *  2. Dashboard print — saves the live dashboard exactly as shown.
  */
-const PDFReportGenerator = ({ clientName, setClientName, branding, inputs, calculations, extraUsage, gbProfile }) => {
+const PDFReportGenerator = ({ clientName, setClientName, clientAddress, setClientAddress, repName, setRepName, branding, inputs, calculations, extraUsage, gbProfile }) => {
   const handleConsultationReport = () => {
     openConsultationReport({
-      clientName, inputs, calculations, extraUsage, gbProfile,
+      clientName, clientAddress, repName, inputs, calculations, extraUsage, gbProfile,
       contact: branding ? { company: branding.company_name, phone: branding.phone, email: branding.email } : {}
     });
   };
@@ -31,15 +31,37 @@ const PDFReportGenerator = ({ clientName, setClientName, branding, inputs, calcu
       </p>
 
       <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-end">
-        <div className="flex-1">
-          <label className="block text-sm text-amber-200/80 mb-1">Client name (shown on the report header)</label>
-          <input
-            type="text"
-            value={clientName}
-            onChange={(e) => setClientName(e.target.value)}
-            placeholder="e.g. The Martinez Family"
-            className="w-full px-3 py-2 border border-amber-400/30 rounded-lg bg-slate-900/60 text-slate-200"
-          />
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-sm text-amber-200/80 mb-1">Client name</label>
+            <input
+              type="text"
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value)}
+              placeholder="e.g. The Martinez Family"
+              className="w-full px-3 py-2 border border-amber-400/30 rounded-lg bg-slate-900/60 text-slate-200"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-amber-200/80 mb-1">Client address</label>
+            <input
+              type="text"
+              value={clientAddress || ''}
+              onChange={(e) => setClientAddress && setClientAddress(e.target.value)}
+              placeholder="123 Sunny Ln, Encinitas"
+              className="w-full px-3 py-2 border border-amber-400/30 rounded-lg bg-slate-900/60 text-slate-200"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-amber-200/80 mb-1">Rep name (Developed by)</label>
+            <input
+              type="text"
+              value={repName || ''}
+              onChange={(e) => setRepName && setRepName(e.target.value)}
+              placeholder="e.g. Dave West"
+              className="w-full px-3 py-2 border border-amber-400/30 rounded-lg bg-slate-900/60 text-slate-200"
+            />
+          </div>
         </div>
         <button
           onClick={handleConsultationReport}
