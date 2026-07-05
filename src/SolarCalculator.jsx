@@ -11,12 +11,14 @@ import SystemScore from './components/SystemScore';
 import AINarrative from './components/AINarrative';
 import PDFReportGenerator from './components/PDFReportGenerator';
 import SaveToCRM from './components/SaveToCRM';
+import ContactFormModal from './components/ContactFormModal';
+import { openConsultationReport } from './report/ConsultationReport';
 import SystemSpecsSheet from './components/SystemSpecsSheet';
 import BatteryAnalysis from './battery/BatteryAnalysis';
 import LoadSimulator from './simulator/LoadSimulator';
 import GreenButtonUpload from './greenbutton/GreenButtonUpload';
 
-const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = null, clientContext = null }) => {
+const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = null, clientContext = null, canSaveClient = false }) => {
   const [inputs, setInputs] = useState(prefilledInputs ? { ...DEFAULT_INPUTS, ...prefilledInputs } : DEFAULT_INPUTS);
   const [dataSource, setDataSource] = useState('manual');
   const [apiStatus, setApiStatus] = useState(DEFAULT_API_STATUS);
@@ -41,6 +43,18 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
 
   // Green Button measured profile. STATIC once applied — the authoritative
   // consumption baseline (the thing the simulator layers extra usage onto).
+  const [saveClientOpen, setSaveClientOpen] = useState(false);
+
+  const sendAuditReport = () => {
+    openConsultationReport({
+      clientName: (clientContext && clientContext.name) || clientName,
+      clientAddress: (clientContext && clientContext.address) || clientAddress,
+      repName,
+      inputs, calculations, extraUsage,
+      gbProfile: gbApplied ? gbProfile : null
+    });
+  };
+
   const [gbProfile, setGbProfile] = useState(null);
   const [gbApplied, setGbApplied] = useState(false);
 
@@ -167,7 +181,37 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         {/* FINANCIAL AUDIT TAB */}
         <div style={{ display: activeTab === 'audit' ? 'block' : 'none' }}>
         <div className="print:hidden">
-        <SaveToCRM inputs={inputs} clientContext={clientContext} clientLabel={clientLabel} />
+        {clientContext && clientContext.name && (
+          <div className="mb-4 print:hidden">
+            <h1 className="text-3xl font-extrabold text-slate-100">{clientContext.name}</h1>
+            {clientContext.address && (
+              <p className="text-sm text-slate-400 mt-0.5">{clientContext.address}</p>
+            )}
+          </div>
+        )}
+
+        <SaveToCRM inputs={inputs} clientContext={clientContext} clientLabel={clientLabel} onSendAudit={sendAuditReport} />
+
+        {!clientContext && canSaveClient && (
+          <div className="print:hidden mb-4 flex justify-end">
+            <button
+              onClick={() => setSaveClientOpen(true)}
+              className="px-5 py-2 rounded-lg font-semibold text-sm bg-emerald-500 hover:bg-emerald-400 text-[#0a1628] flex items-center gap-2"
+              title="Save this sandbox audit as a new client in your CRM"
+            >
+              + Save Client
+            </button>
+          </div>
+        )}
+
+        {saveClientOpen && (
+          <ContactFormModal
+            mode="create"
+            auditInputs={inputs}
+            onClose={() => setSaveClientOpen(false)}
+            onSaved={(result) => { /* new contact + project created in Zoho */ }}
+          />
+        )}
 
         <InputSection
           inputs={inputs}
