@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Save, Check, AlertCircle, RefreshCw } from 'lucide-react';
+import { Save, Check, AlertCircle, RefreshCw, Send } from 'lucide-react';
 import { apiFetch } from '../lib/supabaseClient';
 
 /**
@@ -15,7 +15,10 @@ const WRITABLE_KEYS = [
 
 const snapshot = (inputs) => JSON.stringify(WRITABLE_KEYS.map((k) => inputs[k]));
 
-const SaveToCRM = ({ inputs, clientContext, clientLabel }) => {
+const SaveToCRM = ({ inputs, clientContext, clientLabel, onSendAudit }) => {
+  const [newsletter, setNewsletter] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendStatus, setSendStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(null); // {ok, message}
   const savedRef = useRef(snapshot(inputs));
@@ -25,7 +28,23 @@ const SaveToCRM = ({ inputs, clientContext, clientLabel }) => {
     setDirty(snapshot(inputs) !== savedRef.current);
   }, [inputs]);
 
-  if (!clientContext || !clientContext.projectId) return null;
+  if (!clientContext || !clientContext.projectId || clientContext.canWrite === false) return null;
+
+  const sendAudit = async () => {
+    setSending(true); setSendStatus(null);
+    try {
+      // 1. open the consultation report for delivery
+      if (onSendAudit) onSendAudit();
+      // 2. stamp Last_Report_Sent (+ newsletter enrollment if checked)
+      await apiFetch('/api/mark-report-sent', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId: clientContext.contactId, newsletter })
+      });
+      setSendStatus({ ok: true, message: newsletter ? 'Report marked sent · enrolled in newsletter' : 'Report marked sent' });
+    } catch (e) {
+      setSendStatus({ ok: false, message: e.message });
+    } finally { setSending(false); }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -63,12 +82,33 @@ const SaveToCRM = ({ inputs, clientContext, clientLabel }) => {
         <span className="text-slate-500 text-xs ml-2">
           {clientLabel ? `${clientLabel} · ` : ''}writes system data to this client's Solar Project in Zoho
         </span>
+        {sendStatus && (
+          <span className={`ml-2 text-xs inline-flex items-center gap-1 ${sendStatus.ok ? 'text-emerald-300' : 'text-red-300'}`}>
+            {sendStatus.ok ? <Check size={12} /> : <AlertCircle size={12} />} {sendStatus.message}
+          </span>
+        )}
         {status && (
           <span className={`ml-2 text-xs inline-flex items-center gap-1 ${status.ok ? 'text-emerald-300' : 'text-red-300'}`}>
             {status.ok ? <Check size={12} /> : <AlertCircle size={12} />} {status.message}
           </span>
         )}
       </div>
+      <div className="flex items-center gap-2 shrink-0">
+      <label className="flex items-center gap-1.5 cursor-pointer text-xs text-slate-300">
+        <input type="checkbox" checked={newsletter} onChange={(e) => setNewsletter(e.target.checked)} className="w-3.5 h-3.5 accent-emerald-400" />
+        Newsletter
+      </label>
+      <button
+        onClick={sendAudit}
+        disabled={sending}
+        className={`px-4 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 transition-all ${
+          sending ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-400 text-[#0a1628]'
+        }`}
+        title="Opens the Consultation Report for delivery and stamps Last Report Sent in Zoho"
+      >
+        {sending ? <RefreshCw size={15} className="animate-spin" /> : <Send size={15} />}
+        Send Audit
+      </button>
       <button
         onClick={save}
         disabled={saving || !dirty}
@@ -81,6 +121,7 @@ const SaveToCRM = ({ inputs, clientContext, clientLabel }) => {
         {saving ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
         {saving ? 'Saving…' : 'Save to CRM'}
       </button>
+      </div>
     </div>
   );
 };
