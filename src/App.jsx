@@ -118,9 +118,12 @@ export default function App() {
           <SolarCalculator
             prefilledInputs={clientData.auditInputs}
             clientLabel={label}
-            clientContext={role === 'admin' && clientData.project ? {
-              contactId: clientData.contact?.id,
-              projectId: clientData.project.id
+            clientContext={clientData.contact ? {
+              contactId: clientData.contact.id,
+              projectId: clientData.project ? clientData.project.id : null,
+              canWrite: role === 'admin' && !!clientData.project,
+              name: clientData.contact.fullName || clientData.contact.email || '',
+              address: [clientData.contact.street, clientData.contact.city, clientData.contact.state, clientData.contact.zip].filter(Boolean).join(', ')
             } : null}
           />
         </div>
@@ -133,7 +136,7 @@ export default function App() {
     return (
       <div>
         <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} />
-        <SolarCalculator />
+        <SolarCalculator canSaveClient={role === 'admin'} />
       </div>
     );
   }
