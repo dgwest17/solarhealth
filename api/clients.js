@@ -8,8 +8,8 @@ import { zohoFetch } from './_zoho.js';
 import { requireUser, sendError } from './_auth.js';
 
 const CONTACT_FIELDS = [
-  'id', 'First_Name', 'Last_Name', 'Full_Name', 'Email',
-  'Mailing_City', 'Mailing_Zip', 'Lifecycle_Stage', 'Ownership_Status',
+  'id', 'First_Name', 'Last_Name', 'Full_Name', 'Email', 'Phone',
+  'Mailing_Street', 'Mailing_City', 'Mailing_State', 'Mailing_Zip', 'Lifecycle_Stage', 'Ownership_Status',
   'Send_Annual_Report', 'Last_Report_Sent'
 ];
 
@@ -135,6 +135,9 @@ export default async function handler(req, res) {
         lastName: c.Last_Name || '',
         fullName: c.Full_Name || `${c.First_Name || ''} ${c.Last_Name || ''}`.trim(),
         email: c.Email || '',
+        phone: c.Phone || '',
+        street: c.Mailing_Street || '',
+        state: c.Mailing_State || '',
         city: c.Mailing_City || '',
         zip: c.Mailing_Zip || '',
         lifecycleStage: c.Lifecycle_Stage || '',
