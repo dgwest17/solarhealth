@@ -120,6 +120,7 @@ export const INSTALLER_OPTIONS = [
   // ---- Recently defunct / bankrupt (warranty-orphaned) ----
   { value: 'SunPower (legacy corp.)', label: 'SunPower — legacy corp. (Ch.11 2024)', defunct: true },
   { value: 'Sunnova', label: 'Sunnova (Ch.11 2025)', defunct: true },
+  { value: 'Solcius', label: 'Solcius (Ch.11 2024)', defunct: true },
   { value: 'Titan Solar Power', label: 'Titan Solar Power (closed 2024)', defunct: true },
   { value: 'ADT Solar', label: 'ADT Solar (exited 2024)', defunct: true },
   { value: 'Sunpro Solar', label: 'Sunpro Solar (closed 2023)', defunct: true },
