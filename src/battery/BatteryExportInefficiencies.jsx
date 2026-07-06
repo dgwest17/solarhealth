@@ -1,3 +1,4 @@
+import TouChart from './TouChart';
 import React from 'react';
 import { TrendingDown, Server, Zap, AlertCircle } from 'lucide-react';
 import { TOU_RATES, UTILITY_OPTIONS } from '../utils/rateData';
@@ -42,6 +43,7 @@ const BatteryExportInefficiencies = ({
 
   return (
     <div className="bg-gradient-to-br from-[#0a1628] to-[#13243f] border border-amber-400/40 rounded-xl shadow-2xl p-6 md:p-8 mb-6">
+      <div className="mb-4"><TouChart utility={inputs.utility} /></div>
       <h2 className="text-2xl font-bold text-amber-300 mb-1">Export Inefficiencies</h2>
       <p className="text-slate-300 text-sm mb-6">
         What you send to the grid by day, buy back by night, and what the grid actually pays you for the difference.
