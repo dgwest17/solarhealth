@@ -110,7 +110,7 @@ export const INSTALLER_OPTIONS = [
   { value: 'LA Solar Group', label: 'LA Solar Group', defunct: false },
   { value: 'Forme Solar', label: 'Forme Solar', defunct: false },
   { value: 'SunPower by (dealer)', label: 'SunPower (dealer install)', defunct: false },
-  { value: 'Freedom Forever', label: 'Freedom Forever', defunct: false },
+
   { value: 'Tesla Energy', label: 'Tesla Energy', defunct: false },
   { value: 'Sunrun', label: 'Sunrun', defunct: false },
   { value: 'Aptos Solar', label: 'Aptos Solar', defunct: false },
@@ -119,8 +119,11 @@ export const INSTALLER_OPTIONS = [
 
   // ---- Recently defunct / bankrupt (warranty-orphaned) ----
   { value: 'SunPower (legacy corp.)', label: 'SunPower — legacy corp. (Ch.11 2024)', defunct: true },
+    { value: 'Freedom Forever', label: 'Freedom Forever (Ch. 11 2026(', defunct: true },
   { value: 'Sunnova', label: 'Sunnova (Ch.11 2025)', defunct: true },
   { value: 'Titan Solar Power', label: 'Titan Solar Power (closed 2024)', defunct: true },
+  { value: 'Solcius', label: 'Solcius (closed 2024)', defunct: true },
+  { value: 'KOTA', label: 'KOTA (closed 2024)', defunct: true },
   { value: 'ADT Solar', label: 'ADT Solar (exited 2024)', defunct: true },
   { value: 'Sunpro Solar', label: 'Sunpro Solar (closed 2023)', defunct: true },
   { value: 'Sunworks', label: 'Sunworks (Ch.7 2024)', defunct: true },
