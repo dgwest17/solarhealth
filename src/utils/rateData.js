@@ -120,7 +120,6 @@ export const INSTALLER_OPTIONS = [
   // ---- Recently defunct / bankrupt (warranty-orphaned) ----
   { value: 'SunPower (legacy corp.)', label: 'SunPower — legacy corp. (Ch.11 2024)', defunct: true },
   { value: 'Sunnova', label: 'Sunnova (Ch.11 2025)', defunct: true },
-  { value: 'Solcius', label: 'Solcius (Ch.11 2024)', defunct: true },
   { value: 'Titan Solar Power', label: 'Titan Solar Power (closed 2024)', defunct: true },
   { value: 'ADT Solar', label: 'ADT Solar (exited 2024)', defunct: true },
   { value: 'Sunpro Solar', label: 'Sunpro Solar (closed 2023)', defunct: true },
@@ -132,3 +131,13 @@ export const INSTALLER_OPTIONS = [
 
   { value: 'Other', label: 'Other / Unknown', defunct: false },
 ];
+
+// Hour-of-day TOU windows ([start,end) 24h) — shared by the battery TOU
+// chart, the report, and Green Button bucketing. Hours not in peak or
+// superOffPeak are off-peak.
+export const TOU_WINDOWS = {
+  SDGE: { peak: [16, 21], superOffPeak: [0, 6] },
+  SCE: { peak: [16, 21], superOffPeak: [8, 16] },
+  PGE: { peak: [16, 21], superOffPeak: [0, 7] },
+  SMUD: { peak: [17, 20], superOffPeak: [0, 6] }
+};
