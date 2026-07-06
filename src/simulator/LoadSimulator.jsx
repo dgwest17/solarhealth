@@ -61,6 +61,12 @@ const LoadSimulator = ({
         billableKwh: extra.billableKwh,
         cost: extra.cost,
         daytimePct: dayPct,
+        freeKwh: extra.freeKwh,
+        surplusUsedKwh: surplusUsed,
+        surplusLeftKwh: surplusLeft,
+        creditBefore: curIsCredit ? curAmount0 : 0,
+        creditReduction,
+        creditAfter: newCredit,
         loads: Object.entries(activeLoads).map(([id, l]) => {
           const lt = getLoadType(id);
           let detail = '';
@@ -123,11 +129,20 @@ const LoadSimulator = ({
 
   // Current position (static — from the real audit, never altered here)
   const curIsCredit = currentNemImpact ? currentNemImpact.type === 'credit' : true;
+  const curAmount0 = currentNemImpact ? Math.round(currentNemImpact.amount) : 0;
+  // Surplus mechanics: added usage first consumes surplus production (shrinking
+  // the credit at the credit rate), then becomes billable true-up at TOU.
+  const headroom = Math.max(0, production - baseUsage);
+  const surplusUsed = Math.min(added, headroom);
+  const surplusLeft = Math.max(0, headroom - added);
+  const creditRate = curIsCredit && currentNemImpact ? (currentNemImpact.rate || 0) : 0;
+  const creditReduction = curIsCredit ? Math.min(curAmount0, Math.round(surplusUsed * creditRate)) : 0;
+  const newCredit = Math.max(0, curAmount0 - creditReduction);
   const curAmount = currentNemImpact ? Math.round(currentNemImpact.amount) : 0;
 
   // Projected = current position adjusted by the extra cost. If they had a
   // credit, extra cost eats into it (and can flip to owing). Shown separately.
-  const projectedNet = (curIsCredit ? curAmount : -curAmount) - extra.cost;
+  const projectedNet = (curIsCredit ? curAmount - creditReduction : -curAmount) - extra.cost;
   const projIsCredit = projectedNet >= 0;
 
   // Recommendation tier on the *extra* cost the added load introduces.
@@ -187,6 +202,21 @@ const LoadSimulator = ({
                   ? `All ${added.toLocaleString()} kWh is covered by your surplus production — no added cost yet.`
                   : `${extra.billableKwh.toLocaleString()} of ${added.toLocaleString()} kWh exceed your production and are billed at time-of-use rates.`}
             </p>
+            {curIsCredit && added > 0 && (
+              <div className="mt-2 pt-2 border-t border-slate-700/50 text-[11px] space-y-0.5">
+                <div className="text-slate-300">
+                  Credit shrinks: <span className="text-green-400 font-semibold">${curAmount0.toLocaleString()}</span>
+                  {' → '}
+                  <span className={`font-semibold ${newCredit > 0 ? 'text-green-400' : 'text-slate-400'}`}>${newCredit.toLocaleString()}</span>
+                  {creditReduction > 0 && <span className="text-red-300"> (−${creditReduction.toLocaleString()})</span>}
+                </div>
+                <div className="text-slate-400">
+                  Surplus production {surplusLeft > 0
+                    ? <>remaining: <span className="text-cyan-300 font-semibold">{surplusLeft.toLocaleString()} kWh</span></>
+                    : <span className="text-red-300 font-semibold">used up — past net zero, extra usage is now billed</span>}
+                </div>
+              </div>
+            )}
             {extra.cost > 0 && (
               <div className="mt-2 pt-2 border-t border-slate-700/50 grid grid-cols-2 gap-2 text-[11px]">
                 <div className="flex items-center gap-1 text-amber-200">
