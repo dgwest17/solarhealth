@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Search, MapPin, Mail, ChevronRight, Users, RefreshCw, AlertCircle,
-  ArrowUp, ArrowDown, Calendar, DollarSign, Zap
+  ArrowUp, ArrowDown, Calendar, DollarSign, Zap, MoreVertical
 } from 'lucide-react';
 import { apiFetch } from '../lib/supabaseClient';
 import ContactFormModal from './ContactFormModal';
@@ -19,7 +19,6 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
   const [sortBy, setSortBy] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
   const [trueUpOnly, setTrueUpOnly] = useState(false);
-  const [chooser, setChooser] = useState(null);   // client for the action chooser
   const [editing, setEditing] = useState(null);   // client for the edit modal
 
   const load = async () => {
@@ -222,7 +221,7 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
             {filtered.map((c) => (
               <button
                 key={c.id}
-                onClick={() => setChooser(c)}
+                onClick={() => onOpen(c.id)}
                 className="text-left bg-slate-800/50 border border-slate-700/60 rounded-xl p-4 hover:border-amber-400/50 hover:bg-slate-800/80 transition-all group"
               >
                 <div className="flex items-start justify-between">
@@ -241,7 +240,19 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
                       </div>
                     )}
                   </div>
-                  <ChevronRight size={18} className="text-slate-600 group-hover:text-amber-400 shrink-0" />
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => { e.stopPropagation(); setEditing(c); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setEditing(c); } }}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-amber-300 hover:bg-slate-700/60"
+                      title="Edit contact info"
+                    >
+                      <MoreVertical size={16} />
+                    </span>
+                    <ChevronRight size={18} className="text-slate-600 group-hover:text-amber-400 shrink-0" />
+                  </div>
                 </div>
 
                 {/* Sort-relevant data footer */}
@@ -292,30 +303,6 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
           </div>
         )}
       </div>
-
-      {/* Action chooser: audit or edit contact */}
-      {chooser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setChooser(null)}>
-          <div className="bg-[#0f1e36] border border-amber-400/40 rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="font-bold text-slate-100 text-lg mb-1">{chooser.fullName || chooser.email}</div>
-            <div className="text-xs text-slate-500 mb-5">{chooser.email}</div>
-            <div className="grid grid-cols-1 gap-2">
-              <button
-                onClick={() => { const id = chooser.id; setChooser(null); onOpen(id); }}
-                className="px-4 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-[#0a1628] font-semibold"
-              >
-                Go to audit →
-              </button>
-              <button
-                onClick={() => { setEditing(chooser); setChooser(null); }}
-                className="px-4 py-3 rounded-xl border border-slate-600 text-slate-200 hover:border-amber-400/60 hover:text-amber-200"
-              >
-                Edit contact info
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {editing && (
         <ContactFormModal
