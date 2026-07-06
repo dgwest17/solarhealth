@@ -1,101 +1,332 @@
-import React, { useState } from 'react';
-import { X, Save, RefreshCw, AlertCircle, Check, UserPlus, UserCog } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Search, MapPin, Mail, ChevronRight, Users, RefreshCw, AlertCircle,
+  ArrowUp, ArrowDown, Calendar, DollarSign, Zap
+} from 'lucide-react';
 import { apiFetch } from '../lib/supabaseClient';
+import ContactFormModal from './ContactFormModal';
 
 /**
- * One modal, two modes:
- *   mode="edit"   — update an existing Contact's basic info (needs contact.id)
- *   mode="create" — "Save Client" from the sandbox: creates Contact + linked
- *                   Solar_Project from the current audit inputs.
- *
- * Address auto-complete: the street field uses the browser's native address
- * autofill (autoComplete attributes). True as-you-type suggestions need a
- * Google Places API key — the input is ready for that upgrade.
+ * Client Dashboard — pulls the caller's clients from /api/clients (role-scoped
+ * server-side), then sorts/filters client-side. Clicking a client calls onOpen.
  */
-// Stable field component (defined OUTSIDE the modal so inputs keep focus).
-const Field = ({ label, value, onChange, type = 'text', span = 1, ac }) => (
-  <div className={span === 2 ? 'col-span-2' : ''}>
-    <label className="block text-xs text-slate-400 mb-1">{label}</label>
-    <input type={type} value={value} onChange={onChange} autoComplete={ac}
-      className="w-full px-3 py-2 border border-slate-600 rounded-lg bg-slate-900/70 text-slate-100 text-sm focus:border-amber-400/60 focus:outline-none" />
-  </div>
-);
-
-const EMPTY = { firstName: '', lastName: '', email: '', phone: '', street: '', city: '', state: 'CA', zip: '', sendAnnualReport: false };
-
-const ContactFormModal = ({ mode = 'edit', initial = null, auditInputs = null, onClose, onSaved }) => {
-  const [form, setForm] = useState({ ...EMPTY, ...(initial || {}) });
-  const [saving, setSaving] = useState(false);
+const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = false, onRole }) => {
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('name');
+  const [sortDir, setSortDir] = useState('asc');
+  const [trueUpOnly, setTrueUpOnly] = useState(false);
+  const [chooser, setChooser] = useState(null);   // client for the action chooser
+  const [editing, setEditing] = useState(null);   // client for the edit modal
 
-  const save = async () => {
-    if (!form.lastName.trim()) { setError('Last name is required.'); return; }
-    setSaving(true); setError('');
+  const load = async () => {
+    setLoading(true);
+    setError('');
     try {
-      let result;
-      if (mode === 'create') {
-        result = await apiFetch('/api/create-client', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contact: form, inputs: auditInputs || {} })
-        });
-      } else {
-        result = await apiFetch('/api/save-contact', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contactId: initial.id, contact: form })
-        });
-      }
-      onSaved && onSaved(result, form);
-      onClose();
-    } catch (e) { setError(e.message); } finally { setSaving(false); }
+      const data = await apiFetch('/api/clients');
+      setClients(data.clients || []);
+      if (onRole && data.role) onRole(data.role);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  useEffect(() => { load(); }, []);
+
+  // How many owe a true-up — drives the upsell-target badge.
+  const trueUpCount = useMemo(
+    () => clients.filter((c) => c.nemType === 'trueup').length,
+    [clients]
+  );
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    const list = clients.filter((c) => {
+      if (trueUpOnly && c.nemType !== 'trueup') return false;
+      if (statusFilter !== 'all' && (c.lifecycleStage || '').toLowerCase() !== statusFilter) return false;
+      if (!q) return true;
+      return (
+        c.fullName.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q) ||
+        c.city.toLowerCase().includes(q)
+      );
+    });
+
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const val = (c) => {
+      switch (sortBy) {
+        case 'installDate': return c.installDate || '';
+        case 'lastReportSent': return c.lastReportSent || '';
+        case 'annualSavings': return c.annualSavings;
+        case 'creditOwe':
+          if (c.nemAmount == null) return null;
+          return c.nemType === 'trueup' ? -c.nemAmount : c.nemAmount;
+        case 'name':
+        default: return (c.lastName || c.fullName || '').toLowerCase();
+      }
+    };
+    return [...list].sort((a, b) => {
+      const av = val(a), bv = val(b);
+      const aNull = av == null || av === '';
+      const bNull = bv == null || bv === '';
+      if (aNull && bNull) return 0;
+      if (aNull) return 1;
+      if (bNull) return -1;
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+  }, [clients, search, statusFilter, sortBy, sortDir, trueUpOnly]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="bg-[#0f1e36] border border-amber-400/40 rounded-2xl shadow-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-amber-300 flex items-center gap-2">
-            {mode === 'create' ? <UserPlus size={19} /> : <UserCog size={19} />}
-            {mode === 'create' ? 'Save New Client' : 'Edit Contact Info'}
-          </h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-amber-300"><X size={18} /></button>
-        </div>
-        {mode === 'create' && (
-          <p className="text-xs text-slate-400 mb-4">Creates the contact in your CRM and attaches the current sandbox audit as their system.</p>
-        )}
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="First name" value={form.firstName} onChange={set('firstName')} ac="given-name" />
-          <Field label="Last name *" value={form.lastName} onChange={set('lastName')} ac="family-name" />
-          <Field label="Email" value={form.email} onChange={set('email')} type="email" span={2} ac="email" />
-          <Field label="Phone" value={form.phone} onChange={set('phone')} type="tel" span={2} ac="tel" />
-          <Field label="Street address" value={form.street} onChange={set('street')} span={2} ac="street-address" />
-          <Field label="City" value={form.city} onChange={set('city')} ac="address-level2" />
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="State" value={form.state} onChange={set('state')} ac="address-level1" />
-            <Field label="Zip" value={form.zip} onChange={set('zip')} ac="postal-code" />
+    <div className="min-h-screen bg-gradient-to-br from-[#0a1628] via-[#0f1e36] to-[#0a1628] p-6">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        {!hideHeader ? (
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <Users size={28} className="text-amber-400" />
+              <div>
+                <h1 className="text-2xl font-bold text-amber-300">Client Monitoring</h1>
+                <p className="text-slate-400 text-sm">
+                  {role === 'admin' ? 'All clients' : role === 'rep' ? 'Your test client (more coming soon)' : 'Your clients'} · {clients.length} total
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-400 hidden sm:block">{userEmail}</span>
+              <button onClick={load} className="p-2 rounded-lg bg-slate-800/60 border border-slate-600 text-slate-300 hover:text-amber-300" title="Refresh">
+                <RefreshCw size={16} />
+              </button>
+              <button onClick={onSignOut} className="px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-600 text-slate-300 text-sm hover:text-amber-300">
+                Sign out
+              </button>
+            </div>
           </div>
-        </div>
-        <label className="flex items-center gap-2 mt-4 cursor-pointer">
-          <input type="checkbox" checked={form.sendAnnualReport} onChange={set('sendAnnualReport')} className="w-4 h-4 accent-amber-400" />
-          <span className="text-sm text-slate-300">Enroll in newsletter / annual report</span>
-        </label>
-        {error && (
-          <div className="mt-3 bg-red-900/30 border border-red-400/40 rounded-lg p-2.5 text-xs text-red-200 flex items-start gap-2">
-            <AlertCircle size={14} className="mt-0.5 shrink-0" /> {error}
+        ) : (
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <Users size={24} className="text-amber-400" />
+              <h1 className="text-xl font-bold text-amber-300">
+                {role === 'admin' ? 'All clients' : 'Your clients'} · {clients.length}
+              </h1>
+            </div>
+            <button onClick={load} className="p-2 rounded-lg bg-slate-800/60 border border-slate-600 text-slate-300 hover:text-amber-300" title="Refresh">
+              <RefreshCw size={16} />
+            </button>
           </div>
         )}
-        <div className="flex justify-end gap-2 mt-5">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-300 border border-slate-600 hover:text-amber-300">Cancel</button>
-          <button onClick={save} disabled={saving}
-            className={`px-5 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 ${saving ? 'bg-slate-700 text-slate-400' : 'bg-amber-400 hover:bg-amber-300 text-[#0a1628]'}`}>
-            {saving ? <RefreshCw size={15} className="animate-spin" /> : mode === 'create' ? <UserPlus size={15} /> : <Save size={15} />}
-            {saving ? 'Saving…' : mode === 'create' ? 'Save Client' : 'Save'}
+
+        {/* Search + filter + sort */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-3">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, email, or city…"
+              className="w-full pl-10 pr-3 py-2.5 border border-slate-600 rounded-lg bg-slate-900/70 text-slate-100 focus:border-amber-400/60 focus:outline-none"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2.5 border border-slate-600 rounded-lg bg-slate-900/70 text-slate-100"
+          >
+            <option value="all">All stages</option>
+            <option value="client">Client</option>
+            <option value="prospect">Prospect</option>
+            <option value="past client">Past Client</option>
+          </select>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="px-3 py-2.5 border border-slate-600 rounded-lg bg-slate-900/70 text-slate-100"
+            title="Sort by"
+          >
+            <option value="name">Sort: Name</option>
+            <option value="installDate">Sort: Install Date</option>
+            <option value="lastReportSent">Sort: Last Report Sent</option>
+            <option value="annualSavings">Sort: Annual Savings</option>
+            <option value="creditOwe">Sort: Annual Credit / Owe</option>
+          </select>
+          <button
+            onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+            className="px-3 py-2.5 border border-slate-600 rounded-lg bg-slate-900/70 text-slate-300 hover:text-amber-300 flex items-center gap-1"
+            title={sortDir === 'asc' ? 'Ascending' : 'Descending'}
+          >
+            {sortDir === 'asc' ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
           </button>
         </div>
+
+        {/* True-up upsell-target filter */}
+        <div className="flex items-center gap-3 mb-6">
+          <button
+            onClick={() => {
+              const next = !trueUpOnly;
+              setTrueUpOnly(next);
+              if (next) { setSortBy('creditOwe'); setSortDir('asc'); }
+            }}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all border ${
+              trueUpOnly
+                ? 'bg-red-500/20 border-red-400/60 text-red-200'
+                : 'bg-slate-800/60 border-slate-600 text-slate-300 hover:text-red-200 hover:border-red-400/40'
+            }`}
+            title="Show only clients who owe an annual true-up — your battery upsell targets"
+          >
+            <Zap size={15} className={trueUpOnly ? 'text-red-300' : 'text-amber-400'} />
+            {trueUpOnly ? 'Showing true-up clients' : 'Battery targets (true-up only)'}
+          </button>
+          <span className="text-xs text-slate-500">
+            {trueUpCount} of {clients.length} owe a true-up
+          </span>
+        </div>
+
+        {error && (
+          <div className="mb-4 bg-red-900/30 border border-red-400/40 rounded-lg p-4 flex items-start gap-2">
+            <AlertCircle size={18} className="text-red-400 mt-0.5 shrink-0" />
+            <div className="text-sm text-red-200">
+              {error}
+              <div className="text-xs text-red-300/70 mt-1">
+                If this mentions configuration, the Zoho or Supabase env vars may not be set in Vercel yet.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="text-center py-20 text-slate-400">
+            <RefreshCw size={28} className="animate-spin mx-auto mb-3 text-amber-400" />
+            Loading clients…
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-20 text-slate-500">
+            {clients.length === 0 ? (
+              <>
+                <p className="text-slate-300 mb-1">No clients found in Zoho yet.</p>
+                <p className="text-sm">Once you add Contacts in Zoho, they'll appear here. Use the Sandbox tab to explore the tools meanwhile.</p>
+              </>
+            ) : trueUpOnly ? (
+              'No clients currently owe a true-up.'
+            ) : (
+              'No clients match your search.'
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {filtered.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => setChooser(c)}
+                className="text-left bg-slate-800/50 border border-slate-700/60 rounded-xl p-4 hover:border-amber-400/50 hover:bg-slate-800/80 transition-all group"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-slate-100 truncate">
+                      {c.fullName || '(no name)'}
+                    </div>
+                    {c.email && (
+                      <div className="text-xs text-slate-400 flex items-center gap-1 mt-1 truncate">
+                        <Mail size={11} className="shrink-0" /> <span className="truncate">{c.email}</span>
+                      </div>
+                    )}
+                    {c.city && (
+                      <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                        <MapPin size={11} /> {c.city} {c.zip}
+                      </div>
+                    )}
+                  </div>
+                  <ChevronRight size={18} className="text-slate-600 group-hover:text-amber-400 shrink-0" />
+                </div>
+
+                {/* Sort-relevant data footer */}
+                <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                  {c.installDate && (
+                    <div className="flex items-center gap-1 text-slate-400">
+                      <Calendar size={10} /> Installed {c.installDate}
+                    </div>
+                  )}
+                  {c.lastReportSent ? (
+                    <div className="flex items-center gap-1 text-slate-400">
+                      <Mail size={10} /> Report {c.lastReportSent}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-slate-600">
+                      <Mail size={10} /> No report sent
+                    </div>
+                  )}
+                  {c.annualSavings != null && (
+                    <div className="flex items-center gap-1 text-green-300/80">
+                      <DollarSign size={10} /> ${c.annualSavings.toLocaleString()}/yr saved
+                    </div>
+                  )}
+                  {c.nemAmount != null && (
+                    <div className={`flex items-center gap-1 ${c.nemType === 'credit' ? 'text-green-300/80' : 'text-red-300/80'}`}>
+                      <DollarSign size={10} />
+                      {c.nemType === 'credit'
+                        ? `+$${c.nemAmount.toLocaleString()} credit`
+                        : `−$${c.nemAmount.toLocaleString()} owed`}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 flex items-center gap-2 flex-wrap">
+                  {c.lifecycleStage && (
+                    <span className="inline-block text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-slate-700/60 text-amber-200/80">
+                      {c.lifecycleStage}
+                    </span>
+                  )}
+                  {c.nemType === 'trueup' && (
+                    <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-red-500/20 text-red-200 border border-red-400/40">
+                      <Zap size={9} /> Battery target
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Action chooser: audit or edit contact */}
+      {chooser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setChooser(null)}>
+          <div className="bg-[#0f1e36] border border-amber-400/40 rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="font-bold text-slate-100 text-lg mb-1">{chooser.fullName || chooser.email}</div>
+            <div className="text-xs text-slate-500 mb-5">{chooser.email}</div>
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                onClick={() => { const id = chooser.id; setChooser(null); onOpen(id); }}
+                className="px-4 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-[#0a1628] font-semibold"
+              >
+                Go to audit →
+              </button>
+              <button
+                onClick={() => { setEditing(chooser); setChooser(null); }}
+                className="px-4 py-3 rounded-xl border border-slate-600 text-slate-200 hover:border-amber-400/60 hover:text-amber-200"
+              >
+                Edit contact info
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editing && (
+        <ContactFormModal
+          mode="edit"
+          initial={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => load()}
+        />
+      )}
     </div>
   );
 };
 
-export default ContactFormModal;
+export default ClientDashboard;
