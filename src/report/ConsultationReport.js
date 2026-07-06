@@ -8,14 +8,14 @@
  *   (incl. inspection timeline) → Manufacturer contacts → Contact banner →
  *   Disclaimer.
  */
-import { TOU_RATES, UTILITY_OPTIONS, NEM_OPTIONS } from '../utils/rateData';
+import { TOU_RATES, UTILITY_OPTIONS, NEM_OPTIONS, TOU_WINDOWS } from '../utils/rateData';
 import {
   buildDailyOverlay,
   calculateExportEconomics,
   calculateCreditsRecovered,
   NEM3_EXPORT_RATE
 } from '../battery/BatteryModel';
-import { buildEquipmentSchedule } from '../tech/equipmentData';
+import { buildEquipmentSchedule, replacementCostFor, projectedEquipmentExposure } from '../tech/EquipmentData';
 import { calculateSystemScore } from '../tech/systemScore';
 import { getBatteryIncentives } from '../tech/incentives';
 import { BRANDING } from '../config/branding';
@@ -141,6 +141,24 @@ export function openConsultationReport({ clientName, clientAddress, repName, inp
   const billAtInstall = (Number(inputs.annualUsageAtInstall) || 0) * initRate / 12;
   const billNowNoSolar = (Number(inputs.currentAnnualUsage) || 0) * nowRate / 12;
   const billJumpPct = billAtInstall > 0 ? Math.round(((billNowNoSolar - billAtInstall) / billAtInstall) * 100) : 0;
+
+  const exposure = projectedEquipmentExposure(schedule.items, 10);
+
+  const touWin = TOU_WINDOWS[inputs.utility] || TOU_WINDOWS.SDGE;
+  const touSvg = (() => {
+    const W = 660, bandY = 22, bandH = 26, H = 72;
+    const bandFor = (h) => (h >= touWin.peak[0] && h < touWin.peak[1]) ? '#ef4444'
+      : (h >= touWin.superOffPeak[0] && h < touWin.superOffPeak[1]) ? '#10b981' : '#f59e0b';
+    const cells = Array.from({ length: 24 }, (_, h) =>
+      `<rect x="${(h / 24) * W}" y="${bandY}" width="${W / 24}" height="${bandH}" fill="${bandFor(h)}" opacity="${bandFor(h) === '#ef4444' ? 0.95 : 0.72}"/>`).join('');
+    const ticks = [0, 6, 12, 18, 24].map((h) =>
+      `<text x="${(h / 24) * W}" y="${bandY + bandH + 14}" font-size="8.5" fill="#7d8aa0" text-anchor="middle">${h === 0 || h === 24 ? '12a' : h === 12 ? '12p' : h < 12 ? h + 'a' : (h - 12) + 'p'}</text>`).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%">
+      <text x="0" y="12" font-size="9" fill="#8a97ab">24-HOUR RATE MAP — ${inputs.utility}</text>
+      ${cells}${ticks}
+      <text x="${W}" y="12" font-size="9" fill="#8a97ab" text-anchor="end">■ peak $${touRates.peak} · ■ off-peak $${touRates.offPeak} · ■ super off-peak $${touRates.superOffPeak}</text>
+    </svg>`;
+  })();
 
   const nemExpires = inputs.nemVersion === 'NEM3' ? null : inputs.installedYear + 20;
   const postNemTrueUp = Math.max(0, impKwh * touRates.peak - expKwh * NEM3_EXPORT_RATE);
@@ -284,16 +302,26 @@ ${row('Payback', calculations.paybackYears + ' years')}
 ${schedule.items.length ? `
 <h2>${S()} · Equipment, Warranty & Service Schedule</h2>
 <table class="eq">
-<tr><th>Component</th><th>Manufacturer</th><th>Warranty ends</th><th>Expected service / replacement</th><th>Status</th></tr>
-${schedule.items.map((i) => `<tr>
+<tr><th>Component</th><th>Manufacturer</th><th>Warranty ends</th><th>Expected service / replacement</th><th>Est. replacement (parts + labor)</th><th>Status</th></tr>
+${schedule.items.map((i) => { const rc = replacementCostFor(i.kind); return `<tr>
 <td>${esc(i.kind)}</td>
 <td>${esc(i.manufacturer.label)}${i.manufacturer.defunct ? ' <span class="badge" style="background:#3a1512;color:#ff6b5e">OUT OF BUSINESS</span>' : ''}</td>
 <td>${i.warrantyEnds}</td>
 <td>${i.serviceYear}</td>
+<td>${rc ? money(rc.parts + rc.labor) + ' <span class="note">(' + esc(rc.note) + ')</span>' : '—'}</td>
 <td><span class="badge" style="background:#12233c;color:${statusColor(i.status)}">${i.status.toUpperCase()}</span></td>
-</tr>`).join('')}
+</tr>`; }).join('')}
 </table>
 <p class="note">Recommended professional inspection: <strong style="color:var(--gold)">${schedule.inspectionYear}</strong>. Lifetimes are typical industry figures for planning purposes.</p>
+${exposure.total > 0 ? `
+<div class="panelbox" style="border-color:#ff6b5e;display:flex;justify-content:space-between;align-items:center">
+  <div>
+    <div style="font-weight:800;color:#fff">Projected out-of-warranty equipment costs (next ${exposure.horizonYears} years)</div>
+    <div class="note">${exposure.items.map((e) => `${esc(e.kind)} ~${e.year}: ${money(e.cost)}`).join(' · ')}</div>
+    <div class="note" style="color:#e8b93e">A service plan spreads this into a predictable monthly cost — and covers the labor.</div>
+  </div>
+  <div style="font-size:22px;font-weight:900;color:#ff6b5e;white-space:nowrap">${money(exposure.total)}</div>
+</div>` : ''}
 ` : ''}
 
 <h2>${S()} · Savings — History & 10-Year Outlook</h2>
@@ -329,6 +357,10 @@ ${(extraUsage.loads || []).map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.d
 </table>
 <table style="margin-top:6px">
 ${row('Total added usage', kwh(extraUsage.addedKwh) + '/yr')}
+${extraUsage.creditBefore > 0 ? row('Credit impact', money(extraUsage.creditBefore) + ' → ' + money(extraUsage.creditAfter) + '/yr (−' + money(extraUsage.creditReduction) + ')') : ''}
+${extraUsage.surplusLeftKwh > 0
+  ? row('Surplus production remaining', kwh(extraUsage.surplusLeftKwh) + '/yr still available for future loads')
+  : row('Surplus production', 'fully consumed — additional usage is billed at time-of-use rates')}
 ${row('Portion above current production', kwh(extraUsage.billableKwh) + '/yr')}
 ${row('Estimated added annual cost', '\u2212' + money(extraCost) + '/yr at time-of-use rates')}
 </table>
@@ -336,6 +368,7 @@ ${row('Estimated added annual cost', '\u2212' + money(extraCost) + '/yr at time-
 ` : ''}
 
 <h2>${S()} · Battery Impact</h2>
+<div class="panelbox">${touSvg}</div>
 <table>
 ${row('Energy sold to the grid' + (measured ? ' (measured)' : ' (modeled)'), kwh(expKwh) + '/yr')}
 ${row('Energy bought back' + (measured ? ' (measured)' : ' (modeled)'), kwh(impKwh) + '/yr')}
