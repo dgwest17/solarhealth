@@ -15,7 +15,7 @@ import {
   calculateCreditsRecovered,
   NEM3_EXPORT_RATE
 } from '../battery/BatteryModel';
-import { buildEquipmentSchedule, replacementCostFor, projectedEquipmentExposure } from '../tech/EquipmentData';
+import { buildEquipmentSchedule, replacementCostFor, projectedEquipmentExposure } from '../tech/equipmentData';
 import { calculateSystemScore } from '../tech/systemScore';
 import { getBatteryIncentives } from '../tech/incentives';
 import { BRANDING } from '../config/branding';
