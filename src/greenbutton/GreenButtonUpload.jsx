@@ -139,14 +139,9 @@ const GreenButtonUpload = ({ utility = 'SDGE', annualProduction = 0, onApply, ap
 
           <button
             onClick={() => onApply && onApply(profile, derivedUsage)}
-            disabled={applied}
-            className={`w-full py-2.5 rounded-lg font-semibold text-sm transition-all ${
-              applied
-                ? 'bg-emerald-600/40 text-emerald-200 cursor-default'
-                : 'bg-emerald-500 hover:bg-emerald-400 text-slate-900'
-            }`}
+            className="w-full py-2.5 rounded-lg font-semibold text-sm transition-all bg-emerald-500 hover:bg-emerald-400 text-slate-900"
           >
-            {applied ? '✓ Applied to audit & battery' : 'Apply measured data to audit & battery'}
+            {applied ? '↻ Re-apply measured data (e.g. after entering production)' : 'Apply measured data to audit & battery'}
           </button>
         </div>
       )}
