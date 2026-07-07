@@ -58,12 +58,23 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
   const [gbProfile, setGbProfile] = useState(null);
   const [gbApplied, setGbApplied] = useState(false);
 
+  const [gbNote, setGbNote] = useState(null); // rep guidance after apply
+
   const handleGreenButtonApply = (profile, derivedUsage) => {
     setGbProfile(profile);
     setGbApplied(true);
     if (derivedUsage != null) {
       // Total house consumption derived from measured grid flows + production.
       setInputs((prev) => ({ ...prev, currentAnnualUsage: derivedUsage }));
+      setGbNote({
+        ok: true,
+        message: `Current Annual Usage auto-updated to ${derivedUsage.toLocaleString()} kWh (production − exports + imports from measured data). Battery import/export figures now use the meter data.`
+      });
+    } else {
+      setGbNote({
+        ok: false,
+        message: 'Measured data applied to the battery tool only — Current Annual Usage was NOT updated because Annual Production is missing or zero. Enter the system\u2019s Annual Production above, then click "Re-apply measured data" so usage connects to the meter data.'
+      });
     }
   };
 
@@ -232,6 +243,13 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
           onApply={handleGreenButtonApply}
           applied={gbApplied}
         />
+        {gbNote && (
+          <div className={`print:hidden -mt-3 mb-6 rounded-lg border p-3 text-sm ${
+            gbNote.ok ? 'bg-emerald-500/10 border-emerald-400/40 text-emerald-200' : 'bg-amber-500/10 border-amber-400/50 text-amber-200'
+          }`}>
+            {gbNote.ok ? '✓ ' : '⚠ '}{gbNote.message}
+          </div>
+        )}
         </div>
 
         {/* Sections render in natural source order. In print, page breaks
