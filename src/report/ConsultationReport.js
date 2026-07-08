@@ -8,7 +8,7 @@
  *   (incl. inspection timeline) → Manufacturer contacts → Contact banner →
  *   Disclaimer.
  */
-import { TOU_RATES, UTILITY_OPTIONS, NEM_OPTIONS, TOU_WINDOWS } from '../utils/rateData';
+import { TOU_RATES, UTILITY_OPTIONS, NEM_OPTIONS, TOU_WINDOWS, getEvTouPlan } from '../utils/rateData';
 import {
   buildDailyOverlay,
   calculateExportEconomics,
@@ -144,19 +144,30 @@ export function openConsultationReport({ clientName, clientAddress, repName, inp
 
   const exposure = projectedEquipmentExposure(schedule.items, 10);
 
-  const touWin = TOU_WINDOWS[inputs.utility] || TOU_WINDOWS.SDGE;
+  const evPlan = extraUsage && extraUsage.ratePlan === 'SDGE_EVTOU5' ? getEvTouPlan('SDGE_EVTOU5') : null;
+  const touWin = evPlan ? evPlan.windows : (TOU_WINDOWS[inputs.utility] || TOU_WINDOWS.SDGE);
+  const touDisp = evPlan ? { peak: evPlan.peak, offPeak: evPlan.offPeak, superOffPeak: evPlan.superOffPeak } : touRates;
   const touSvg = (() => {
-    const W = 660, bandY = 22, bandH = 26, H = 72;
-    const bandFor = (h) => (h >= touWin.peak[0] && h < touWin.peak[1]) ? '#ef4444'
-      : (h >= touWin.superOffPeak[0] && h < touWin.superOffPeak[1]) ? '#10b981' : '#f59e0b';
+    const W = 660, bandY = 22, bandH = 26, H = 92;
+    const COLORS = { peak: '#ef4444', off: '#f59e0b', sop: '#10b981' };
+    const bandFor = (h) => (h >= touWin.peak[0] && h < touWin.peak[1]) ? COLORS.peak
+      : ((h >= touWin.superOffPeak[0] && h < touWin.superOffPeak[1]) ||
+         (touWin.sopWeekdayMidday && h >= touWin.sopWeekdayMidday[0] && h < touWin.sopWeekdayMidday[1])) ? COLORS.sop : COLORS.off;
     const cells = Array.from({ length: 24 }, (_, h) =>
-      `<rect x="${(h / 24) * W}" y="${bandY}" width="${W / 24}" height="${bandH}" fill="${bandFor(h)}" opacity="${bandFor(h) === '#ef4444' ? 0.95 : 0.72}"/>`).join('');
+      `<rect x="${(h / 24) * W}" y="${bandY}" width="${W / 24}" height="${bandH}" fill="${bandFor(h)}" opacity="${bandFor(h) === COLORS.peak ? 0.95 : 0.72}"/>`).join('');
     const ticks = [0, 6, 12, 18, 24].map((h) =>
       `<text x="${(h / 24) * W}" y="${bandY + bandH + 14}" font-size="8.5" fill="#7d8aa0" text-anchor="middle">${h === 0 || h === 24 ? '12a' : h === 12 ? '12p' : h < 12 ? h + 'a' : (h - 12) + 'p'}</text>`).join('');
+    const legendY = bandY + bandH + 28;
+    const legend = [
+      ['Peak $' + touDisp.peak + '/kWh', COLORS.peak, 0],
+      ['Off-peak $' + touDisp.offPeak + '/kWh', COLORS.off, 170],
+      ['Super off-peak $' + touDisp.superOffPeak + '/kWh' + (evPlan ? ' (12–6am + wkdy 10a–2p)' : ''), COLORS.sop, 350]
+    ].map(([label, color, lx]) =>
+      `<rect x="${lx}" y="${legendY - 8}" width="9" height="9" rx="2" fill="${color}"/>` +
+      `<text x="${lx + 13}" y="${legendY}" font-size="8.5" fill="#c9d4e3">${label}</text>`).join('');
     return `<svg viewBox="0 0 ${W} ${H}" style="width:100%">
-      <text x="0" y="12" font-size="9" fill="#8a97ab">24-HOUR RATE MAP — ${inputs.utility}</text>
-      ${cells}${ticks}
-      <text x="${W}" y="12" font-size="9" fill="#8a97ab" text-anchor="end">■ peak $${touRates.peak} · ■ off-peak $${touRates.offPeak} · ■ super off-peak $${touRates.superOffPeak}</text>
+      <text x="0" y="12" font-size="9" fill="#8a97ab">24-HOUR RATE MAP — ${evPlan ? esc(evPlan.label).toUpperCase() : inputs.utility}${evPlan ? ' <tspan fill="#e8b93e">(verify current tariff)</tspan>' : ''}</text>
+      ${cells}${ticks}${legend}
     </svg>`;
   })();
 
@@ -362,9 +373,17 @@ ${extraUsage.surplusLeftKwh > 0
   ? row('Surplus production remaining', kwh(extraUsage.surplusLeftKwh) + '/yr still available for future loads')
   : row('Surplus production', 'fully consumed — additional usage is billed at time-of-use rates')}
 ${row('Portion above current production', kwh(extraUsage.billableKwh) + '/yr')}
-${row('Estimated added annual cost', '\u2212' + money(extraCost) + '/yr at time-of-use rates')}
+${extraUsage.ratePlan === 'SDGE_EVTOU5'
+  ? row('Estimated added annual cost (EV-TOU-5 super off-peak)', '\u2212' + money(extraCost) + '/yr')
+    + (extraUsage.standardCost != null ? row('Same usage on the standard plan', '\u2212' + money(extraUsage.standardCost) + '/yr') : '')
+  : row('Estimated added annual cost', '\u2212' + money(extraCost) + '/yr at time-of-use rates')}
 </table>
 <p class="note">Added-usage costs apply only to consumption beyond current production, priced by when the power is used.</p>
+${extraUsage.ratePlan === 'SDGE_EVTOU5' && extraUsage.evTouFallbackCost != null ? `
+<div class="panelbox" style="border-color:#e8b93e">
+  <div style="font-weight:800;color:#e8b93e">⚠ Rate-plan risk</div>
+  <div class="note" style="color:#dbe4f0">This plan depends on SDG&E's super off-peak window. <strong>If SDG&E removes super off-peak, your added-usage true-up would be ${money(extraUsage.evTouFallbackCost)}/yr at off-peak rates</strong> — a battery removes that dependency by storing your own solar instead.</div>
+</div>` : ''}
 ` : ''}
 
 <h2>${S()} · Battery Impact</h2>
