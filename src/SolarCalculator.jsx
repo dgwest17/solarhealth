@@ -11,8 +11,10 @@ import SystemScore from './components/SystemScore';
 import AINarrative from './components/AINarrative';
 import PDFReportGenerator from './components/PDFReportGenerator';
 import SaveToCRM from './components/SaveToCRM';
+import { apiFetch } from './lib/supabaseClient';
 import ContactFormModal from './components/ContactFormModal';
 import { openConsultationReport } from './report/ConsultationReport';
+import { deriveAnnualUsage } from './greenbutton/GreenButtonParser';
 import SystemSpecsSheet from './components/SystemSpecsSheet';
 import BatteryAnalysis from './battery/BatteryAnalysis';
 import LoadSimulator from './simulator/LoadSimulator';
@@ -44,6 +46,37 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
   // Green Button measured profile. STATIC once applied — the authoritative
   // consumption baseline (the thing the simulator layers extra usage onto).
   const [saveClientOpen, setSaveClientOpen] = useState(false);
+  const [ratePlan, setRatePlan] = useState('standard');
+
+  // ---- Persistence: auto-load saved Green Button profile + settings ----
+  useEffect(() => {
+    if (!clientContext || !clientContext.contactId) return;
+    (async () => {
+      try {
+        const data = await apiFetch(`/api/gb-profile?contactId=${encodeURIComponent(clientContext.contactId)}`);
+        if (data.settings && data.settings.ratePlan) setRatePlan(data.settings.ratePlan);
+        if (data.gbProfile && data.gbProfile.ok) {
+          setGbProfile(data.gbProfile);
+          setGbApplied(true);
+          const derived = deriveAnnualUsage(data.gbProfile, inputs.annualProduction);
+          if (derived != null) setInputs((prev) => ({ ...prev, currentAnnualUsage: derived }));
+          const when = data.updatedAt ? new Date(data.updatedAt).toLocaleDateString() : 'previously';
+          setGbNote({ ok: true, message: `Loaded saved measured data (uploaded ${when}). Battery figures use the meter data${derived != null ? `; Current Annual Usage set to ${derived.toLocaleString()} kWh` : ''}.` });
+        }
+      } catch (e) { /* no saved profile or persistence not configured — silent */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientContext && clientContext.contactId]);
+
+  const persistRatePlan = (plan) => {
+    setRatePlan(plan);
+    if (clientContext && clientContext.contactId) {
+      apiFetch('/api/gb-profile', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId: clientContext.contactId, settings: { ratePlan: plan } })
+      }).catch(() => {});
+    }
+  };
 
   const sendAuditReport = () => {
     openConsultationReport({
@@ -63,6 +96,12 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
   const handleGreenButtonApply = (profile, derivedUsage) => {
     setGbProfile(profile);
     setGbApplied(true);
+    if (clientContext && clientContext.contactId) {
+      apiFetch('/api/gb-profile', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId: clientContext.contactId, gbProfile: profile })
+      }).catch(() => {});
+    }
     if (derivedUsage != null) {
       // Total house consumption derived from measured grid flows + production.
       setInputs((prev) => ({ ...prev, currentAnnualUsage: derivedUsage }));
@@ -184,6 +223,8 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
               production={inputs.annualProduction}
               utility={inputs.utility}
               currentNemImpact={calculations.currentNEMImpact}
+              ratePlan={ratePlan}
+              onRatePlanChange={persistRatePlan}
               onExtraUsageChange={setExtraUsage}
             />
           </div>
