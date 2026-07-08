@@ -144,3 +144,24 @@ export const TOU_WINDOWS = {
   PGE: { peak: [16, 21], superOffPeak: [0, 7] },
   SMUD: { peak: [17, 20], superOffPeak: [0, 6] }
 };
+
+// EV rate plans. VERIFY current rates before quoting — SDG&E revises these.
+// EV-TOU-5: super off-peak 12am–6am daily PLUS weekdays 10am–2pm; very low
+// SOP pricing in exchange for a monthly basic service fee.
+export const EV_TOU_PLANS = {
+  SDGE_EVTOU5: {
+    id: 'SDGE_EVTOU5',
+    utility: 'SDGE',
+    label: 'SDG&E EV-TOU-5',
+    peak: 0.71,          // 4–9 PM
+    offPeak: 0.45,
+    superOffPeak: 0.14,  // 12am–6am daily + weekdays 10am–2pm
+    monthlyFee: 16,
+    windows: { peak: [16, 21], superOffPeak: [0, 6], sopWeekdayMidday: [10, 14] },
+    approx: true // representative — verify current tariff
+  }
+};
+
+export function getEvTouPlan(planId) {
+  return EV_TOU_PLANS[planId] || null;
+}
