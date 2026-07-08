@@ -40,6 +40,8 @@ const LoadSimulator = ({
   production = 12000,
   utility = 'SDGE',
   currentNemImpact = null,
+  ratePlan = 'standard',
+  onRatePlanChange = null,
   onExtraUsageChange
 }) => {
   // activeLoads: { [id]: { kwh, daytimePct } }
@@ -48,10 +50,10 @@ const LoadSimulator = ({
 
   const added = totalAddedKwh(activeLoads);
   const dayPct = blendedDaytimePct(activeLoads);
+  const extra = calcExtraUsageCost(activeLoads, baseUsage, production, touRates);
   const isEvTou = utility === 'SDGE' && ratePlan === 'SDGE_EVTOU5';
   const evTou = isEvTou ? calcExtraUsageCostEvTou(extra.billableKwh, 'SDGE_EVTOU5') : null;
   const effCost = evTou ? evTou.cost : extra.cost;
-  const extra = calcExtraUsageCost(activeLoads, baseUsage, production, touRates);
 
   const offsetBase = baseUsage > 0 ? Math.round((production / baseUsage) * 100) : 0;
   const projectedUsage = baseUsage + added;
