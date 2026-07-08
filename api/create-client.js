@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
     const user = await requireUser(req);
-    if (user.role !== 'admin') return res.status(403).json({ error: 'Saving new clients is limited to admins for now.' });
+    if (user.role !== 'admin' && user.role !== 'rep') return res.status(403).json({ error: 'Saving new clients requires an admin or rep login.' });
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     const { contact = {}, inputs = {} } = body;
@@ -35,11 +35,26 @@ export default async function handler(req, res) {
       Mailing_Zip: (contact.zip || '').trim() || null,
       Send_Annual_Report: !!contact.sendAnnualReport
     };
-    const cRes = await zohoFetch('/crm/v2/Contacts', {
+    // Rep ownership stamp — lets reps see their own leads on the dashboard.
+    // If the Created_By_Rep field doesn't exist in Zoho yet, retry without it.
+    let repStampWarning = null;
+    if (user.role === 'rep' || user.role === 'admin') {
+      contactFields.Created_By_Rep = (user.email || '').toLowerCase();
+    }
+    let cRes = await zohoFetch('/crm/v2/Contacts', {
       method: 'POST',
       body: JSON.stringify({ data: [contactFields] })
     });
-    const cStatus = cRes.data && cRes.data[0];
+    let cStatus = cRes.data && cRes.data[0];
+    if (cStatus && cStatus.code !== 'SUCCESS' && contactFields.Created_By_Rep) {
+      delete contactFields.Created_By_Rep;
+      repStampWarning = 'Created_By_Rep field missing in Zoho — lead saved without rep stamp. Add a single-line field with API name Created_By_Rep to Contacts.';
+      cRes = await zohoFetch('/crm/v2/Contacts', {
+        method: 'POST',
+        body: JSON.stringify({ data: [contactFields] })
+      });
+      cStatus = cRes.data && cRes.data[0];
+    }
     if (!cStatus || cStatus.code !== 'SUCCESS') {
       return res.status(502).json({ error: `Zoho rejected the contact: ${cStatus ? cStatus.message || cStatus.code : 'unknown'}` });
     }
@@ -59,6 +74,25 @@ export default async function handler(req, res) {
     const exp = num(inputs.exportRate); if (exp != null) projectFields.Export_Rate = exp;
     if (typeof inputs.onCareProgram === 'boolean') projectFields.On_CARE_Program = inputs.onCareProgram;
     if (inputs.hasBattery) { const cap = num(inputs.batteryCapacity); if (cap != null) projectFields.Battery_Capacity_kWh = cap; }
+    // Financial product (verified writable fields)
+    if (['Cash', 'Loan', 'PPA'].includes(inputs.program)) {
+      projectFields.Purchase_Type = inputs.program;
+      const term = int(inputs.loanTerm);
+      const rate = num(inputs.loanInterestRate);
+      const esc = num(inputs.escalator);
+      if (inputs.program === 'Loan') {
+        const principal = num(inputs.loanPrincipal);
+        if (principal != null && principal > 0) projectFields.Contract_Value = principal;
+        if (term != null && term > 0) projectFields.Term = term; // YEARS
+        if (rate != null && rate > 0) projectFields.Escalator_or_Interest = rate;
+      } else if (inputs.program === 'Cash') {
+        const gross = num(inputs.cashGrossCost);
+        if (gross != null && gross > 0) projectFields.Contract_Value = gross;
+      } else if (inputs.program === 'PPA') {
+        if (esc != null && esc >= 0) projectFields.Escalator_or_Interest = esc;
+      }
+    }
+
     // New record → safe to write Install_Date from year/month (day defaults to 1st)
     const iy = int(inputs.installedYear); const im = int(inputs.installedMonth);
     if (iy && im) projectFields.Install_Date = `${iy}-${String(im).padStart(2, '0')}-01`;
@@ -74,6 +108,6 @@ export default async function handler(req, res) {
         contactId
       });
     }
-    res.status(200).json({ ok: true, contactId, projectId: pStatus.details.id, message: 'Client and system saved to Zoho.' });
+    res.status(200).json({ ok: true, contactId, projectId: pStatus.details.id, message: 'Client and system saved to Zoho.', warning: repStampWarning });
   } catch (e) { sendError(res, e); }
 }

@@ -122,9 +122,25 @@ export default async function handler(req, res) {
       batteryCapacity: num(primary.Battery_Capacity_kWh, 13.5),
       monthlyPayment: num(primary.Monthly_Payment, 0),
       loanInitialPayment: num(primary.Monthly_Payment, 150),
-      loanTerm: primary.Term ? Math.round(num(primary.Term) / 12) : 20,
       contractValue: num(primary.Contract_Value, 0)
     };
+
+    // ---- Financial product round-trip (Zoho -> audit inputs) ----
+    // Term is stored in YEARS (e.g. 25). Guard: values > 50 are months.
+    const rawTerm = num(primary.Term, 0);
+    if (rawTerm > 0) auditInputs.loanTerm = rawTerm > 50 ? Math.round(rawTerm / 12) : Math.round(rawTerm);
+    const rawRate = num(primary.Escalator_or_Interest, 0);
+    const rawValue = num(primary.Contract_Value, 0);
+    if (auditInputs.program === 'Loan') {
+      if (rawValue > 0) auditInputs.loanPrincipal = rawValue;
+      if (rawRate > 0) auditInputs.loanInterestRate = rawRate;
+    } else if (auditInputs.program === 'PPA') {
+      if (rawRate > 0) auditInputs.escalator = rawRate;
+    } else if (auditInputs.program === 'Cash' && rawValue > 0) {
+      auditInputs.cashGrossCost = rawValue;
+      auditInputs.taxCredit = Math.round(rawValue * 0.30);
+      auditInputs.cashNetCost = Math.round(rawValue * 0.70);
+    }
 
     res.status(200).json({
       role: user.role,

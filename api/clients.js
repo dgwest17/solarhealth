@@ -95,17 +95,33 @@ export default async function handler(req, res) {
         // No test client configured yet — return an empty, friendly list.
         return res.status(200).json({ role: user.role, count: 0, clients: [] });
       }
-      whereClause = `Email = '${testEmail}'`;
+      const safeRep = user.email.replace(/'/g, '').toLowerCase();
+      // Test client + leads this rep created. If the Created_By_Rep field
+      // doesn't exist in Zoho yet, COQL will error — we fall back below.
+      whereClause = `(Email = '${testEmail}' or Created_By_Rep = '${safeRep}')`;
     } else {
       // client: only their own record by email match
       const safeEmail = user.email.replace(/'/g, '');
       whereClause = `Email = '${safeEmail}'`;
     }
 
-    const contacts = await coqlAll(
+    let contacts;
+    try {
+      contacts = await coqlAll(
       CONTACT_FIELDS.join(', '),
       `from Contacts where ${whereClause} order by Last_Name`
     );
+    } catch (e) {
+      // Created_By_Rep may not exist yet in Zoho — retry rep query without it.
+      if (user.role === 'rep' && /Created_By_Rep/i.test(whereClause)) {
+        const testEmail2 = (process.env.REP_TEST_CLIENT_EMAIL || '').replace(/'/g, '').toLowerCase();
+        whereClause = `Email = '${testEmail2}'`;
+        contacts = await coqlAll(
+      CONTACT_FIELDS.join(', '),
+      `from Contacts where ${whereClause} order by Last_Name`
+    );
+      } else { throw e; }
+    }
 
     const projectsByContact = {};
     try {

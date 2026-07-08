@@ -42,6 +42,26 @@ function mapInputsToZoho(inputs) {
     const cap = num(inputs.batteryCapacity);
     if (cap != null) out.Battery_Capacity_kWh = cap;
   }
+
+  // ---- Financial product (verified writable in Zoho 2026-07) ----
+  // Purchase_Type is an unrestricted picklist; only known programs written.
+  if (['Cash', 'Loan', 'PPA'].includes(inputs.program)) {
+    out.Purchase_Type = inputs.program;
+    const term = int(inputs.loanTerm);
+    const rate = num(inputs.loanInterestRate);
+    const esc = num(inputs.escalator);
+    if (inputs.program === 'Loan') {
+      const principal = num(inputs.loanPrincipal);
+      if (principal != null && principal > 0) out.Contract_Value = principal;
+      if (term != null && term > 0) out.Term = term; // stored in YEARS
+      if (rate != null && rate > 0) out.Escalator_or_Interest = rate;
+    } else if (inputs.program === 'Cash') {
+      const gross = num(inputs.cashGrossCost);
+      if (gross != null && gross > 0) out.Contract_Value = gross;
+    } else if (inputs.program === 'PPA') {
+      if (esc != null && esc >= 0) out.Escalator_or_Interest = esc;
+    }
+  }
   return out;
 }
 
