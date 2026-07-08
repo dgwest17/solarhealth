@@ -1,682 +1,573 @@
-import { UTILITY_RATES, TOU_RATES } from './rateData';
-import { 
-  calculateMonthlyPayment, 
-  calculateRemainingPrincipal, 
-  calculatePaymentAfterTaxCredit 
-} from './loanCalculations';
-import { 
-  ANNUAL_DEGRADATION_RATE, 
-  NEM2_CONNECTION_FEE, 
-  PPA_BUYOUT_DISCOUNT 
-} from '../constants/defaults';
+import React, { useState, useEffect } from 'react';
+import {
+  Car, Thermometer, Droplets, Snowflake, Waves, Plug, Plus,
+  Zap, TrendingUp, RotateCcw, Home, Sun, Moon, Bath
+} from 'lucide-react';
+import { TOU_RATES } from '../utils/rateData';
+import {
+  LOAD_TYPES, totalAddedKwh, getLoadType, blendedDaytimePct, calcExtraUsageCost,
+  EV_MODELS, evAnnualKwh, HOTTUB_SIZES, hottubAnnualKwh
+, calcExtraUsageCostEvTou
+} from './LoadModel';
 
 /**
- * Get utility rate for a specific year with optional CARE discount
+ * Load Simulator tab.
+ *
+ * IMPORTANT ARCHITECTURE:
+ *  - Baseline usage, baseline production, and the consumption profile are
+ *    STATIC. The simulator never mutates them. (Green Button data will one day
+ *    populate the profile; it must stay authoritative.)
+ *  - The simulator adds EXTRA usage (EV, heat pump, ...) as its own variable,
+ *    each with a daytime/nighttime split. Extra load only costs money once
+ *    total consumption exceeds production (or immediately if already owing).
+ *  - It emits an "Extra Usage True-Up" via onExtraUsageChange so the audit and
+ *    battery tabs can show it as a SEPARATE line — never corrupting the real
+ *    current true-up/credit.
+ *
+ * Props:
+ *   baseUsage, production   - STATIC baselines (from the auditor inputs)
+ *   utility                 - utility key for TOU rates
+ *   currentNemImpact        - the real current credit/true-up (unchanged)
+ *   onExtraUsageChange      - ({ addedKwh, cost, ...}) => void
  */
-export const getUtilityRate = (year, utility, careDiscount = false) => {
-  const rates = UTILITY_RATES[utility];
-  let rate;
-  
-  if (rates[year]) {
-    rate = rates[year];
-  } else {
-    const years = Object.keys(rates).map(Number).sort((a, b) => a - b);
-    if (year < years[0]) {
-      rate = rates[years[0]];
-    } else if (year > years[years.length - 1]) {
-      const lastYear = years[years.length - 1];
-      const prevYear = years[years.length - 2];
-      const avgIncrease = (rates[lastYear] - rates[prevYear]) / rates[prevYear];
-      rate = rates[lastYear] * Math.pow(1 + avgIncrease, year - lastYear);
-    } else {
-      let lowerYear = years[0];
-      let upperYear = years[years.length - 1];
-      for (let i = 0; i < years.length - 1; i++) {
-        if (years[i] <= year && years[i + 1] > year) {
-          lowerYear = years[i];
-          upperYear = years[i + 1];
-          break;
-        }
-      }
-      const ratio = (year - lowerYear) / (upperYear - lowerYear);
-      rate = rates[lowerYear] + (rates[upperYear] - rates[lowerYear]) * ratio;
-    }
-  }
-  
-  if (careDiscount) {
-    rate = rate * 0.70; // 30% discount
-  }
-  
-  return rate;
+const ICONS = {
+  car: Car, thermostat: Thermometer, water: Droplets, snow: Snowflake,
+  pool: Waves, appliance: Plug, plus: Plus, hottub: Bath
 };
 
-/**
- * Calculate degraded production for a given year
- * Solar panels degrade 0.55% per year
- */
-export const getDegradedProduction = (initialProduction, yearsSinceInstall) => {
-  const degradationFactor = Math.pow(1 - ANNUAL_DEGRADATION_RATE, yearsSinceInstall);
-  return initialProduction * degradationFactor;
-};
+const LoadSimulator = ({
+  baseUsage = 10000,
+  production = 12000,
+  utility = 'SDGE',
+  currentNemImpact = null,
+  ratePlan = 'standard',
+  onRatePlanChange = null,
+  onExtraUsageChange
+}) => {
+  // activeLoads: { [id]: { kwh, daytimePct } }
+  const [activeLoads, setActiveLoads] = useState({});
+  const touRates = TOU_RATES[utility] || TOU_RATES.SCE;
 
-/**
- * Calculate usage growth rate based on install vs current usage
- */
-export const getUsageGrowthRate = (annualUsageAtInstall, currentAnnualUsage, yearsSinceInstall) => {
-  if (yearsSinceInstall === 0) return 0;
-  return Math.pow(currentAnnualUsage / annualUsageAtInstall, 1 / yearsSinceInstall) - 1;
-};
+  const added = totalAddedKwh(activeLoads);
+  const dayPct = blendedDaytimePct(activeLoads);
+  const extra = calcExtraUsageCost(activeLoads, baseUsage, production, touRates);
+  const isEvTou = utility === 'SDGE' && ratePlan === 'SDGE_EVTOU5';
+  const evTou = isEvTou ? calcExtraUsageCostEvTou(extra.billableKwh, 'SDGE_EVTOU5') : null;
+  const effCost = evTou ? evTou.cost : extra.cost;
 
-/**
- * Calculate battery arbitrage savings from TOU rate differentials
- */
-export const calculateBatteryArbitrage = (hasBattery, useTOU, utility, batteryCapacity, batteryEfficiency) => {
-  if (!hasBattery || !useTOU) return 0;
-  
-  const touRates = TOU_RATES[utility];
-  const dailyCycles = 1;
-  const daysPerYear = 365;
-  const usableCapacity = batteryCapacity * (batteryEfficiency / 100);
-  
-  const dailySavings = usableCapacity * (touRates.peak - touRates.offPeak);
-  const annualArbitrageSavings = dailySavings * dailyCycles * daysPerYear;
-  
-  return annualArbitrageSavings;
-};
+  const offsetBase = baseUsage > 0 ? Math.round((production / baseUsage) * 100) : 0;
+  const projectedUsage = baseUsage + added;
+  const offsetProjected = projectedUsage > 0 ? Math.round((production / projectedUsage) * 100) : 0;
 
-/**
- * Calculate NEM impact - credits for overproduction or true-up for under-production
- */
-export const calculateNEMImpact = (annualProduction, annualUsage, utilityRate, nemVersion, exportRate) => {
-  const netProduction = annualProduction - annualUsage;
-  
-  if (netProduction > 0) {
-    // Overproducing - they receive compensation
-    let compensationRate;
-    if (nemVersion === 'NEM1') {
-      compensationRate = utilityRate; // Retail rate
-    } else if (nemVersion === 'NEM2') {
-      compensationRate = exportRate; // Typically $0.06-0.08/kWh
-    } else {
-      compensationRate = 0.05; // NEM 3.0 very low export rate
-    }
-    
-    return {
-      type: 'credit',
-      amount: netProduction * compensationRate,
-      netProduction: netProduction,
-      rate: compensationRate
-    };
-  } else {
-    // Under-producing - they owe true-up
-    const shortage = Math.abs(netProduction);
-    const trueUpAmount = shortage * utilityRate;
-    
-    return {
-      type: 'trueup',
-      amount: trueUpAmount,
-      shortage: shortage,
-      rate: utilityRate
-    };
-  }
-};
-
-/**
- * Calculate PPA buyout amount
- * Assumes buyout = remaining payments over 25 years at 30% discount
- */
-export const calculatePPABuyout = (
-  ppaInitialRate,
-  escalator,
-  annualProduction,
-  yearsPaid,
-  ppaDownpayment = 0
-) => {
-  const totalPPAYears = 25;
-  const remainingYears = totalPPAYears - yearsPaid;
-  
-  if (remainingYears <= 0) return 0;
-  
-  let totalRemainingPayments = 0;
-  const monthlyProduction = annualProduction / 12;
-  
-  for (let year = yearsPaid; year < totalPPAYears; year++) {
-    const yearRate = ppaInitialRate * Math.pow(1 + escalator / 100, year);
-    const annualPayment = monthlyProduction * yearRate * 12;
-    totalRemainingPayments += annualPayment;
-  }
-  
-  // Apply 30% discount for buyout
-  const buyoutAmount = totalRemainingPayments * (1 - PPA_BUYOUT_DISCOUNT);
-  
-  return buyoutAmount;
-};
-
-/**
- * Calculate loan payment structure with CORRECTED tax credit logic
- * 
- * CORRECTED LOGIC:
- * - taxCreditApplied = false: Same payment entire time (customer gets tax credit as cash back)
- * - taxCreditApplied = true: Higher payment first 18 months, then LOWER (tax credit reduces principal at 18 months)
- */
-export const calculateLoanPaymentStructure = (
-  loanPrincipal,
-  loanInterestRate,
-  loanTerm,
-  taxCredit,
-  taxCreditApplied,
-  loanPaidOff,
-  loanPaidOffYear,
-  installedYear
-) => {
-  if (taxCreditApplied) {
-    // Tax credit APPLIED to loan at month 18
-    // Customer pays the original payment for 18 months; the credit then pays
-    // down the loan and the payment re-amortizes.
-    const initialPayment = calculateMonthlyPayment(loanPrincipal, loanInterestRate, loanTerm);
-
-    // CORRECTED: the credit reduces the BALANCE AT MONTH 18 (after 18 payments
-    // of principal paydown), not the original principal. Using the original
-    // principal overstates the balance and the re-amortized payment — the
-    // error grows as the term shortens.
-    const balanceAt18 = calculateRemainingPrincipal(loanPrincipal, loanInterestRate, loanTerm, 18);
-    const reducedPrincipal = Math.max(0, balanceAt18 - taxCredit);
-    const remainingYears = loanTerm - 1.5; // 18 months = 1.5 years
-    const paymentAfter18Months = calculateMonthlyPayment(reducedPrincipal, loanInterestRate, remainingYears);
-    
-    return {
-      initialPayment: initialPayment,
-      paymentAfter18Months: paymentAfter18Months,
-      description: 'Tax credit applied at month 18 - payment reduces after',
-      principalAtPayoff: loanPaidOff ? 
-        calculateRemainingPrincipal(
-          reducedPrincipal, 
-          loanInterestRate, 
-          remainingYears, 
-          Math.max(0, ((loanPaidOffYear - installedYear) * 12) - 18)
-        ) : 0
-    };
-  } else {
-    // Tax credit NOT applied to loan
-    // Customer receives tax credit as cash back, payment stays the same
-    const monthlyPayment = calculateMonthlyPayment(loanPrincipal, loanInterestRate, loanTerm);
-    
-    return {
-      initialPayment: monthlyPayment,
-      paymentAfter18Months: monthlyPayment, // SAME payment - no change
-      description: 'Tax credit NOT applied to loan - payment stays same',
-      principalAtPayoff: loanPaidOff ?
-        calculateRemainingPrincipal(
-          loanPrincipal,
-          loanInterestRate,
-          loanTerm,
-          (loanPaidOffYear - installedYear) * 12
-        ) : 0
-    };
-  }
-};
-
-/**
- * Calculate months since installation
- */
-export const getMonthsSinceInstall = (installedYear, installedMonth, nowYear, nowMonth) => {
-  return (nowYear - installedYear) * 12 + (nowMonth - installedMonth);
-};
-
-/**
- * Calculate NEW System Score based on financial performance
- * EXACT CRITERIA per user specifications
- */
-export const calculateSystemScore = (
-  annualUtilityCost, 
-  cumulativeSavings, 
-  currentNEMImpact, 
-  hasBattery,
-  program,
-  yearlyData
-) => {
-  // Determine if savings are trending positive
-  let savingsTrendingPositive = true;
-  if (yearlyData.length >= 2) {
-    const lastYear = yearlyData[yearlyData.length - 1];
-    const prevYear = yearlyData[yearlyData.length - 2];
-    savingsTrendingPositive = lastYear.annualSavings >= prevYear.annualSavings;
-  }
-  
-  const cumulativeSavingsNum = parseFloat(cumulativeSavings);
-  const annualTrueUpOwed = currentNEMImpact.type === 'trueup' ? currentNEMImpact.amount : 0;
-  const annualCredit = currentNEMImpact.type === 'credit' ? currentNEMImpact.amount : 0;
-  
-  // Connection fees threshold (~$120/year)
-  const approximateConnectionFees = 120;
-  const onlyPayingConnectionFees = annualUtilityCost <= approximateConnectionFees * 1.2;
-  
-  let score, status, message, recommendation;
-  
-  // S for SuperSolar
-  // Annual utility costs = connection fees only, cumulative savings positive & trending, Annual TRUE-UP IS A CREDIT > $250
-  if (onlyPayingConnectionFees && 
-      cumulativeSavingsNum > 0 && 
-      savingsTrendingPositive && 
-      annualCredit > 250) {
-    score = 'S';
-    status = 'supersolar';
-    message = 'SuperSolar Performance! Your system is exceeding expectations.';
-    recommendation = `No changes needed. Your system is performing amazingly and you have saved boatloads of money! You are earning money and there is room to grow usage!${!hasBattery ? ' Battery will add backup capabilities.' : ''}`;
-  }
-  
-  // A Grade
-  // Annual utility costs = connection fees only, cumulative savings positive & trending, Annual TRUE-UP IS A CREDIT $0-$250
-  else if (onlyPayingConnectionFees && 
-           cumulativeSavingsNum > 0 && 
-           savingsTrendingPositive && 
-           annualCredit >= 0 && 
-           annualCredit <= 250) {
-    score = 'A';
-    status = 'excellent';
-    message = 'Excellent system performance with strong savings!';
-    recommendation = `No changes needed to system, you are earning money and your system has saved you thousands!${!hasBattery ? ' Battery may improve system savings and add backup capabilities.' : ''}`;
-  }
-  
-  // B Grade
-  // Cumulative savings positive & trending, Annual true-up OWED $0-$500
-  else if (cumulativeSavingsNum > 0 && 
-           savingsTrendingPositive && 
-           annualTrueUpOwed >= 0 && 
-           annualTrueUpOwed <= 500) {
-    score = 'B';
-    status = 'good';
-    message = 'Good system performance with solid savings.';
-    recommendation = `Your system is doing well and you've saved a lot. However, you may want to consider adding extra solar${!hasBattery ? ' and a battery may improve system savings while adding backup capabilities' : ''}.`;
-  }
-  
-  // C Grade
-  // Cumulative savings positive & trending, Annual true-up OWED $500-$2000
-  else if (cumulativeSavingsNum > 0 && 
-           savingsTrendingPositive && 
-           annualTrueUpOwed > 500 && 
-           annualTrueUpOwed <= 2000) {
-    score = 'C';
-    status = 'fair';
-    message = 'Fair performance - system working but could be optimized.';
-    recommendation = `You've saved money with solar, it's better than having no solar! However, your system may need an update. Consider adding more panels${!hasBattery ? ' and/or a battery' : ''} to reduce your annual true-up.`;
-  }
-  
-  // F Grade - CHECK FIRST (more specific)
-  // Cumulative savings < $100 and may not improve OR Annual true-up OWED $1000+
-  else if (cumulativeSavingsNum < 100 || annualTrueUpOwed >= 1000) {
-    score = 'F';
-    status = 'failing';
-    message = 'System significantly underperforming - immediate action needed.';
-    
-    if (program === 'PPA' || program === 'Lease') {
-      recommendation = `Shoot! We believe in solar and what it can do for people. However there are many variables that can lead to a poor experience for a few systems. You may need a system repair or whole new system. Since you have a ${program}, reach out to the company who owns the system for repairs or pursue other actions such as buying out the system or consulting with an installation company.`;
-    } else {
-      recommendation = `Shoot! We believe in solar and what it can do for people. However there are many variables that can lead to a poor experience for a few systems. You may need a system repair or whole new system. Consult with a repair company or installation company.`;
-    }
-  }
-  
-  // D Grade
-  // Cumulative savings low and may not improve OR Annual true-up OWED $1000+
-  else if (!savingsTrendingPositive || annualTrueUpOwed >= 1000) {
-    score = 'D';
-    status = 'poor';
-    message = 'Below expectations - system needs attention.';
-    recommendation = `You've saved money with solar, it's better than having no solar! However, your system may need an update or repair. It is highly recommended you consult a repair firm or add more panels${!hasBattery ? ' and a battery' : ''} to reduce your annual true-up.`;
-  }
-  
-  // Default to C if none match
-  else {
-    score = 'C';
-    status = 'fair';
-    message = 'System performance is adequate but could be improved.';
-    recommendation = `Your system is working, but there's room for improvement. Consider adding more panels${!hasBattery ? ' and/or a battery' : ''} to reduce your annual true-up.`;
-  }
-  
-  return {
-    score,
-    status,
-    message,
-    recommendation,
-    metrics: {
-      onlyPayingConnectionFees,
-      cumulativeSavings: cumulativeSavingsNum,
-      savingsTrendingPositive,
-      annualTrueUpOwed,
-      annualCredit
-    }
-  };
-};
-
-/**
- * Main comprehensive savings calculation with ALL FIXES
- */
-export const calculateComprehensiveSavings = (inputs) => {
-  const monthsSinceInstall = getMonthsSinceInstall(
-    inputs.installedYear, 
-    inputs.installedMonth, 
-    inputs.nowYear, 
-    inputs.nowMonth
-  );
-  const yearsSinceInstall = monthsSinceInstall / 12;
-  const usageGrowthRate = getUsageGrowthRate(
-    inputs.annualUsageAtInstall, 
-    inputs.currentAnnualUsage, 
-    yearsSinceInstall
-  );
-  
-  // Auto-calculate tax credit as 30% of principal if not provided
-  let calculatedTaxCredit = inputs.taxCredit;
-  if (inputs.program === 'Loan' && (!inputs.taxCredit || inputs.taxCredit === 0)) {
-    calculatedTaxCredit = inputs.loanPrincipal * 0.30;
-  } else if (inputs.program === 'Cash' && (!inputs.taxCredit || inputs.taxCredit === 0)) {
-    const grossCost = inputs.cashNetCost / 0.70;
-    calculatedTaxCredit = grossCost * 0.30;
-  }
-  
-  // Calculate loan payment structure with FIXED logic
-  let loanPaymentStructure = null;
-  if (inputs.program === 'Loan') {
-    loanPaymentStructure = calculateLoanPaymentStructure(
-      inputs.loanPrincipal,
-      inputs.loanInterestRate,
-      inputs.loanTerm,
-      calculatedTaxCredit,
-      inputs.taxCreditApplied,  // FIXED: Now uses correct field
-      inputs.loanPaidOff,
-      inputs.loanPaidOffYear,
-      inputs.installedYear
-    );
-  }
-  
-  // Calculate PPA buyout if paid off
-  let ppaBuyoutCost = 0;
-  if (inputs.program === 'PPA' && inputs.ppaPaidOff) {
-    const yearsPaid = inputs.ppaPaidOffYear - inputs.installedYear;
-    ppaBuyoutCost = calculatePPABuyout(
-      inputs.ppaInitialRate,
-      inputs.escalator,
-      inputs.annualProduction,
-      yearsPaid,
-      inputs.ppaDownpayment
-    );
-  }
-  
-  let cumulativeSavings = 0;
-  let cumulativeGrossBenefit = 0;
-  let cumulativeCost = 0;
-  let cumulativeBatteryCost = 0;
-  let cumulativeArbitrageSavings = 0;
-  let cumulativeNEMCredits = 0;
-  let cumulativeTrueUpCharges = 0;
-  let cumulativeConnectionFees = 0;  // NEW: Track NEM2 connection fees
-  let yearlyData = [];
-  
-  const initialRate = getUtilityRate(inputs.installedYear, inputs.utility, inputs.onCareProgram);
-  const currentRate = getUtilityRate(inputs.nowYear, inputs.utility, inputs.onCareProgram);
-  
-  // Calculate utility bill at install vs now
-  const utilityBillAtInstall = (inputs.annualUsageAtInstall / 12) * initialRate;
-  const utilityBillNow = (inputs.currentAnnualUsage / 12) * currentRate;
-  
-  let currentAnnualUtilityCost = 0;
-  
-  for (let year = 0; year <= yearsSinceInstall; year++) {
-    const currentYear = inputs.installedYear + year;
-    const utilityRate = getUtilityRate(currentYear, inputs.utility, inputs.onCareProgram);
-    const projectedUsage = inputs.annualUsageAtInstall * Math.pow(1 + usageGrowthRate, year);
-    
-    // Apply degradation to production (0.55% per year)
-    const degradedProduction = getDegradedProduction(inputs.annualProduction, year);
-    
-    const nemImpact = calculateNEMImpact(
-      degradedProduction, 
-      projectedUsage, 
-      utilityRate, 
-      inputs.nemVersion, 
-      inputs.exportRate
-    );
-    
-    const utilityWouldPay = (projectedUsage / 12) * utilityRate;
-    
-    // Calculate solar cost based on program
-    let solarCost = 0;
-    
-    if (inputs.program === 'Cash') {
-      solarCost = 0; // No monthly payment for cash
-    } 
-    else if (inputs.program === 'PPA') {
-      // Check if paid off this year
-      if (inputs.ppaPaidOff && currentYear >= inputs.ppaPaidOffYear) {
-        solarCost = 0; // No more payments after payoff
-      } else {
-        const monthlyProduction = degradedProduction / 12;
-        solarCost = monthlyProduction * inputs.ppaInitialRate * Math.pow(1 + inputs.escalator / 100, year);
-      }
-    } 
-    else if (inputs.program === 'Loan') {
-      // Check if paid off or term ended
-      if (inputs.loanPaidOff && currentYear >= inputs.loanPaidOffYear) {
-        solarCost = 0; // No more payments after payoff
-      } else if (year >= inputs.loanTerm) {
-        solarCost = 0; // Loan term ended
-      } else {
-        const monthsIntoLoan = year * 12;
-        if (monthsIntoLoan < 18) {
-          solarCost = loanPaymentStructure.initialPayment;
-        } else {
-          solarCost = loanPaymentStructure.paymentAfter18Months;
-        }
-      }
-    } 
-    else {
-      solarCost = 0;
-    }
-    
-    const batteryCost = inputs.hasBattery ? inputs.batteryMonthlyPayment : 0;
-    const arbitrageSavings = calculateBatteryArbitrage(
-      inputs.hasBattery, 
-      inputs.useTOU, 
-      inputs.utility, 
-      inputs.batteryCapacity, 
-      inputs.batteryEfficiency
-    ) / 12;
-    
-    // NEM 2.0 connection fee
-    const connectionFee = inputs.nemVersion === 'NEM2' ? NEM2_CONNECTION_FEE : 0;
-    
-    const monthlyNEMImpact = nemImpact.amount / 12;
-    
-    let monthlySavings;
-    if (nemImpact.type === 'credit') {
-      monthlySavings = utilityWouldPay - solarCost - batteryCost - connectionFee + arbitrageSavings + monthlyNEMImpact;
-    } else {
-      monthlySavings = utilityWouldPay - solarCost - batteryCost - connectionFee + arbitrageSavings - monthlyNEMImpact;
-    }
-
-    // GROSS solar benefit (for payback): what the system delivers before any
-    // financing payments — avoided utility cost ± NEM position. Excludes
-    // solar/battery payments (those ARE the investment being paid back) and
-    // battery arbitrage (a battery benefit, not a solar one).
-    const grossMonthlyBenefit = nemImpact.type === 'credit'
-      ? utilityWouldPay + monthlyNEMImpact
-      : utilityWouldPay - monthlyNEMImpact;
-
-    const monthsInYear = year === Math.floor(yearsSinceInstall) ? (monthsSinceInstall % 12 || 12) : 12;
-
-    for (let m = 0; m < monthsInYear; m++) {
-      cumulativeSavings += monthlySavings;
-      cumulativeGrossBenefit += grossMonthlyBenefit;
-      cumulativeCost += solarCost;
-      cumulativeBatteryCost += batteryCost;
-      cumulativeArbitrageSavings += arbitrageSavings;
-      cumulativeConnectionFees += connectionFee;
-      
-      if (nemImpact.type === 'credit') {
-        cumulativeNEMCredits += monthlyNEMImpact;
-      } else {
-        cumulativeTrueUpCharges += monthlyNEMImpact;
-      }
-    }
-    
-    // Track current year annual utility cost for System Score
-    if (year === Math.floor(yearsSinceInstall)) {
-      currentAnnualUtilityCost = (solarCost + batteryCost + connectionFee) * 12;
-      if (nemImpact.type === 'trueup') {
-        currentAnnualUtilityCost += nemImpact.amount;
-      }
-    }
-    
-    if (monthsInYear === 12) {
-      yearlyData.push({
-        year: currentYear,
-        utilityRate: utilityRate.toFixed(3),
-        projectedUsage: Math.round(projectedUsage),
-        degradedProduction: Math.round(degradedProduction),
-        utilityCost: Math.round(utilityWouldPay * 12),
-        solarCost: Math.round(solarCost * 12),
-        batteryCost: Math.round(batteryCost * 12),
-        connectionFees: Math.round(connectionFee * 12),
-        annualSavings: Math.round(monthlySavings * 12),
-        cumulativeSavings: Math.round(cumulativeSavings),
-        arbitrageSavings: Math.round(arbitrageSavings * 12),
-        nemImpact: nemImpact.type === 'credit' ? Math.round(nemImpact.amount) : -Math.round(nemImpact.amount),
-        netProduction: nemImpact.type === 'credit' ? Math.round(nemImpact.netProduction) : Math.round(nemImpact.shortage)
+  // Emit the extra-usage result up so audit + battery + report can use it.
+  useEffect(() => {
+    if (onExtraUsageChange) {
+      onExtraUsageChange({
+        addedKwh: added,
+        billableKwh: extra.billableKwh,
+        cost: effCost,
+        standardCost: extra.cost,
+        ratePlan: isEvTou ? 'SDGE_EVTOU5' : 'standard',
+        evTouFallbackCost: evTou ? evTou.fallbackCost : null,
+        daytimePct: dayPct,
+        freeKwh: extra.freeKwh,
+        surplusUsedKwh: surplusUsed,
+        surplusLeftKwh: surplusLeft,
+        creditBefore: curIsCredit ? curAmount0 : 0,
+        creditReduction,
+        creditAfter: newCredit,
+        loads: Object.entries(activeLoads).map(([id, l]) => {
+          const lt = getLoadType(id);
+          let detail = '';
+          if (id === 'ev') {
+            const m = EV_MODELS.find((e) => e.id === l.evModel);
+            detail = `${m ? m.label : 'EV'} · ${Number(l.milesPerYear || 0).toLocaleString()} mi/yr home-charged`;
+          } else if (id === 'hottub') {
+            const s = HOTTUB_SIZES.find((x) => x.id === l.tubSize);
+            detail = `${s ? s.label.split(' (')[0] : 'Hot tub'} · ${l.hoursPerDay} hr/day`;
+          }
+          return { id, label: lt ? lt.label : id, kwh: Number(l.kwh) || 0, daytimePct: l.daytimePct, detail };
+        })
       });
     }
-  }
-  
-  // Add tax credit to savings for Loan if NOT applied, or for Cash.
-  // Kept in NET BENEFIT but excluded from the monthly average — a one-time
-  // credit isn't a monthly saving.
-  let taxCreditLump = 0;
-  if (inputs.program === 'Loan' && !inputs.taxCreditApplied && calculatedTaxCredit > 0) {
-    taxCreditLump = calculatedTaxCredit;
-    cumulativeSavings += taxCreditLump;
-  } else if (inputs.program === 'Cash' && calculatedTaxCredit > 0) {
-    taxCreditLump = calculatedTaxCredit;
-    cumulativeSavings += taxCreditLump;
-  }
-  
-  // Add payoff costs if applicable
-  if (inputs.program === 'Loan' && inputs.loanPaidOff && loanPaymentStructure) {
-    cumulativeCost += loanPaymentStructure.principalAtPayoff;
-  }
-  if (inputs.program === 'PPA' && inputs.ppaPaidOff) {
-    cumulativeCost += ppaBuyoutCost;
-  }
-  
-  // Calculate total investment
-  let totalInvestment;
-  if (inputs.program === 'Cash') {
-    totalInvestment = inputs.cashNetCost;
-  } else if (inputs.program === 'PPA') {
-    totalInvestment = cumulativeCost + inputs.ppaDownpayment;
-  } else if (inputs.program === 'Loan') {
-    totalInvestment = cumulativeCost + inputs.loanDownpayment;
-  } else {
-    totalInvestment = cumulativeCost;
-  }
-  
-  if (inputs.hasBattery && inputs.batteryMonthlyPayment > 0) {
-    totalInvestment += cumulativeBatteryCost;
-  }
-  
-  // PAYBACK (corrected): "when does the system pay for itself" =
-  //   net system cost ÷ gross annual benefit.
-  // The old formula divided payments-made-to-date by NET savings, which
-  // double-counted loan payments (subtracted from savings AND counted as
-  // investment) and drifted with time. Net cost is what was actually
-  // invested after the tax credit; gross benefit is what the system
-  // delivers each year before financing payments.
-  let netSystemCost;
-  if (inputs.program === 'Cash') {
-    netSystemCost = inputs.cashNetCost; // already net of tax credit
-  } else if (inputs.program === 'Loan') {
-    netSystemCost = inputs.loanPrincipal + inputs.loanDownpayment - calculatedTaxCredit;
-  } else if (inputs.program === 'PPA') {
-    netSystemCost = inputs.ppaDownpayment; // no ownership investment beyond down
-  } else {
-    netSystemCost = totalInvestment;
-  }
-  const grossAnnualBenefit = yearsSinceInstall > 0 ? cumulativeGrossBenefit / yearsSinceInstall : 0;
-  const paybackYears = grossAnnualBenefit > 0 ? Math.max(0, netSystemCost) / grossAnnualBenefit : 0;
-  const offsetPercentage = (getDegradedProduction(inputs.annualProduction, yearsSinceInstall) / inputs.currentAnnualUsage) * 100;
-  const roi = ((cumulativeSavings / totalInvestment) * 100);
-  
-  const currentNEMImpact = calculateNEMImpact(
-    getDegradedProduction(inputs.annualProduction, yearsSinceInstall),
-    inputs.currentAnnualUsage, 
-    currentRate,
-    inputs.nemVersion,
-    inputs.exportRate
-  );
-  
-  // Calculate System Score
-  const systemScore = calculateSystemScore(
-    currentAnnualUtilityCost,
-    cumulativeSavings.toFixed(2),
-    currentNEMImpact,
-    inputs.hasBattery,
-    inputs.program,
-    yearlyData
-  );
-  
-  // Provide backward compatibility for old components
-  const systemHealth = {
-    performanceRatio: 95,
-    status: systemScore.status,
-    message: systemScore.message,
-    expectedProduction: inputs.systemSize * 1400
-  };
-  
-  // Add backward compatibility for old InputSection
-  const backwardCompatibleLoanStructure = loanPaymentStructure ? {
-    ...loanPaymentStructure,
-    after18Months: loanPaymentStructure.paymentAfter18Months,
-    effectivePayment: loanPaymentStructure.initialPayment,
-    first18MonthsExtra: loanPaymentStructure.initialPayment,
-    reducedPayment: loanPaymentStructure.paymentAfter18Months
-  } : {
-    after18Months: 0,
-    effectivePayment: 0,
-    first18MonthsExtra: 0,
-    reducedPayment: 0,
-    initialPayment: 0,
-    paymentAfter18Months: 0
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [added, extra.cost, extra.billableKwh, dayPct, effCost]);
 
-  return {
-    cumulativeSavings: cumulativeSavings.toFixed(2),
-    cumulativeCost: cumulativeCost.toFixed(2),
-    cumulativeBatteryCost: cumulativeBatteryCost.toFixed(2),
-    cumulativeArbitrageSavings: cumulativeArbitrageSavings.toFixed(2),
-    cumulativeNEMCredits: cumulativeNEMCredits.toFixed(2),
-    cumulativeTrueUpCharges: cumulativeTrueUpCharges.toFixed(2),
-    cumulativeConnectionFees: cumulativeConnectionFees.toFixed(2),
-    monthsSinceInstall,
-    yearsSinceInstall: yearsSinceInstall.toFixed(1),
-    avgMonthlySavings: (monthsSinceInstall > 0 ? (cumulativeSavings - taxCreditLump) / monthsSinceInstall : 0).toFixed(2),
-    currentUtilityRate: currentRate.toFixed(3),
-    initialUtilityRate: initialRate.toFixed(3),
-    rateIncrease: (((currentRate - initialRate) / initialRate) * 100).toFixed(1),
-    yearlyData,
-    paybackYears: paybackYears.toFixed(1),
-    paybackMonths: (paybackYears * 12).toFixed(1),
-    roi: roi.toFixed(1),
-    offsetPercentage: offsetPercentage.toFixed(0),
-    usageGrowthRate: (usageGrowthRate * 100).toFixed(1),
-    systemScore,
-    systemHealth, // Backward compatibility
-    totalInvestment: totalInvestment.toFixed(2),
-    currentNEMImpact,
-    loanPaymentStructure: backwardCompatibleLoanStructure, // FIXED: Backward compatible
-    ppaBuyoutCost: ppaBuyoutCost.toFixed(2),
-    calculatedTaxCredit: calculatedTaxCredit.toFixed(2),
-    utilityBillAtInstall: utilityBillAtInstall.toFixed(2),
-    utilityBillNow: utilityBillNow.toFixed(2),
-    utilityBillIncrease: ((utilityBillNow - utilityBillAtInstall) / utilityBillAtInstall * 100).toFixed(1),
-    currentAnnualUtilityCost: currentAnnualUtilityCost.toFixed(2),
-    currentDegradedProduction: getDegradedProduction(inputs.annualProduction, yearsSinceInstall).toFixed(0)
+  const toggle = (id) => {
+    setActiveLoads((prev) => {
+      const next = { ...prev };
+      if (id in next) delete next[id];
+      else {
+        const lt = getLoadType(id);
+        if (id === 'ev') {
+          const m = EV_MODELS[0];
+          next[id] = { kwh: evAnnualKwh(12000, m.miPerKwh), daytimePct: lt.defaultDaytimePct, evModel: m.id, milesPerYear: 12000, miPerKwh: m.miPerKwh };
+        } else if (id === 'hottub') {
+          next[id] = { kwh: hottubAnnualKwh('medium', 1), daytimePct: lt.defaultDaytimePct, tubSize: 'medium', hoursPerDay: 1 };
+        } else {
+          next[id] = { kwh: lt.defaultKwh, daytimePct: lt.defaultDaytimePct };
+        }
+      }
+      return next;
+    });
   };
+  const setKwh = (id, kwh) => setActiveLoads((p) => ({ ...p, [id]: { ...p[id], kwh } }));
+  const setDay = (id, daytimePct) => setActiveLoads((p) => ({ ...p, [id]: { ...p[id], daytimePct } }));
+
+  // EV config: recompute derived kWh whenever the model/miles/efficiency change.
+  const setEv = (patch) => setActiveLoads((p) => {
+    const cur = { ...p.ev, ...patch };
+    if (patch.evModel) {
+      const m = EV_MODELS.find((e) => e.id === patch.evModel);
+      if (m && patch.evModel !== 'custom') cur.miPerKwh = m.miPerKwh;
+    }
+    cur.kwh = evAnnualKwh(cur.milesPerYear, cur.miPerKwh);
+    return { ...p, ev: cur };
+  });
+
+  // Hot tub config: derived from size + daily hours.
+  const setTub = (patch) => setActiveLoads((p) => {
+    const cur = { ...p.hottub, ...patch };
+    cur.kwh = hottubAnnualKwh(cur.tubSize, cur.hoursPerDay);
+    return { ...p, hottub: cur };
+  });
+
+  const reset = () => setActiveLoads({});
+
+  const money = (v) => `$${Math.round(Math.abs(v)).toLocaleString()}`;
+
+  // Current position (static — from the real audit, never altered here)
+  const curIsCredit = currentNemImpact ? currentNemImpact.type === 'credit' : true;
+  const curAmount0 = currentNemImpact ? Math.round(currentNemImpact.amount) : 0;
+  // Surplus mechanics: added usage first consumes surplus production (shrinking
+  // the credit at the credit rate), then becomes billable true-up at TOU.
+  const headroom = Math.max(0, production - baseUsage);
+  const surplusUsed = Math.min(added, headroom);
+  const surplusLeft = Math.max(0, headroom - added);
+  const creditRate = curIsCredit && currentNemImpact ? (currentNemImpact.rate || 0) : 0;
+  const creditReduction = curIsCredit ? Math.min(curAmount0, Math.round(surplusUsed * creditRate)) : 0;
+  const newCredit = Math.max(0, curAmount0 - creditReduction);
+  const curAmount = currentNemImpact ? Math.round(currentNemImpact.amount) : 0;
+
+  // Projected = current position adjusted by the extra cost. If they had a
+  // credit, extra cost eats into it (and can flip to owing). Shown separately.
+  const projectedNet = (curIsCredit ? curAmount - creditReduction : -curAmount) - effCost;
+  const projIsCredit = projectedNet >= 0;
+
+  // Recommendation tier on the *extra* cost the added load introduces.
+  const owedForRec = extra.cost;
+  let recommendation = null;
+  if (owedForRec > 0 && owedForRec <= 1000) recommendation = { text: 'Battery Recommended', level: 'battery' };
+  else if (owedForRec > 1000) recommendation = { text: 'Battery + Solar Recommended', level: 'both' };
+
+  return (
+    <div className="bg-gradient-to-br from-[#0e1f38] to-[#0a1628] border border-cyan-400/30 rounded-xl shadow-2xl p-6 md:p-8 mb-6">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-2xl font-bold text-cyan-300 flex items-center gap-2">
+          <Home size={24} className="text-cyan-400" /> Load Simulator
+        </h2>
+        {added > 0 && (
+          <button onClick={reset} className="text-xs text-slate-400 hover:text-cyan-300 flex items-center gap-1 border border-slate-600 rounded-lg px-3 py-1.5">
+            <RotateCcw size={13} /> Reset
+          </button>
+        )}
+      </div>
+      <p className="text-slate-300 text-sm mb-5">
+        Add electrification upgrades to see what the <em>extra</em> energy would cost. Your current
+        numbers stay put — this shows the added cost on top, priced by when you'd use the power.
+      </p>
+
+      {/* Static baseline strip */}
+      <div className="grid grid-cols-3 gap-3 mb-6">
+        <BaseCell label="Baseline usage" value={`${baseUsage.toLocaleString()} kWh`} />
+        <BaseCell label="Baseline production" value={`${production.toLocaleString()} kWh`} />
+        <BaseCell
+          label="Current position"
+          value={`${curIsCredit ? '+' : '\u2212'}${money(curAmount)}/yr`}
+          valueClass={curIsCredit ? 'text-green-400' : 'text-red-400'}
+        />
+      </div>
+
+      {utility === 'SDGE' && (
+        <div className="mb-4 flex items-center gap-3 bg-slate-800/60 border border-emerald-500/30 rounded-xl p-3">
+          <span className="text-sm text-slate-300 font-medium">⚡ Rate plan:</span>
+          <select
+            value={ratePlan}
+            onChange={(e) => onRatePlanChange && onRatePlanChange(e.target.value)}
+            className="px-3 py-1.5 text-sm border border-slate-600 rounded-lg bg-slate-900/70 text-emerald-300"
+          >
+            <option value="standard">Standard TOU</option>
+            <option value="SDGE_EVTOU5">EV-TOU-5 (super off-peak 12–6am + wkdy 10am–2pm)</option>
+          </select>
+          {ratePlan === 'SDGE_EVTOU5' && (
+            <span className="text-[11px] text-slate-400">SOP ~$0.14/kWh · verify current tariff · ~$16/mo plan fee</span>
+          )}
+        </div>
+      )}
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* The house */}
+        <div className="lg:col-span-3">
+          <HouseGraphic activeLoads={activeLoads} onToggle={toggle} />
+        </div>
+
+        {/* Live impact panel */}
+        <div className="lg:col-span-2 space-y-3">
+          {/* EXTRA USAGE TRUE-UP — the separate additive number */}
+          <div className={`rounded-xl p-5 border-2 ${extra.cost > 0 ? 'bg-red-500/10 border-red-400/50' : 'bg-slate-900/50 border-slate-700/50'}`}>
+            <div className="text-xs uppercase tracking-wider mb-1 flex items-center gap-1.5 text-red-300">
+              <Zap size={13} /> Extra Usage True-Up
+            </div>
+            <div className={`text-4xl font-extrabold ${extra.cost > 0 ? 'text-red-400' : 'text-slate-300'}`}>
+              {extra.cost > 0 ? '\u2212' : ''}{money(extra.cost)}<span className="text-base font-normal text-slate-400">/yr</span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              {added === 0
+                ? 'Add an upgrade to see its cost.'
+                : extra.cost === 0
+                  ? `All ${added.toLocaleString()} kWh is covered by your surplus production — no added cost yet.`
+                  : `${extra.billableKwh.toLocaleString()} of ${added.toLocaleString()} kWh exceed your production and are billed at time-of-use rates.`}
+            </p>
+            {isEvTou && extra.billableKwh > 0 && (
+              <div className="mt-2 pt-2 border-t border-emerald-500/30 text-[11px] space-y-1">
+                <div className="text-emerald-300 font-semibold">
+                  EV-TOU-5: extra usage charged at super off-peak — ${effCost.toLocaleString()}/yr
+                  <span className="text-slate-400 font-normal"> (vs ${extra.cost.toLocaleString()} on the standard plan)</span>
+                </div>
+                <div className="text-amber-300">
+                  ⚠ If SDG&E removes super off-peak, your true-up would be <span className="font-bold">${evTou.fallbackCost.toLocaleString()}/yr</span> at off-peak rates.
+                </div>
+              </div>
+            )}
+            {curIsCredit && added > 0 && (
+              <div className="mt-2 pt-2 border-t border-slate-700/50 text-[11px] space-y-0.5">
+                <div className="text-slate-300">
+                  Credit shrinks: <span className="text-green-400 font-semibold">${curAmount0.toLocaleString()}</span>
+                  {' → '}
+                  <span className={`font-semibold ${newCredit > 0 ? 'text-green-400' : 'text-slate-400'}`}>${newCredit.toLocaleString()}</span>
+                  {creditReduction > 0 && <span className="text-red-300"> (−${creditReduction.toLocaleString()})</span>}
+                </div>
+                <div className="text-slate-400">
+                  Surplus production {surplusLeft > 0
+                    ? <>remaining: <span className="text-cyan-300 font-semibold">{surplusLeft.toLocaleString()} kWh</span></>
+                    : <span className="text-red-300 font-semibold">used up — past net zero, extra usage is now billed</span>}
+                </div>
+              </div>
+            )}
+            {extra.cost > 0 && (
+              <div className="mt-2 pt-2 border-t border-slate-700/50 grid grid-cols-2 gap-2 text-[11px]">
+                <div className="flex items-center gap-1 text-amber-200">
+                  <Sun size={11} /> {extra.daytimeKwh.toLocaleString()} kWh @ off-peak
+                </div>
+                <div className="flex items-center gap-1 text-red-200">
+                  <Moon size={11} /> {extra.nighttimeKwh.toLocaleString()} kWh @ peak
+                </div>
+                <div className="col-span-2 text-slate-400">
+                  Effective rate ${extra.effectiveRate.toFixed(3)}/kWh · {dayPct}% daytime
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Projected combined position (separate from current) */}
+          {added > 0 && (
+            <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/50">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-300">Projected year-end (current {curIsCredit ? 'credit' : 'owed'} + extra)</span>
+              </div>
+              <div className={`text-2xl font-bold mt-1 ${projIsCredit ? 'text-green-400' : 'text-red-400'}`}>
+                {projIsCredit ? '+' : '\u2212'}{money(projectedNet)}<span className="text-sm font-normal text-slate-400">/yr</span>
+              </div>
+            </div>
+          )}
+
+          {/* Flashing recommendation */}
+          {recommendation && (
+            <div className={`rounded-xl p-4 border-2 animate-pulse flex items-center gap-2 ${
+              recommendation.level === 'both' ? 'bg-red-500/20 border-red-400/70' : 'bg-amber-500/20 border-amber-400/70'
+            }`}>
+              <Zap size={20} className={recommendation.level === 'both' ? 'text-red-300' : 'text-amber-300'} />
+              <div>
+                <div className={`font-extrabold text-lg leading-tight ${recommendation.level === 'both' ? 'text-red-200' : 'text-amber-200'}`}>
+                  {recommendation.text}
+                </div>
+                <div className="text-[11px] text-slate-300/80">
+                  {recommendation.level === 'both'
+                    ? 'This added load is steep — storage plus more panels closes the gap.'
+                    : 'A battery would recover most of this added cost by shifting it off peak.'}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-slate-900/40 rounded-xl p-4 border border-slate-700/50">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-300">Solar offset</span>
+              <div className="flex items-center gap-2">
+                {added > 0 ? (
+                  <>
+                    <span className="text-slate-500 line-through">{offsetBase}%</span>
+                    <span className="font-bold text-cyan-300">{offsetProjected}%</span>
+                  </>
+                ) : (
+                  <span className="font-semibold text-slate-200">{offsetBase}%</span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-sm mt-2">
+              <span className="text-slate-300">Added load</span>
+              <span className="font-bold text-cyan-300">+{added.toLocaleString()} kWh/yr</span>
+            </div>
+          </div>
+
+          {/* Per-load fine-tuning: kWh + day/night split */}
+          {Object.keys(activeLoads).length > 0 && (
+            <div className="bg-slate-900/40 rounded-xl p-4 border border-slate-700/50">
+              <div className="text-xs text-slate-300 uppercase tracking-wider mb-3">Fine-tune each load</div>
+              <div className="space-y-4">
+                {Object.keys(activeLoads).map((id) => {
+                  const lt = getLoadType(id);
+                  const l = activeLoads[id];
+                  return (
+                    <div key={id}>
+                      <div className="flex items-center justify-between text-sm mb-1">
+                        <span className="text-slate-200">{lt.label}</span>
+                        <span className="text-cyan-300 font-semibold">{Number(l.kwh).toLocaleString()} kWh</span>
+                      </div>
+
+                      {id === 'ev' ? (
+                        <div className="space-y-1.5 mb-1">
+                          <select
+                            value={l.evModel}
+                            onChange={(e) => setEv({ evModel: e.target.value })}
+                            className="w-full px-2 py-1.5 text-xs border border-slate-600 rounded-lg bg-slate-900/70 text-slate-200"
+                          >
+                            {EV_MODELS.map((m) => (
+                              <option key={m.id} value={m.id}>{m.label}{m.id !== 'custom' ? ` (${m.miPerKwh} mi/kWh)` : ''}</option>
+                            ))}
+                          </select>
+                          <div className="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Home-charged miles/yr</span>
+                            <span className="text-cyan-300 font-semibold">{Number(l.milesPerYear).toLocaleString()} mi</span>
+                          </div>
+                          <input type="range" min={1000} max={30000} step={500}
+                            value={l.milesPerYear} onChange={(e) => setEv({ milesPerYear: Number(e.target.value) })}
+                            className="w-full accent-cyan-400" />
+                          {(l.evModel === 'custom' || l.evModel === 'phev') && (
+                            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                              <span>Efficiency (mi/kWh):</span>
+                              <input type="number" min={0.5} max={6} step={0.1} value={l.miPerKwh}
+                                onChange={(e) => setEv({ miPerKwh: Number(e.target.value) })}
+                                className="w-20 px-2 py-1 border border-slate-600 rounded bg-slate-900/70 text-cyan-300" />
+                            </div>
+                          )}
+                        </div>
+                      ) : id === 'hottub' ? (
+                        <div className="space-y-1.5 mb-1">
+                          <select
+                            value={l.tubSize}
+                            onChange={(e) => setTub({ tubSize: e.target.value })}
+                            className="w-full px-2 py-1.5 text-xs border border-slate-600 rounded-lg bg-slate-900/70 text-slate-200"
+                          >
+                            {HOTTUB_SIZES.map((s) => (
+                              <option key={s.id} value={s.id}>{s.label}</option>
+                            ))}
+                          </select>
+                          <div className="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Use per day</span>
+                            <span className="text-cyan-300 font-semibold">{l.hoursPerDay} hr</span>
+                          </div>
+                          <input type="range" min={0} max={6} step={0.5}
+                            value={l.hoursPerDay} onChange={(e) => setTub({ hoursPerDay: Number(e.target.value) })}
+                            className="w-full accent-cyan-400" />
+                        </div>
+                      ) : (
+                        <input type="range" min={lt.minKwh} max={lt.maxKwh} step={100}
+                          value={l.kwh} onChange={(e) => setKwh(id, Number(e.target.value))}
+                          className="w-full accent-cyan-400" />
+                      )}
+
+                      <div className="flex items-center justify-between text-[11px] mt-1 mb-0.5">
+                        <span className="flex items-center gap-1 text-amber-200"><Sun size={11} /> Day {l.daytimePct}%</span>
+                        <span className="flex items-center gap-1 text-red-200">Night {100 - l.daytimePct}% <Moon size={11} /></span>
+                      </div>
+                      <input type="range" min={0} max={100} step={5}
+                        value={l.daytimePct} onChange={(e) => setDay(id, Number(e.target.value))}
+                        className="w-full accent-amber-400" />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Appliance picker */}
+      <div className="mt-6">
+        <div className="text-xs text-slate-400 uppercase tracking-wider mb-3">Add to the home</div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
+          {LOAD_TYPES.map((lt) => {
+            const Icon = ICONS[lt.icon] || Plus;
+            const on = lt.id in activeLoads;
+            return (
+              <button key={lt.id} onClick={() => toggle(lt.id)} title={lt.blurb}
+                className={`rounded-xl p-3 border text-center transition-all ${
+                  on ? 'bg-cyan-400/20 border-cyan-400/60 text-cyan-200'
+                     : 'bg-slate-800/50 border-slate-700/60 text-slate-300 hover:border-cyan-400/40 hover:text-cyan-200'
+                }`}>
+                <Icon size={22} className={`mx-auto mb-1 ${on ? 'text-cyan-300' : 'text-slate-400'}`} />
+                <div className="text-[11px] font-medium leading-tight">{lt.label}</div>
+                {on && <div className="text-[10px] text-cyan-300/80 mt-0.5">✓ added</div>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <p className="text-xs text-slate-500 mt-5">
+        Estimates are typical California figures and vary by climate, home size, and habits. The
+        "Extra Usage True-Up" is priced by time-of-use and shown separately on the Audit and Battery
+        tabs — your current true-up/credit is never changed by this simulation.
+      </p>
+    </div>
+  );
 };
+
+const BaseCell = ({ label, value, valueClass = 'text-slate-100' }) => (
+  <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50 text-center">
+    <div className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</div>
+    <div className={`text-lg font-bold mt-0.5 ${valueClass}`}>{value}</div>
+  </div>
+);
+
+/** Illustrated home — clickable hotspots that light up as loads are added. */
+const HouseGraphic = ({ activeLoads, onToggle }) => {
+  const on = (id) => id in activeLoads;
+  const glow = (id) => (on(id) ? 1 : 0.18);
+  const stroke = (id) => (on(id) ? '#22d3ee' : '#475569');
+
+  return (
+    <svg viewBox="0 0 460 360" className="w-full select-none">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#0e2a4a" /><stop offset="100%" stopColor="#0a1628" />
+        </linearGradient>
+        <linearGradient id="roof" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#1e3a5f" /><stop offset="100%" stopColor="#16304d" />
+        </linearGradient>
+        <radialGradient id="sun" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#fbbf24" /><stop offset="100%" stopColor="#f59e0b" />
+        </radialGradient>
+      </defs>
+
+      <rect x="0" y="0" width="460" height="300" fill="url(#sky)" />
+      <rect x="0" y="295" width="460" height="65" fill="#0c1f1a" />
+      <circle cx="402" cy="52" r="22" fill="url(#sun)" opacity="0.9" />
+
+      <rect x="120" y="150" width="200" height="150" rx="4" fill="#13263f" stroke="#26425f" strokeWidth="2" />
+      <polygon points="110,152 220,80 330,152" fill="url(#roof)" stroke="#2b486a" strokeWidth="2" />
+
+      <g opacity="0.95">
+        {[0, 1, 2].map((r) => [0, 1, 2, 3].map((c) => (
+          <rect key={`p${r}${c}`} x={150 + c * 22} y={104 + r * 13} width="19" height="11"
+            fill="#0e7490" stroke="#22d3ee" strokeWidth="0.6" rx="1" transform="skewX(-18)" opacity="0.85" />
+        )))}
+      </g>
+
+      <rect x="205" y="235" width="30" height="65" rx="2" fill="#0e1f33" stroke="#2b486a" strokeWidth="1.5" />
+      <circle cx="229" cy="268" r="2" fill="#22d3ee" />
+
+      {/* EV */}
+      <g onClick={() => onToggle('ev')} style={{ cursor: 'pointer' }}>
+        <rect x="28" y="252" width="74" height="46" rx="8" fill="#0f2438" stroke={stroke('ev')} strokeWidth="2" opacity={on('ev') ? 1 : 0.5} />
+        <g opacity={glow('ev')}>
+          <rect x="36" y="266" width="58" height="20" rx="6" fill="#1e4d5c" />
+          <rect x="46" y="258" width="34" height="14" rx="5" fill="#256b7e" />
+          <circle cx="48" cy="288" r="6" fill="#0b1622" stroke="#22d3ee" strokeWidth="1.5" />
+          <circle cx="82" cy="288" r="6" fill="#0b1622" stroke="#22d3ee" strokeWidth="1.5" />
+          <path d="M94 276 q18 0 24 -18" fill="none" stroke="#22d3ee" strokeWidth="2" strokeDasharray="3 2" />
+        </g>
+        <text x="65" y="312" textAnchor="middle" fontSize="10" fill={on('ev') ? '#67e8f9' : '#64748b'}>EV</text>
+      </g>
+
+      {/* Heat pump */}
+      <g onClick={() => onToggle('heatpump')} style={{ cursor: 'pointer' }}>
+        <rect x="330" y="232" width="44" height="40" rx="5" fill="#0f2438" stroke={stroke('heatpump')} strokeWidth="2" opacity={on('heatpump') ? 1 : 0.5} />
+        <g opacity={glow('heatpump')}>
+          <circle cx="352" cy="252" r="12" fill="none" stroke="#22d3ee" strokeWidth="2" />
+          {[0, 60, 120, 180, 240, 300].map((a) => (
+            <line key={a} x1="352" y1="252" x2={352 + 10 * Math.cos((a * Math.PI) / 180)} y2={252 + 10 * Math.sin((a * Math.PI) / 180)} stroke="#22d3ee" strokeWidth="1.5" />
+          ))}
+        </g>
+        <text x="352" y="285" textAnchor="middle" fontSize="9" fill={on('heatpump') ? '#67e8f9' : '#64748b'}>Heat Pump</text>
+      </g>
+
+      {/* A/C */}
+      <g onClick={() => onToggle('ac')} style={{ cursor: 'pointer' }}>
+        <rect x="384" y="250" width="34" height="30" rx="4" fill="#0f2438" stroke={stroke('ac')} strokeWidth="2" opacity={on('ac') ? 1 : 0.5} />
+        <g opacity={glow('ac')}>
+          {[0, 1, 2].map((i) => (<line key={i} x1="390" y1={258 + i * 6} x2="412" y2={258 + i * 6} stroke="#22d3ee" strokeWidth="1.5" />))}
+        </g>
+        <text x="401" y="292" textAnchor="middle" fontSize="9" fill={on('ac') ? '#67e8f9' : '#64748b'}>A/C</text>
+      </g>
+
+      {/* HPWH */}
+      <g onClick={() => onToggle('hpwh')} style={{ cursor: 'pointer' }}>
+        <rect x="132" y="210" width="26" height="56" rx="6" fill="#0f2438" stroke={stroke('hpwh')} strokeWidth="2" opacity={on('hpwh') ? 1 : 0.55} />
+        <g opacity={glow('hpwh')}>
+          <circle cx="145" cy="228" r="7" fill="none" stroke="#22d3ee" strokeWidth="1.5" />
+          <path d="M145 238 v18" stroke="#22d3ee" strokeWidth="1.5" />
+          <path d="M141 246 q4 4 8 0" fill="none" stroke="#22d3ee" strokeWidth="1.5" />
+        </g>
+        <text x="145" y="278" textAnchor="middle" fontSize="8" fill={on('hpwh') ? '#67e8f9' : '#64748b'}>Water</text>
+      </g>
+
+      {/* Appliances */}
+      <g onClick={() => onToggle('appliances')} style={{ cursor: 'pointer' }}>
+        <rect x="258" y="200" width="50" height="40" rx="3" fill="#0f2438" stroke={stroke('appliances')} strokeWidth="2" opacity={on('appliances') ? 1 : 0.5} />
+        <g opacity={glow('appliances')}>
+          <rect x="266" y="208" width="14" height="24" rx="2" fill="none" stroke="#22d3ee" strokeWidth="1.5" />
+          <circle cx="294" cy="214" r="4" fill="none" stroke="#22d3ee" strokeWidth="1.5" />
+          <circle cx="294" cy="226" r="4" fill="none" stroke="#22d3ee" strokeWidth="1.5" />
+        </g>
+        <text x="283" y="254" textAnchor="middle" fontSize="8" fill={on('appliances') ? '#67e8f9' : '#64748b'}>Appliances</text>
+      </g>
+
+      {/* Hot tub — round tub with steam, left of the pool */}
+      <g onClick={() => onToggle('hottub')} style={{ cursor: 'pointer' }}>
+        <ellipse cx="285" cy="322" rx="24" ry="12" fill="#0f2438" stroke={stroke('hottub')} strokeWidth="2" opacity={on('hottub') ? 1 : 0.5} />
+        <g opacity={glow('hottub')}>
+          <ellipse cx="285" cy="320" rx="17" ry="7" fill="none" stroke="#22d3ee" strokeWidth="1.5" />
+          {/* steam wisps */}
+          <path d="M277 310 q2 -4 0 -8" fill="none" stroke="#22d3ee" strokeWidth="1.2" opacity="0.8" />
+          <path d="M285 308 q2 -4 0 -8" fill="none" stroke="#22d3ee" strokeWidth="1.2" opacity="0.6" />
+          <path d="M293 310 q2 -4 0 -8" fill="none" stroke="#22d3ee" strokeWidth="1.2" opacity="0.8" />
+        </g>
+        <text x="285" y="345" textAnchor="middle" fontSize="9" fill={on('hottub') ? '#67e8f9' : '#64748b'}>Hot Tub</text>
+      </g>
+
+      {/* Pool */}
+      <g onClick={() => onToggle('pool')} style={{ cursor: 'pointer' }}>
+        <ellipse cx="370" cy="320" rx="46" ry="16" fill="#0f2438" stroke={stroke('pool')} strokeWidth="2" opacity={on('pool') ? 1 : 0.5} />
+        <g opacity={glow('pool')}>
+          <path d="M340 320 q10 -6 20 0 t20 0 t20 0" fill="none" stroke="#22d3ee" strokeWidth="1.5" />
+          <path d="M344 326 q10 -5 20 0 t20 0" fill="none" stroke="#22d3ee" strokeWidth="1.2" opacity="0.7" />
+        </g>
+        <text x="370" y="346" textAnchor="middle" fontSize="9" fill={on('pool') ? '#67e8f9' : '#64748b'}>Pool</text>
+      </g>
+
+      {/* Custom */}
+      <g onClick={() => onToggle('custom')} style={{ cursor: 'pointer' }}>
+        <circle cx="70" cy="200" r="20" fill="#0f2438" stroke={stroke('custom')} strokeWidth="2" opacity={on('custom') ? 1 : 0.5} />
+        <g opacity={glow('custom')}>
+          <rect x="63" y="191" width="14" height="14" rx="3" fill="none" stroke="#22d3ee" strokeWidth="1.5" />
+          <line x1="66" y1="205" x2="66" y2="210" stroke="#22d3ee" strokeWidth="1.5" />
+          <line x1="74" y1="205" x2="74" y2="210" stroke="#22d3ee" strokeWidth="1.5" />
+        </g>
+        <text x="70" y="232" textAnchor="middle" fontSize="9" fill={on('custom') ? '#67e8f9' : '#64748b'}>Custom</text>
+      </g>
+    </svg>
+  );
+};
+
+export default LoadSimulator;
