@@ -7,6 +7,7 @@ import { TOU_RATES } from '../utils/rateData';
 import {
   LOAD_TYPES, totalAddedKwh, getLoadType, blendedDaytimePct, calcExtraUsageCost,
   EV_MODELS, evAnnualKwh, HOTTUB_SIZES, hottubAnnualKwh
+, calcExtraUsageCostEvTou
 } from './LoadModel';
 
 /**
@@ -47,6 +48,9 @@ const LoadSimulator = ({
 
   const added = totalAddedKwh(activeLoads);
   const dayPct = blendedDaytimePct(activeLoads);
+  const isEvTou = utility === 'SDGE' && ratePlan === 'SDGE_EVTOU5';
+  const evTou = isEvTou ? calcExtraUsageCostEvTou(extra.billableKwh, 'SDGE_EVTOU5') : null;
+  const effCost = evTou ? evTou.cost : extra.cost;
   const extra = calcExtraUsageCost(activeLoads, baseUsage, production, touRates);
 
   const offsetBase = baseUsage > 0 ? Math.round((production / baseUsage) * 100) : 0;
@@ -59,7 +63,10 @@ const LoadSimulator = ({
       onExtraUsageChange({
         addedKwh: added,
         billableKwh: extra.billableKwh,
-        cost: extra.cost,
+        cost: effCost,
+        standardCost: extra.cost,
+        ratePlan: isEvTou ? 'SDGE_EVTOU5' : 'standard',
+        evTouFallbackCost: evTou ? evTou.fallbackCost : null,
         daytimePct: dayPct,
         freeKwh: extra.freeKwh,
         surplusUsedKwh: surplusUsed,
@@ -82,7 +89,7 @@ const LoadSimulator = ({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [added, extra.cost, extra.billableKwh, dayPct]);
+  }, [added, extra.cost, extra.billableKwh, dayPct, effCost]);
 
   const toggle = (id) => {
     setActiveLoads((prev) => {
@@ -142,7 +149,7 @@ const LoadSimulator = ({
 
   // Projected = current position adjusted by the extra cost. If they had a
   // credit, extra cost eats into it (and can flip to owing). Shown separately.
-  const projectedNet = (curIsCredit ? curAmount - creditReduction : -curAmount) - extra.cost;
+  const projectedNet = (curIsCredit ? curAmount - creditReduction : -curAmount) - effCost;
   const projIsCredit = projectedNet >= 0;
 
   // Recommendation tier on the *extra* cost the added load introduces.
@@ -179,7 +186,23 @@ const LoadSimulator = ({
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      {utility === 'SDGE' && (
+        <div className="mb-4 flex items-center gap-3 bg-slate-800/60 border border-emerald-500/30 rounded-xl p-3">
+          <span className="text-sm text-slate-300 font-medium">⚡ Rate plan:</span>
+          <select
+            value={ratePlan}
+            onChange={(e) => onRatePlanChange && onRatePlanChange(e.target.value)}
+            className="px-3 py-1.5 text-sm border border-slate-600 rounded-lg bg-slate-900/70 text-emerald-300"
+          >
+            <option value="standard">Standard TOU</option>
+            <option value="SDGE_EVTOU5">EV-TOU-5 (super off-peak 12–6am + wkdy 10am–2pm)</option>
+          </select>
+          {ratePlan === 'SDGE_EVTOU5' && (
+            <span className="text-[11px] text-slate-400">SOP ~$0.14/kWh · verify current tariff · ~$16/mo plan fee</span>
+          )}
+        </div>
+      )}
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* The house */}
         <div className="lg:col-span-3">
           <HouseGraphic activeLoads={activeLoads} onToggle={toggle} />
@@ -202,6 +225,17 @@ const LoadSimulator = ({
                   ? `All ${added.toLocaleString()} kWh is covered by your surplus production — no added cost yet.`
                   : `${extra.billableKwh.toLocaleString()} of ${added.toLocaleString()} kWh exceed your production and are billed at time-of-use rates.`}
             </p>
+            {isEvTou && extra.billableKwh > 0 && (
+              <div className="mt-2 pt-2 border-t border-emerald-500/30 text-[11px] space-y-1">
+                <div className="text-emerald-300 font-semibold">
+                  EV-TOU-5: extra usage charged at super off-peak — ${effCost.toLocaleString()}/yr
+                  <span className="text-slate-400 font-normal"> (vs ${extra.cost.toLocaleString()} on the standard plan)</span>
+                </div>
+                <div className="text-amber-300">
+                  ⚠ If SDG&E removes super off-peak, your true-up would be <span className="font-bold">${evTou.fallbackCost.toLocaleString()}/yr</span> at off-peak rates.
+                </div>
+              </div>
+            )}
             {curIsCredit && added > 0 && (
               <div className="mt-2 pt-2 border-t border-slate-700/50 text-[11px] space-y-0.5">
                 <div className="text-slate-300">

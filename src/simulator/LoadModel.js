@@ -1,3 +1,5 @@
+import { getEvTouPlan } from '../utils/rateData';
+
 /**
  * Load simulator model.
  *
@@ -225,4 +227,20 @@ export function calcExtraUsageCost(activeLoads, baseUsage, production, touRates)
     cost,
     effectiveRate
   };
+}
+
+
+/**
+ * Price billable extra usage on an EV-TOU plan: scheduled charging lands in
+ * super off-peak (12am–6am nightly; weekdays 10am–2pm for the day share), so
+ * BOTH shares price at the plan's SOP rate. Also returns the fallback: what
+ * the same usage costs at the plan's OFF-PEAK rate if the utility ever
+ * removes/narrows super off-peak.
+ */
+export function calcExtraUsageCostEvTou(billableKwh, planId) {
+  const plan = getEvTouPlan(planId);
+  if (!plan || billableKwh <= 0) return { cost: 0, fallbackCost: 0, plan: null };
+  const cost = billableKwh * plan.superOffPeak;
+  const fallbackCost = billableKwh * plan.offPeak;
+  return { cost: Math.round(cost), fallbackCost: Math.round(fallbackCost), plan };
 }
