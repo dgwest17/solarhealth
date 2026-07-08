@@ -10,7 +10,9 @@ import { apiFetch } from '../lib/supabaseClient';
  */
 const WRITABLE_KEYS = [
   'systemSize', 'annualProduction', 'annualUsageAtInstall', 'currentAnnualUsage',
-  'utility', 'nemVersion', 'exportRate', 'onCareProgram', 'hasBattery', 'batteryCapacity'
+  'utility', 'nemVersion', 'exportRate', 'onCareProgram', 'hasBattery', 'batteryCapacity',
+  // financial product
+  'program', 'loanPrincipal', 'loanTerm', 'loanInterestRate', 'escalator', 'cashGrossCost'
 ];
 
 const snapshot = (inputs) => JSON.stringify(WRITABLE_KEYS.map((k) => inputs[k]));
