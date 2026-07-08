@@ -546,11 +546,16 @@ export const calculateComprehensiveSavings = (inputs) => {
     }
   }
   
-  // Add tax credit to savings for Loan if NOT applied, or for Cash
+  // Add tax credit to savings for Loan if NOT applied, or for Cash.
+  // Kept in NET BENEFIT but excluded from the monthly average — a one-time
+  // credit isn't a monthly saving.
+  let taxCreditLump = 0;
   if (inputs.program === 'Loan' && !inputs.taxCreditApplied && calculatedTaxCredit > 0) {
-    cumulativeSavings += calculatedTaxCredit;
+    taxCreditLump = calculatedTaxCredit;
+    cumulativeSavings += taxCreditLump;
   } else if (inputs.program === 'Cash' && calculatedTaxCredit > 0) {
-    cumulativeSavings += calculatedTaxCredit;
+    taxCreditLump = calculatedTaxCredit;
+    cumulativeSavings += taxCreditLump;
   }
   
   // Add payoff costs if applicable
@@ -651,7 +656,7 @@ export const calculateComprehensiveSavings = (inputs) => {
     cumulativeConnectionFees: cumulativeConnectionFees.toFixed(2),
     monthsSinceInstall,
     yearsSinceInstall: yearsSinceInstall.toFixed(1),
-    avgMonthlySavings: (cumulativeSavings / monthsSinceInstall).toFixed(2),
+    avgMonthlySavings: (monthsSinceInstall > 0 ? (cumulativeSavings - taxCreditLump) / monthsSinceInstall : 0).toFixed(2),
     currentUtilityRate: currentRate.toFixed(3),
     initialUtilityRate: initialRate.toFixed(3),
     rateIncrease: (((currentRate - initialRate) / initialRate) * 100).toFixed(1),
