@@ -4,6 +4,7 @@ import { UTILITY_OPTIONS, NEM_OPTIONS, PROGRAM_OPTIONS, API_PROVIDERS, TOU_RATES
 import { calculateMonthlyPayment } from '../utils/loanCalculations';
 import { PANEL_MANUFACTURERS, INVERTER_MANUFACTURERS, BATTERY_MANUFACTURERS } from '../tech/equipmentData';
 import { BRANDING } from '../config/branding';
+import Tip from './Tip';
 
 const InputSection = ({ 
   inputs, 
@@ -73,6 +74,7 @@ const InputSection = ({
   // 'system' open by default; the rest collapsed so the form doesn't swallow
   // the whole screen. Each collapsed header shows a live summary of its values.
   const [openSections, setOpenSections] = useState({ system: true, financing: false, battery: false });
+  const [ppaMode, setPpaMode] = useState('rate'); // 'rate' | 'payment'
   const toggleSection = (id) => setOpenSections((p) => ({ ...p, [id]: !p[id] }));
 
   const utilShort = (UTILITY_OPTIONS.find((u) => u.value === inputs.utility)?.label.match(/\(([^)]+)\)/)?.[1]) || inputs.utility;
@@ -155,7 +157,7 @@ const InputSection = ({
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
-              <label className="block text-sm text-blue-200 mb-1">Provider</label>
+              <label className="block text-sm text-blue-200 mb-1">Provider<Tip k="utility" /></label>
               <select
                 value={inputs.apiProvider}
                 onChange={(e) => onInputChange('apiProvider', e.target.value)}
@@ -206,7 +208,7 @@ const InputSection = ({
         <div className="space-y-4">
           <h3 className="font-semibold text-cyan-400 border-b border-cyan-500/30 pb-2">Installation</h3>
           <div>
-            <label className="block text-sm text-cyan-300 mb-1">Year</label>
+            <label className="block text-sm text-cyan-300 mb-1">Year<Tip k="installYear" /></label>
             <select
               value={inputs.installedYear}
               onChange={(e) => onInputChange('installedYear', parseInt(e.target.value))}
@@ -218,7 +220,7 @@ const InputSection = ({
             </select>
           </div>
           <div>
-            <label className="block text-sm text-cyan-300 mb-1">Month</label>
+            <label className="block text-sm text-cyan-300 mb-1">Month<Tip k="installMonth" /></label>
             <select
               value={inputs.installedMonth}
               onChange={(e) => onInputChange('installedMonth', parseInt(e.target.value))}
@@ -236,7 +238,7 @@ const InputSection = ({
             Current Date <span className="text-xs text-green-300">(Auto-Updated)</span>
           </h3>
           <div>
-            <label className="block text-sm text-green-300 mb-1">Year</label>
+            <label className="block text-sm text-green-300 mb-1">Year<Tip k="installYear" /></label>
             <input
               type="number"
               value={inputs.nowYear}
@@ -245,7 +247,7 @@ const InputSection = ({
             />
           </div>
           <div>
-            <label className="block text-sm text-green-300 mb-1">Month</label>
+            <label className="block text-sm text-green-300 mb-1">Month<Tip k="installMonth" /></label>
             <input
               type="number"
               value={inputs.nowMonth}
@@ -258,7 +260,7 @@ const InputSection = ({
         <div className="space-y-4">
           <h3 className="font-semibold text-cyan-400 border-b border-cyan-500/30 pb-2">Utility</h3>
           <div>
-            <label className="block text-sm text-cyan-300 mb-1">Provider</label>
+            <label className="block text-sm text-cyan-300 mb-1">Provider<Tip k="utility" /></label>
             <select
               value={inputs.utility}
               onChange={(e) => onInputChange('utility', e.target.value)}
@@ -292,7 +294,7 @@ const InputSection = ({
       {/* System Details */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div>
-          <label className="block text-sm text-cyan-300 mb-1">System Size (kW)</label>
+          <label className="block text-sm text-cyan-300 mb-1">System Size (kW)<Tip k="systemSize" /></label>
           <input
             type="number"
             step="0.1"
@@ -302,7 +304,7 @@ const InputSection = ({
           />
         </div>
         <div>
-          <label className="block text-sm text-cyan-300 mb-1">Usage at Install (kWh/yr)</label>
+          <label className="block text-sm text-cyan-300 mb-1">Usage at Install (kWh/yr)<Tip k="usageAtInstall" /></label>
           <input
             type="number"
             value={inputs.annualUsageAtInstall}
@@ -311,7 +313,7 @@ const InputSection = ({
           />
         </div>
         <div>
-          <label className="block text-sm text-cyan-300 mb-1">Current Usage (kWh/yr)</label>
+          <label className="block text-sm text-cyan-300 mb-1">Current Usage (kWh/yr)<Tip k="currentUsage" /></label>
           <input
             type="number"
             value={inputs.currentAnnualUsage}
@@ -330,7 +332,7 @@ const InputSection = ({
       {/* System Production & NEM */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div>
-          <label className="block text-sm text-cyan-300 mb-1">Annual System Production (kWh/yr)</label>
+          <label className="block text-sm text-cyan-300 mb-1">Annual System Production (kWh/yr)<Tip k="annualProduction" /></label>
           <input
             type="number"
             value={inputs.annualProduction}
@@ -348,7 +350,7 @@ const InputSection = ({
           </div>
         </div>
         <div>
-          <label className="block text-sm text-cyan-300 mb-1">NEM Version</label>
+          <label className="block text-sm text-cyan-300 mb-1">NEM Version<Tip k="nemVersion" /></label>
           <select
             value={inputs.nemVersion}
             onChange={(e) => onInputChange('nemVersion', e.target.value)}
@@ -400,7 +402,7 @@ const InputSection = ({
       {/* Equipment (drives warranty/service schedule on the report) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div>
-          <label className="block text-sm text-cyan-300 mb-1">Panel Manufacturer</label>
+          <label className="block text-sm text-cyan-300 mb-1">Panel Manufacturer<Tip k="panelManufacturer" /></label>
           <select
             value={inputs.panelManufacturer || ''}
             onChange={(e) => onInputChange('panelManufacturer', e.target.value)}
@@ -413,7 +415,7 @@ const InputSection = ({
           </select>
         </div>
         <div>
-          <label className="block text-sm text-cyan-300 mb-1">Inverter Manufacturer</label>
+          <label className="block text-sm text-cyan-300 mb-1">Inverter Manufacturer<Tip k="inverterManufacturer" /></label>
           <select
             value={inputs.inverterManufacturer || ''}
             onChange={(e) => onInputChange('inverterManufacturer', e.target.value)}
@@ -426,7 +428,7 @@ const InputSection = ({
           </select>
         </div>
         <div>
-          <label className="block text-sm text-cyan-300 mb-1">Battery Manufacturer</label>
+          <label className="block text-sm text-cyan-300 mb-1">Battery Manufacturer<Tip k="batteryManufacturer" /></label>
           <select
             value={inputs.batteryManufacturer || ''}
             onChange={(e) => onInputChange('batteryManufacturer', e.target.value)}
@@ -445,7 +447,7 @@ const InputSection = ({
       {renderSection('financing', '💳 Financing', financingSummary, (<>
       {/* Solar Program Selection */}
       <div className="mb-6">
-        <label className="block text-sm text-cyan-300 mb-2">Solar Program</label>
+        <label className="block text-sm text-cyan-300 mb-2">Solar Program<Tip k="program" /></label>
         <select
           value={inputs.program}
           onChange={(e) => onInputChange('program', e.target.value)}
@@ -461,9 +463,23 @@ const InputSection = ({
       {inputs.program === 'PPA' && (
         <div className="bg-purple-900/20 border-2 border-purple-400/50 rounded-lg p-6 mb-6">
           <h3 className="font-semibold text-purple-300 mb-4 text-lg">PPA/Lease Details</h3>
+
+          {/* Entry mode: contract rate OR current monthly payment */}
+          <div className="mb-4 flex items-center gap-2 text-sm">
+            <span className="text-purple-200">I know:</span>
+            <button type="button" onClick={() => setPpaMode('rate')}
+              className={`px-3 py-1.5 rounded-lg border ${ppaMode === 'rate' ? 'bg-purple-500 text-white border-purple-400' : 'border-purple-400/40 text-purple-300 hover:bg-purple-900/30'}`}>
+              Contract kWh rate
+            </button>
+            <button type="button" onClick={() => setPpaMode('payment')}
+              className={`px-3 py-1.5 rounded-lg border ${ppaMode === 'payment' ? 'bg-purple-500 text-white border-purple-400' : 'border-purple-400/40 text-purple-300 hover:bg-purple-900/30'}`}>
+              Current monthly payment
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             <div>
-              <label className="block text-sm text-purple-200 mb-1">Down Payment ($)</label>
+              <label className="block text-sm text-purple-200 mb-1">Down Payment ($)<Tip k="ppaDownpayment" /></label>
               <input
                 type="number"
                 value={inputs.ppaDownpayment}
@@ -472,8 +488,9 @@ const InputSection = ({
                 placeholder="0"
               />
             </div>
+            {ppaMode === 'rate' ? (
             <div>
-              <label className="block text-sm text-purple-200 mb-1">Initial kWh Rate ($/kWh)</label>
+              <label className="block text-sm text-purple-200 mb-1">Initial kWh Rate ($/kWh)<Tip k="ppaInitialRate" /></label>
               <input
                 type="number"
                 step="0.01"
@@ -482,8 +499,32 @@ const InputSection = ({
                 className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
               />
             </div>
+            ) : (
             <div>
-              <label className="block text-sm text-purple-200 mb-1">Escalator</label>
+              <label className="block text-sm text-purple-200 mb-1">Current Monthly Payment ($)<Tip k="ppaCurrentPayment" /></label>
+              <input
+                type="number"
+                step="1"
+                value={inputs.ppaCurrentPayment || ''}
+                onChange={(e) => {
+                  const payment = parseFloat(e.target.value) || 0;
+                  onInputChange('ppaCurrentPayment', payment);
+                  // Back-calculate the contract (initial) rate from today's payment:
+                  // currentRate = payment / monthlyProduction; initial = current / (1+esc)^years
+                  const monthlyProd = (inputs.annualProduction || 0) / 12;
+                  const years = Math.max(0, (inputs.nowYear - inputs.installedYear) + (inputs.nowMonth - inputs.installedMonth) / 12);
+                  if (monthlyProd > 0 && payment > 0) {
+                    const currentRate = payment / monthlyProd;
+                    const initialRate = currentRate / Math.pow(1 + (inputs.escalator || 0) / 100, years);
+                    onInputChange('ppaInitialRate', Math.round(initialRate * 10000) / 10000);
+                  }
+                }}
+                className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+              />
+            </div>
+            )}
+            <div>
+              <label className="block text-sm text-purple-200 mb-1">Escalator<Tip k="escalator" /></label>
               <select
                 value={inputs.escalator}
                 onChange={(e) => onInputChange('escalator', parseFloat(e.target.value))}
@@ -495,9 +536,14 @@ const InputSection = ({
               </select>
             </div>
             <div>
-              <label className="block text-sm text-purple-200 mb-1">Initial Monthly Payment</label>
+              <label className="block text-sm text-purple-200 mb-1">{ppaMode === 'payment' ? 'Derived: contract rate & initial payment' : 'Initial Monthly Payment'}</label>
               <div className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-cyan-500/20 font-semibold text-cyan-400 text-lg">
-                ${((inputs.annualProduction / 12) * inputs.ppaInitialRate).toFixed(2)}
+                {ppaMode === 'payment'
+                  ? <>
+                      <span className="block text-sm">Current rate: ${((inputs.ppaCurrentPayment || 0) / ((inputs.annualProduction || 1) / 12)).toFixed(3)}/kWh</span>
+                      <span className="block text-sm">Initial: ${inputs.ppaInitialRate}/kWh → ${((inputs.annualProduction / 12) * inputs.ppaInitialRate).toFixed(2)}/mo</span>
+                    </>
+                  : <>${((inputs.annualProduction / 12) * inputs.ppaInitialRate).toFixed(2)}</>}
               </div>
             </div>
           </div>
@@ -566,7 +612,7 @@ const InputSection = ({
               />
             </div>
             <div>
-              <label className="block text-sm text-green-200 mb-1">Interest Rate (%)</label>
+              <label className="block text-sm text-green-200 mb-1">Interest Rate (%)<Tip k="loanInterestRate" /></label>
               <input
                 type="number"
                 step="0.01"
@@ -576,7 +622,7 @@ const InputSection = ({
               />
             </div>
             <div>
-              <label className="block text-sm text-green-200 mb-1">Term (years)</label>
+              <label className="block text-sm text-green-200 mb-1">Term (years)<Tip k="loanTerm" /></label>
               <input
                 type="number"
                 value={inputs.loanTerm}
@@ -684,7 +730,7 @@ const InputSection = ({
               <label className="block text-sm text-blue-200 mb-1">
                 Total System Cost ($)
                 <span className="ml-2 text-xs text-blue-300/70">Before incentives</span>
-              </label>
+              <Tip k="cashGrossCost" /></label>
               <input
                 type="number"
                 value={inputs.cashGrossCost ?? Math.round((inputs.cashNetCost || 0) / 0.70)}
@@ -720,7 +766,7 @@ const InputSection = ({
       {/* NEM 2.0 Export Rate */}
       {inputs.nemVersion === 'NEM2' && (
         <div className="mb-6">
-          <label className="block text-sm text-cyan-300 mb-1">NEM 2.0 Export Rate ($/kWh)</label>
+          <label className="block text-sm text-cyan-300 mb-1">NEM 2.0 Export Rate ($/kWh)<Tip k="exportRate" /></label>
           <input
             type="number"
             step="0.01"
@@ -765,7 +811,7 @@ const InputSection = ({
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm text-purple-200 mb-1">Capacity (kWh)</label>
+              <label className="block text-sm text-purple-200 mb-1">Capacity (kWh)<Tip k="batteryCapacity" /></label>
               <input
                 type="number"
                 step="0.1"
@@ -776,7 +822,7 @@ const InputSection = ({
             </div>
             
             <div>
-              <label className="block text-sm text-purple-200 mb-1">Efficiency (%)</label>
+              <label className="block text-sm text-purple-200 mb-1">Efficiency (%)<Tip k="batteryEfficiency" /></label>
               <input
                 type="number"
                 value={inputs.batteryEfficiency}
@@ -788,7 +834,7 @@ const InputSection = ({
             </div>
             
             <div>
-              <label className="block text-sm text-purple-200 mb-1">Monthly Payment ($)</label>
+              <label className="block text-sm text-purple-200 mb-1">Monthly Payment ($)<Tip k="batteryMonthlyPayment" /></label>
               <input
                 type="number"
                 value={inputs.batteryMonthlyPayment}
