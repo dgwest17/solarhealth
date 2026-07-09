@@ -32,3 +32,15 @@ export const TOOLTIPS = {
   batteryManufacturer: 'Brand of the battery system. Drives warranty and replacement planning on the report.',
   greenButton: 'Free 15-minute usage data from the utility website (Green Button Download). Makes this audit measured instead of estimated.'
 };
+
+
+/**
+ * Per-utility Green Button download instructions — EDIT FREELY.
+ * Shown in the upload card's ⓘ popover based on the selected utility.
+ */
+export const GB_INSTRUCTIONS = {
+  SDGE: 'Log in at sdge.com → My Energy Center → Usage → "Green Button Download my data" → choose CSV, 15-minute interval, and a full 12-month date range → Download. Upload that .csv here.',
+  SCE: 'Log in at sce.com → Data Sharing & Download (search "Green Button") → Download my data → CSV format, longest available range (aim for 12 months) → Download and upload the file here.',
+  PGE: 'Log in at pge.com → Energy Usage Details → Green Button → "Export usage for a range of days" → CSV, full 12 months → Export. Upload the .csv here.',
+  SMUD: 'Log in at smud.org → My Account → Usage → Green Button Download → CSV with the longest range available → upload the file here.'
+};
