@@ -31,7 +31,8 @@ export const DEFAULT_INPUTS = {
   
   // PPA/Lease specific
   ppaInitialRate: 0.12,
-  escalator: 0.9,
+  ppaCurrentPayment: 0,
+  escalator: 2.9,
   ppaDownpayment: 0,
   ppaPaidOff: false,  // NEW: Track if PPA paid off
   ppaPaidOffYear: currentDate.year,  // NEW: Year PPA was paid off
