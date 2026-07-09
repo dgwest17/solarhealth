@@ -20,7 +20,7 @@ const Tip = ({ k }) => {
         aria-label="Help"
       >i</button>
       {open && (
-        <span className="absolute z-40 left-1/2 -translate-x-1/2 top-6 w-64 bg-slate-900 border border-orange-400/60 rounded-lg p-3 text-xs text-slate-200 shadow-2xl font-normal normal-case tracking-normal">
+        <span className="absolute z-[120] left-1/2 -translate-x-1/2 top-6 w-64 bg-slate-900 border border-orange-400/60 rounded-lg p-3 text-xs text-slate-200 shadow-2xl font-normal normal-case tracking-normal">
           {text}
         </span>
       )}

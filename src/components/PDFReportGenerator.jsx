@@ -71,6 +71,14 @@ const PDFReportGenerator = ({ clientName, setClientName, clientAddress, setClien
           Consultation Report
         </button>
         <button
+          type="button"
+          disabled
+          className="bg-slate-800 text-slate-500 font-medium px-4 py-2.5 rounded-lg border border-slate-700 cursor-not-allowed text-sm"
+          title="Coming soon: an AI-personalized report generated from this audit plus your consultation recording/notes (Granola integration planned)"
+        >
+          ✨ Personalized Report — soon
+        </button>
+        <button
           onClick={() => window.print()}
           className="bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold px-5 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 border border-slate-600"
           title="Print the live dashboard as-is"

@@ -15,7 +15,10 @@ const InputSection = ({
   onApiConnect,
   calculations,
   onUpdate,
-  isUpdating
+  isUpdating,
+  ratePlan = 'standard',
+  onRatePlanChange = null,
+  gbApplied = false
 }) => {
   // Generate year options (1999 to current year)
   const currentYear = new Date().getFullYear();
@@ -97,7 +100,7 @@ const InputSection = ({
   const renderSection = (id, title, summary, content) => {
     const open = openSections[id];
     return (
-      <div className="border border-cyan-500/20 rounded-xl mb-3 overflow-hidden">
+      <div className="border border-cyan-500/20 rounded-xl mb-3">
         <button
           type="button"
           onClick={() => toggleSection(id)}
@@ -161,7 +164,7 @@ const InputSection = ({
               <select
                 value={inputs.apiProvider}
                 onChange={(e) => onInputChange('apiProvider', e.target.value)}
-                className="w-full px-3 py-2 border border-blue-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
+                className="w-full px-2.5 py-1.5 border border-blue-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
               >
                 {API_PROVIDERS.map(provider => (
                   <option key={provider.value} value={provider.value}>{provider.label}</option>
@@ -174,7 +177,7 @@ const InputSection = ({
                 type="password"
                 value={inputs.apiKey}
                 onChange={(e) => onInputChange('apiKey', e.target.value)}
-                className="w-full px-3 py-2 border border-blue-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
+                className="w-full px-2.5 py-1.5 border border-blue-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
               />
             </div>
             <div>
@@ -183,7 +186,7 @@ const InputSection = ({
                 type="text"
                 value={inputs.systemId}
                 onChange={(e) => onInputChange('systemId', e.target.value)}
-                className="w-full px-3 py-2 border border-blue-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
+                className="w-full px-2.5 py-1.5 border border-blue-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
               />
             </div>
           </div>
@@ -204,7 +207,7 @@ const InputSection = ({
       {/* ============ SECTION: SYSTEM & SITE ============ */}
       {renderSection('system', '🏠 System & Site', systemSummary, (<>
       {/* Date Inputs - NOW WITH DROPDOWNS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
         <div className="space-y-4">
           <h3 className="font-semibold text-cyan-400 border-b border-cyan-500/30 pb-2">Installation</h3>
           <div>
@@ -212,7 +215,7 @@ const InputSection = ({
             <select
               value={inputs.installedYear}
               onChange={(e) => onInputChange('installedYear', parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
+              className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
             >
               {yearOptions.map(year => (
                 <option key={year} value={year}>{year}</option>
@@ -224,7 +227,7 @@ const InputSection = ({
             <select
               value={inputs.installedMonth}
               onChange={(e) => onInputChange('installedMonth', parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
+              className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
             >
               {monthOptions.map(month => (
                 <option key={month.value} value={month.value}>{month.label}</option>
@@ -238,20 +241,20 @@ const InputSection = ({
             Current Date <span className="text-xs text-green-300">(Auto-Updated)</span>
           </h3>
           <div>
-            <label className="block text-sm text-green-300 mb-1">Year<Tip k="installYear" /></label>
+            <label className="block text-sm text-green-300 mb-1">Year</label>
             <input
               type="number"
               value={inputs.nowYear}
-              className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/40 text-green-300 text-lg"
+              className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/40 text-green-300 text-sm"
               readOnly
             />
           </div>
           <div>
-            <label className="block text-sm text-green-300 mb-1">Month<Tip k="installMonth" /></label>
+            <label className="block text-sm text-green-300 mb-1">Month</label>
             <input
               type="number"
               value={inputs.nowMonth}
-              className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/40 text-green-300 text-lg"
+              className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/40 text-green-300 text-sm"
               readOnly
             />
           </div>
@@ -264,7 +267,7 @@ const InputSection = ({
             <select
               value={inputs.utility}
               onChange={(e) => onInputChange('utility', e.target.value)}
-              className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
+              className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
             >
               {UTILITY_OPTIONS.map(util => (
                 <option key={util.value} value={util.value}>{util.label}</option>
@@ -292,7 +295,7 @@ const InputSection = ({
       </div>
 
       {/* System Details */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
         <div>
           <label className="block text-sm text-cyan-300 mb-1">System Size (kW)<Tip k="systemSize" /></label>
           <input
@@ -300,7 +303,7 @@ const InputSection = ({
             step="0.1"
             value={inputs.systemSize}
             onChange={(e) => onInputChange('systemSize', parseFloat(e.target.value))}
-            className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
+            className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
         </div>
         <div>
@@ -309,35 +312,38 @@ const InputSection = ({
             type="number"
             value={inputs.annualUsageAtInstall}
             onChange={(e) => onInputChange('annualUsageAtInstall', parseInt(e.target.value))}
-            className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
+            className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
         </div>
         <div>
           <label className="block text-sm text-cyan-300 mb-1">Current Usage (kWh/yr)<Tip k="currentUsage" /></label>
+          {gbApplied && (
+            <div className="text-[10px] text-emerald-300 mb-1">📊 Taken from Green Button data — assumes the system is functioning properly</div>
+          )}
           <input
             type="number"
             value={inputs.currentAnnualUsage}
             onChange={(e) => onInputChange('currentAnnualUsage', parseInt(e.target.value))}
-            className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
+            className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
         </div>
         <div>
           <label className="block text-sm text-cyan-300 mb-1">Growth Rate</label>
-          <div className="w-full px-3 py-2 border border-orange-400/30 rounded-lg bg-orange-500/20 font-semibold text-orange-400 text-lg">
+          <div className="w-full px-2.5 py-1.5 border border-orange-400/30 rounded-lg bg-orange-500/20 font-semibold text-orange-400 text-sm">
             {calculations.usageGrowthRate}%
           </div>
         </div>
       </div>
 
       {/* System Production & NEM */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
         <div>
           <label className="block text-sm text-cyan-300 mb-1">Annual System Production (kWh/yr)<Tip k="annualProduction" /></label>
           <input
             type="number"
             value={inputs.annualProduction}
             onChange={(e) => onInputChange('annualProduction', parseInt(e.target.value))}
-            className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
+            className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
           <p className="text-xs text-gray-400 mt-1">
             Current (with 0.55% degradation): {calculations.currentDegradedProduction} kWh/yr
@@ -345,7 +351,7 @@ const InputSection = ({
         </div>
         <div>
           <label className="block text-sm text-cyan-300 mb-1">Usage Offset</label>
-          <div className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-green-500/20 font-semibold text-green-400 text-lg">
+          <div className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-green-500/20 font-semibold text-green-400 text-sm">
             {calculations.offsetPercentage}%
           </div>
         </div>
@@ -354,7 +360,7 @@ const InputSection = ({
           <select
             value={inputs.nemVersion}
             onChange={(e) => onInputChange('nemVersion', e.target.value)}
-            className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
+            className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           >
             {NEM_OPTIONS.map(nem => (
               <option key={nem.value} value={nem.value}>{nem.label}</option>
@@ -369,7 +375,7 @@ const InputSection = ({
         <select
           value={inputs.installer || ''}
           onChange={(e) => onInputChange('installer', e.target.value)}
-          className="w-full md:w-1/2 px-4 py-3 border-2 border-cyan-400/50 rounded-lg bg-slate-900/60 text-cyan-300 text-lg font-medium"
+          className="w-full md:w-1/2 px-4 py-3 border-2 border-cyan-400/50 rounded-lg bg-slate-900/60 text-cyan-300 text-sm font-medium"
         >
           <option value="">Select installer…</option>
           <optgroup label="Active installers">
@@ -400,13 +406,13 @@ const InputSection = ({
       </div>
 
       {/* Equipment (drives warranty/service schedule on the report) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
         <div>
           <label className="block text-sm text-cyan-300 mb-1">Panel Manufacturer<Tip k="panelManufacturer" /></label>
           <select
             value={inputs.panelManufacturer || ''}
             onChange={(e) => onInputChange('panelManufacturer', e.target.value)}
-            className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
+            className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
           >
             <option value="">Select…</option>
             {PANEL_MANUFACTURERS.map((m) => (
@@ -419,7 +425,7 @@ const InputSection = ({
           <select
             value={inputs.inverterManufacturer || ''}
             onChange={(e) => onInputChange('inverterManufacturer', e.target.value)}
-            className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
+            className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
           >
             <option value="">Select…</option>
             {INVERTER_MANUFACTURERS.map((m) => (
@@ -432,7 +438,7 @@ const InputSection = ({
           <select
             value={inputs.batteryManufacturer || ''}
             onChange={(e) => onInputChange('batteryManufacturer', e.target.value)}
-            className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
+            className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
           >
             <option value="">Select…</option>
             {BATTERY_MANUFACTURERS.map((m) => (
@@ -451,7 +457,7 @@ const InputSection = ({
         <select
           value={inputs.program}
           onChange={(e) => onInputChange('program', e.target.value)}
-          className="w-full md:w-1/2 px-4 py-3 border-2 border-cyan-400/50 rounded-lg bg-slate-900/60 text-cyan-300 text-lg font-medium"
+          className="w-full md:w-1/2 px-4 py-3 border-2 border-cyan-400/50 rounded-lg bg-slate-900/60 text-cyan-300 text-sm font-medium"
         >
           {PROGRAM_OPTIONS.map(prog => (
             <option key={prog.value} value={prog.value}>{prog.label}</option>
@@ -484,7 +490,7 @@ const InputSection = ({
                 type="number"
                 value={inputs.ppaDownpayment}
                 onChange={(e) => onInputChange('ppaDownpayment', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+                className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
                 placeholder="0"
               />
             </div>
@@ -496,7 +502,7 @@ const InputSection = ({
                 step="0.01"
                 value={inputs.ppaInitialRate}
                 onChange={(e) => onInputChange('ppaInitialRate', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+                className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
               />
             </div>
             ) : (
@@ -519,7 +525,7 @@ const InputSection = ({
                     onInputChange('ppaInitialRate', Math.round(initialRate * 10000) / 10000);
                   }
                 }}
-                className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+                className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
               />
             </div>
             )}
@@ -528,7 +534,7 @@ const InputSection = ({
               <select
                 value={inputs.escalator}
                 onChange={(e) => onInputChange('escalator', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+                className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
               >
                 {PPA_ESCALATOR_OPTIONS.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -537,7 +543,7 @@ const InputSection = ({
             </div>
             <div>
               <label className="block text-sm text-purple-200 mb-1">{ppaMode === 'payment' ? 'Derived: contract rate & initial payment' : 'Initial Monthly Payment'}</label>
-              <div className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-cyan-500/20 font-semibold text-cyan-400 text-lg">
+              <div className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-cyan-500/20 font-semibold text-cyan-400 text-sm">
                 {ppaMode === 'payment'
                   ? <>
                       <span className="block text-sm">Current rate: ${((inputs.ppaCurrentPayment || 0) / ((inputs.annualProduction || 1) / 12)).toFixed(3)}/kWh</span>
@@ -567,7 +573,7 @@ const InputSection = ({
               <select
                 value={inputs.ppaPaidOffYear}
                 onChange={(e) => onInputChange('ppaPaidOffYear', parseInt(e.target.value))}
-                className="w-full md:w-64 px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+                className="w-full md:w-64 px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
               >
                 {yearOptions.filter(y => y >= inputs.installedYear && y <= currentYear).map(year => (
                   <option key={year} value={year}>{year}</option>
@@ -608,7 +614,7 @@ const InputSection = ({
                 type="number"
                 value={inputs.loanPrincipal}
                 onChange={(e) => onInputChange('loanPrincipal', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
+                className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-sm"
               />
             </div>
             <div>
@@ -618,7 +624,7 @@ const InputSection = ({
                 step="0.01"
                 value={inputs.loanInterestRate}
                 onChange={(e) => onInputChange('loanInterestRate', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
+                className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-sm"
               />
             </div>
             <div>
@@ -627,7 +633,7 @@ const InputSection = ({
                 type="number"
                 value={inputs.loanTerm}
                 onChange={(e) => onInputChange('loanTerm', parseInt(e.target.value))}
-                className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
+                className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-sm"
               />
             </div>
             <div>
@@ -636,7 +642,7 @@ const InputSection = ({
                 type="number"
                 value={inputs.loanDownpayment}
                 onChange={(e) => onInputChange('loanDownpayment', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
+                className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-sm"
                 placeholder="0"
               />
             </div>
@@ -649,7 +655,7 @@ const InputSection = ({
                 type="number"
                 value={taxCredit}
                 onChange={(e) => onInputChange('taxCredit', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
+                className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-sm"
                 placeholder={(inputs.loanPrincipal * 0.30).toFixed(2)}
               />
             </div>
@@ -685,7 +691,7 @@ const InputSection = ({
               <select
                 value={inputs.loanPaidOffYear}
                 onChange={(e) => onInputChange('loanPaidOffYear', parseInt(e.target.value))}
-                className="w-full md:w-64 px-3 py-2 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-lg"
+                className="w-full md:w-64 px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-sm"
               >
                 {yearOptions.filter(y => y >= inputs.installedYear && y <= currentYear).map(year => (
                   <option key={year} value={year}>{year}</option>
@@ -740,18 +746,18 @@ const InputSection = ({
                   onInputChange('taxCredit', Math.round(gross * 0.30));
                   onInputChange('cashNetCost', Math.round(gross * 0.70));
                 }}
-                className="w-full px-3 py-2 border border-blue-400/30 rounded-lg bg-slate-900/60 text-blue-300 text-lg"
+                className="w-full px-2.5 py-1.5 border border-blue-400/30 rounded-lg bg-slate-900/60 text-blue-300 text-sm"
               />
             </div>
             <div>
               <label className="block text-sm text-blue-200 mb-1">Federal Tax Credit (30%)</label>
-              <div className="w-full px-3 py-2 border border-green-400/30 rounded-lg bg-green-500/20 font-semibold text-green-400 text-lg">
+              <div className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-green-500/20 font-semibold text-green-400 text-sm">
                 −${Number(inputs.taxCredit || 0).toLocaleString()}
               </div>
             </div>
             <div>
               <label className="block text-sm text-blue-200 mb-1">Net Cost After Credit</label>
-              <div className="w-full px-3 py-2 border border-cyan-400/30 rounded-lg bg-cyan-500/20 font-semibold text-cyan-400 text-lg">
+              <div className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-cyan-500/20 font-semibold text-cyan-400 text-sm">
                 ${Number(inputs.cashNetCost || 0).toLocaleString()}
               </div>
             </div>
@@ -772,7 +778,7 @@ const InputSection = ({
             step="0.01"
             value={inputs.exportRate}
             onChange={(e) => onInputChange('exportRate', parseFloat(e.target.value))}
-            className="w-full md:w-64 px-3 py-2 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-lg"
+            className="w-full md:w-64 px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
           <p className="text-xs text-gray-400 mt-1">Typical range: $0.06 - $0.08/kWh | Connection fee: $12/month</p>
         </div>
@@ -793,11 +799,14 @@ const InputSection = ({
         <label className="flex items-center space-x-2 cursor-pointer">
           <input
             type="checkbox"
-            checked={inputs.useTOU}
-            onChange={(e) => onInputChange('useTOU', e.target.checked)}
-            className="w-4 h-4 accent-cyan-400"
+            checked={ratePlan === 'SDGE_EVTOU5'}
+            onChange={(e) => onRatePlanChange && onRatePlanChange(e.target.checked ? 'SDGE_EVTOU5' : 'standard')}
+            disabled={inputs.utility !== 'SDGE'}
+            className="w-4 h-4 accent-emerald-400"
           />
-          <span className="text-sm text-cyan-300">⚡ Use TOU rates?</span>
+          <span className={`text-sm ${inputs.utility === 'SDGE' ? 'text-emerald-300' : 'text-slate-500'}`}>
+            ⚡ Using EV-TOU{inputs.utility !== 'SDGE' ? ' (SDG&E only)' : ' (super off-peak 12–6am + wkdy 10am–2pm)'}
+          </span>
         </label>
       </div>
 
@@ -817,7 +826,7 @@ const InputSection = ({
                 step="0.1"
                 value={inputs.batteryCapacity}
                 onChange={(e) => onInputChange('batteryCapacity', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+                className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
               />
             </div>
             
@@ -827,7 +836,7 @@ const InputSection = ({
                 type="number"
                 value={inputs.batteryEfficiency}
                 onChange={(e) => onInputChange('batteryEfficiency', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+                className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
                 min="70"
                 max="100"
               />
@@ -839,13 +848,13 @@ const InputSection = ({
                 type="number"
                 value={inputs.batteryMonthlyPayment}
                 onChange={(e) => onInputChange('batteryMonthlyPayment', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-lg"
+                className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
               />
             </div>
             
             <div>
               <label className="block text-sm text-purple-200 mb-1">Arbitrage Savings</label>
-              <div className="w-full px-3 py-2 border border-purple-400/30 rounded-lg bg-purple-500/20 font-semibold text-purple-300 text-lg">
+              <div className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-purple-500/20 font-semibold text-purple-300 text-sm">
                 ${parseFloat(calculations.cumulativeArbitrageSavings).toLocaleString()}
               </div>
             </div>
