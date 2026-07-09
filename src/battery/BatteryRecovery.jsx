@@ -1,3 +1,4 @@
+import GridFutureGraphic from './GridFutureGraphic';
 import React from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -168,6 +169,8 @@ const BatteryRecovery = ({
           California's grid is under unprecedented strain. Soaring demand and an aging system mean
           nighttime rates — the rates you pay most — climb relentlessly. The pressure is structural, and it's accelerating.
         </p>
+
+        <div className="mb-6"><GridFutureGraphic /></div>
 
         {/* Graphic: demand drivers feeding a rising-load grid */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-center mb-6">
