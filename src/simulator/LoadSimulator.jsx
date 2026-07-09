@@ -188,22 +188,6 @@ const LoadSimulator = ({
         />
       </div>
 
-      {utility === 'SDGE' && (
-        <div className="mb-4 flex items-center gap-3 bg-slate-800/60 border border-emerald-500/30 rounded-xl p-3">
-          <span className="text-sm text-slate-300 font-medium">⚡ Rate plan:</span>
-          <select
-            value={ratePlan}
-            onChange={(e) => onRatePlanChange && onRatePlanChange(e.target.value)}
-            className="px-3 py-1.5 text-sm border border-slate-600 rounded-lg bg-slate-900/70 text-emerald-300"
-          >
-            <option value="standard">Standard TOU</option>
-            <option value="SDGE_EVTOU5">EV-TOU-5 (super off-peak 12–6am + wkdy 10am–2pm)</option>
-          </select>
-          {ratePlan === 'SDGE_EVTOU5' && (
-            <span className="text-[11px] text-slate-400">SOP ~$0.14/kWh · verify current tariff · ~$16/mo plan fee</span>
-          )}
-        </div>
-      )}
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* The house */}
         <div className="lg:col-span-3">
