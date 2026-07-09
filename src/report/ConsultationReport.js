@@ -10,6 +10,7 @@
  */
 import { TOU_RATES, UTILITY_OPTIONS, NEM_OPTIONS, TOU_WINDOWS, getEvTouPlan } from '../utils/rateData';
 import {
+  CONSUMPTION_PROFILES,
   buildDailyOverlay,
   calculateExportEconomics,
   calculateCreditsRecovered,
@@ -148,26 +149,49 @@ export function openConsultationReport({ clientName, clientAddress, repName, inp
   const touWin = evPlan ? evPlan.windows : (TOU_WINDOWS[inputs.utility] || TOU_WINDOWS.SDGE);
   const touDisp = evPlan ? { peak: evPlan.peak, offPeak: evPlan.offPeak, superOffPeak: evPlan.superOffPeak } : touRates;
   const touSvg = (() => {
-    const W = 660, bandY = 22, bandH = 26, H = 92;
-    const COLORS = { peak: '#ef4444', off: '#f59e0b', sop: '#10b981' };
-    const bandFor = (h) => (h >= touWin.peak[0] && h < touWin.peak[1]) ? COLORS.peak
+    const W = 660, H = 200, P = 30, baseY = 158;
+    const CB = { peak: '#ef4444', off: '#f59e0b', sop: '#10b981' };
+    const bandKey = (h) => (h >= touWin.peak[0] && h < touWin.peak[1]) ? 'peak'
       : ((h >= touWin.superOffPeak[0] && h < touWin.superOffPeak[1]) ||
-         (touWin.sopWeekdayMidday && h >= touWin.sopWeekdayMidday[0] && h < touWin.sopWeekdayMidday[1])) ? COLORS.sop : COLORS.off;
-    const cells = Array.from({ length: 24 }, (_, h) =>
-      `<rect x="${(h / 24) * W}" y="${bandY}" width="${W / 24}" height="${bandH}" fill="${bandFor(h)}" opacity="${bandFor(h) === COLORS.peak ? 0.95 : 0.72}"/>`).join('');
+         (touWin.sopWeekdayMidday && h >= touWin.sopWeekdayMidday[0] && h < touWin.sopWeekdayMidday[1])) ? 'sop' : 'off';
+    const rateOf = { peak: touDisp.peak, off: touDisp.offPeak, sop: touDisp.superOffPeak };
+    const maxRate = Math.max(touDisp.peak, touDisp.offPeak, touDisp.superOffPeak);
+    const x = (h) => P + (h / 24) * (W - P * 2);
+    // Buy/sell price bars — height proportional to price (taller = pricier)
+    const priceBars = Array.from({ length: 24 }, (_, h) => {
+      const k = bandKey(h);
+      const bh = Math.max(8, (rateOf[k] / maxRate) * 100);
+      return `<rect x="${x(h)}" y="${baseY - bh}" width="${(W - P * 2) / 24 - 1.5}" height="${bh}" rx="1.5" fill="${CB[k]}" opacity="0.45"/>`;
+    }).join('');
+    // Consumption profile curve (evening-heavy household shape)
+    const prof = (CONSUMPTION_PROFILES.evening_heavy || { hourly: [] }).hourly;
+    const maxP = Math.max(...prof, 1);
+    const consPts = prof.map((v, h) => `${x(h) + 6},${baseY - (v / maxP) * 112}`).join(' ');
+    // Solar production bell (roughly 7am–6pm, peak 12:30)
+    const solarPts = Array.from({ length: 24 }, (_, h) => {
+      const v = Math.max(0, Math.exp(-Math.pow((h - 12.5) / 3.1, 2)));
+      return `${x(h) + 6},${baseY - v * 100}`;
+    }).join(' ');
     const ticks = [0, 6, 12, 18, 24].map((h) =>
-      `<text x="${(h / 24) * W}" y="${bandY + bandH + 14}" font-size="8.5" fill="#7d8aa0" text-anchor="middle">${h === 0 || h === 24 ? '12a' : h === 12 ? '12p' : h < 12 ? h + 'a' : (h - 12) + 'p'}</text>`).join('');
-    const legendY = bandY + bandH + 28;
+      `<text x="${x(h)}" y="${baseY + 14}" font-size="8.5" fill="#7d8aa0" text-anchor="middle">${h === 0 || h === 24 ? '12a' : h === 12 ? '12p' : h < 12 ? h + 'a' : (h - 12) + 'p'}</text>`).join('');
+    const legendY = baseY + 30;
     const legend = [
-      ['Peak $' + touDisp.peak + '/kWh', COLORS.peak, 0],
-      ['Off-peak $' + touDisp.offPeak + '/kWh', COLORS.off, 170],
-      ['Super off-peak $' + touDisp.superOffPeak + '/kWh' + (evPlan ? ' (12–6am + wkdy 10a–2p)' : ''), COLORS.sop, 350]
-    ].map(([label, color, lx]) =>
-      `<rect x="${lx}" y="${legendY - 8}" width="9" height="9" rx="2" fill="${color}"/>` +
-      `<text x="${lx + 13}" y="${legendY}" font-size="8.5" fill="#c9d4e3">${label}</text>`).join('');
+      [`Buy/sell price — Peak $${touDisp.peak}`, CB.peak, 0, 'rect'],
+      [`Off-peak $${touDisp.offPeak}`, CB.off, 175, 'rect'],
+      [`Super off-peak $${touDisp.superOffPeak}`, CB.sop, 290, 'rect'],
+      ['Home consumption', '#22d3ee', 440, 'line'],
+      ['Solar production', '#e8b93e', 555, 'line']
+    ].map(([label, color, lx, kind]) =>
+      (kind === 'rect'
+        ? `<rect x="${lx}" y="${legendY - 8}" width="9" height="9" rx="2" fill="${color}" opacity="0.6"/>`
+        : `<line x1="${lx}" y1="${legendY - 4}" x2="${lx + 12}" y2="${legendY - 4}" stroke="${color}" stroke-width="2.5"/>`) +
+      `<text x="${lx + 15}" y="${legendY}" font-size="8" fill="#c9d4e3">${label}</text>`).join('');
     return `<svg viewBox="0 0 ${W} ${H}" style="width:100%">
-      <text x="0" y="12" font-size="9" fill="#8a97ab">24-HOUR RATE MAP — ${evPlan ? esc(evPlan.label).toUpperCase() : inputs.utility}${evPlan ? ' <tspan fill="#e8b93e">(verify current tariff)</tspan>' : ''}</text>
-      ${cells}${ticks}${legend}
+      <text x="${P}" y="12" font-size="9" fill="#8a97ab">YOUR DAY vs THE PRICE OF POWER — ${evPlan ? esc(evPlan.label).toUpperCase() + ' <tspan fill=\"#e8b93e\">(verify current tariff)</tspan>' : inputs.utility}</text>
+      ${priceBars}
+      <polyline points="${solarPts}" fill="none" stroke="#e8b93e" stroke-width="2" stroke-dasharray="5 3" opacity="0.9"/>
+      <polyline points="${consPts}" fill="none" stroke="#22d3ee" stroke-width="2.5"/>
+      ${ticks}${legend}
     </svg>`;
   })();
 
