@@ -338,7 +338,7 @@ const InputSection = ({
       {/* System Production & NEM */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
         <div>
-          <label className="block text-sm text-cyan-300 mb-1">Annual System Production (kWh/yr)<Tip k="annualProduction" /></label>
+          <label className="block text-sm text-cyan-300 mb-1">INSTALLED Annual System Production (kWh/yr)<Tip k="annualProduction" /></label>
           <input
             type="number"
             value={inputs.annualProduction}
