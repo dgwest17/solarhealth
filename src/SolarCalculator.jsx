@@ -13,6 +13,7 @@ import PDFReportGenerator from './components/PDFReportGenerator';
 import SaveToCRM from './components/SaveToCRM';
 import { apiFetch } from './lib/supabaseClient';
 import ContactFormModal from './components/ContactFormModal';
+import GuideTour from './components/GuideTour';
 import { openConsultationReport } from './report/ConsultationReport';
 import { deriveAnnualUsage } from './greenbutton/GreenButtonParser';
 import SystemSpecsSheet from './components/SystemSpecsSheet';
@@ -162,6 +163,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
 
   return (
     <div className="app-root min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
+      <GuideTour />
       <div className="max-w-7xl mx-auto">
         {/* Print-only report header */}
         <div className="hidden print:block mb-4 pb-3 border-b-2 border-amber-500">
