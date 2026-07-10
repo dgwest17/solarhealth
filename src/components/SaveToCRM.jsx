@@ -35,14 +35,37 @@ const SaveToCRM = ({ inputs, clientContext, clientLabel, onSendAudit }) => {
   const sendAudit = async () => {
     setSending(true); setSendStatus(null);
     try {
-      // 1. open the consultation report for delivery
-      if (onSendAudit) onSendAudit();
-      // 2. stamp Last_Report_Sent (+ newsletter enrollment if checked)
+      // Build the report (also opens a preview tab) and email it to the client.
+      const payload = onSendAudit ? onSendAudit() : null;
+      if (payload && payload.reportHtml) {
+        try {
+          const r = await apiFetch('/api/send-audit', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contactId: clientContext.contactId,
+              reportHtml: payload.reportHtml,
+              summary: payload.summary,
+              newsletter
+            })
+          });
+          setSendStatus({ ok: true, message: `Emailed to ${r.emailedTo}${newsletter ? ' · enrolled in newsletter' : ''}` });
+          return;
+        } catch (e) {
+          // Email not configured or failed — fall back to stamping only.
+          await apiFetch('/api/mark-report-sent', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contactId: clientContext.contactId, newsletter })
+          });
+          setSendStatus({ ok: false, message: `Email failed (${e.message}) — report opened for manual delivery; marked sent in CRM.` });
+          return;
+        }
+      }
+      // No report payload — legacy stamp
       await apiFetch('/api/mark-report-sent', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contactId: clientContext.contactId, newsletter })
       });
-      setSendStatus({ ok: true, message: newsletter ? 'Report marked sent · enrolled in newsletter' : 'Report marked sent' });
+      setSendStatus({ ok: true, message: 'Report marked sent' });
     } catch (e) {
       setSendStatus({ ok: false, message: e.message });
     } finally { setSending(false); }
