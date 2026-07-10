@@ -105,7 +105,7 @@ function heroSvg() {
   </svg>`;
 }
 
-export function openConsultationReport({ clientName, clientAddress, repName, inputs, calculations, extraUsage, gbProfile, contact = {} }) {
+export function buildConsultationReportHtml({ clientName, clientAddress, repName, inputs, calculations, extraUsage, gbProfile, contact = {} }) {
   const utilLabel = labelFor(UTILITY_OPTIONS, inputs.utility);
   const utilShort = (/\(([^)]+)\)/.exec(utilLabel) || [null, utilLabel])[1];
   const nemLabel = labelFor(NEM_OPTIONS, inputs.nemVersion);
@@ -458,8 +458,14 @@ ${schedule.items.map((i) => `<tr>
 <footer><span>${esc(BRANDING.appName)} · System Analysis · Prepared by ${esc(BRANDING.brandName)}, a service of ${esc(BRANDING.legalName)}</span><span>${today}</span></footer>
 </body></html>`;
 
+  return html;
+}
+
+export function openConsultationReport(params) {
+  const html = buildConsultationReportHtml(params);
   const w = window.open('', '_blank');
-  if (!w) { alert('Pop-up blocked — please allow pop-ups to generate the report.'); return; }
+  if (!w) { alert('Pop-up blocked — please allow pop-ups to generate the report.'); return html; }
   w.document.write(html);
   w.document.close();
+  return html;
 }
