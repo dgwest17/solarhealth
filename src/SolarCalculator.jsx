@@ -79,13 +79,25 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
   };
 
   const sendAuditReport = () => {
-    openConsultationReport({
+    // Opens the preview tab AND returns { reportHtml, summary } for emailing.
+    const html = openConsultationReport({
       clientName: (clientContext && clientContext.name) || clientName,
       clientAddress: (clientContext && clientContext.address) || clientAddress,
       repName,
       inputs, calculations, extraUsage,
       gbProfile: gbApplied ? gbProfile : null
     });
+    const nem = calculations.currentNEMImpact;
+    return {
+      reportHtml: html,
+      summary: {
+        cumulativeSavings: calculations.cumulativeSavings,
+        avgMonthlySavings: calculations.avgMonthlySavings,
+        nemLine: nem ? (nem.type === 'credit'
+          ? `Earning ~$${Math.round(nem.amount).toLocaleString()}/yr in credits`
+          : `~$${Math.round(nem.amount).toLocaleString()}/yr annual true-up`) : null
+      }
+    };
   };
 
   const [gbProfile, setGbProfile] = useState(null);
