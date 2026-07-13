@@ -118,6 +118,18 @@ export function parseGreenButton(text, utility = 'SDGE') {
     if (p.length >= 2 && p[0]) meta[p[0]] = p.slice(1).join(',');
   }
 
+  // Clamp to the most recent 365 days.
+  let maxDateMs = -Infinity;
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    if (!lines[i]) continue;
+    const p = splitCsvLine(lines[i]);
+    if (p.length < 5) continue;
+    const t = Date.parse(p[ix.date]);
+    if (Number.isFinite(t) && t > maxDateMs) maxDateMs = t;
+  }
+  const cutoffMs = Number.isFinite(maxDateMs) ? maxDateMs - 364 * 24 * 3600 * 1000 : -Infinity;
+  let clippedOldRows = 0;
+
   const days = new Set();
   let importKwh = 0;
   let exportKwh = 0;
@@ -130,6 +142,8 @@ export function parseGreenButton(text, utility = 'SDGE') {
     if (!lines[i]) continue;
     const p = splitCsvLine(lines[i]);
     if (p.length < 5) continue;
+    const dMs = Date.parse(p[ix.date]);
+    if (Number.isFinite(dMs) && dMs < cutoffMs) { clippedOldRows++; continue; }
     const h = parseTime12h(p[ix.time]);
     if (h == null) { skippedTime++; continue; }
     const c = parseFloat(p[ix.cons]) || 0;
@@ -184,6 +198,7 @@ export function parseGreenButton(text, utility = 'SDGE') {
       readingEnd: meta['Reading End'] || ''
     },
     days: dayCount,
+    clippedToLatestYear: clippedOldRows > 0,
     rows,
     // Raw measured totals over the file's range:
     importKwh: Math.round(importKwh),
