@@ -106,6 +106,7 @@ export const calculateNEMPosition = (inputs, buyRateFallback) => {
   const production = Number(inputs.annualProduction) || 0;
   const usage = Number(inputs.currentAnnualUsage) || 0;
 
+  // Grid flows: measured (Green Button) when present, else profile estimate.
   const SELF_USE_SHARE = { evening_heavy: 0.40, balanced: 0.50, daytime_heavy: 0.62 };
   let importKwh, exportKwh, measured = false;
   if ((Number(inputs.measuredImportKwh) || 0) > 0 || (Number(inputs.measuredExportKwh) || 0) > 0) {
@@ -119,6 +120,7 @@ export const calculateNEMPosition = (inputs, buyRateFallback) => {
     importKwh = Math.max(0, usage - selfUse);
   }
 
+  // Average BUY rate: TOU-weighted (measured shares when available), CARE-discounted.
   const tou = TOU_RATES[inputs.utility] || TOU_RATES.SCE;
   const shares = measured && inputs.measuredTouShares
     ? inputs.measuredTouShares
@@ -127,20 +129,26 @@ export const calculateNEMPosition = (inputs, buyRateFallback) => {
   if (!Number.isFinite(buyRate) || buyRate <= 0) buyRate = buyRateFallback;
   if (inputs.onCareProgram) buyRate *= 0.70;
 
-  let sellRate;
-  if (inputs.nemVersion === 'NEM1') sellRate = buyRate;
-  else if (inputs.nemVersion === 'NEM2') sellRate = Number(inputs.exportRate) || 0.07;
-  else sellRate = 0.035;
+  let energyNet, sellRate, feesAnnual;
 
-  const buyCost = importKwh * buyRate;
-  const sellCredit = exportKwh * sellRate;
-  const energyNet = sellCredit - buyCost;
-
-  let feesAnnual;
-  if (inputs.nemVersion === 'NEM1') {
-    feesAnnual = energyNet >= 0 ? 0 : NEM2_CONNECTION_FEE * 12;
-  } else {
+  if (inputs.nemVersion === 'NEM3') {
+    // NEM 3.0: exports genuinely decoupled — sold ~$0.035, imports at retail.
+    sellRate = 0.035;
+    energyNet = exportKwh * sellRate - importKwh * buyRate;
     feesAnnual = NEM2_CONNECTION_FEE * 12;
+  } else {
+    // NEM 1.0 / 2.0: exports offset imports kWh-for-kWh over the year —
+    // only the ANNUAL NET position is settled at true-up.
+    //   Net surplus  -> paid at the (small) export/net-surplus rate.
+    //   Net shortfall -> owed at the average rate power is bought.
+    const gridNetKwh = exportKwh - importKwh; // + = net exporter
+    sellRate = inputs.nemVersion === 'NEM1' ? buyRate : (Number(inputs.exportRate) || 0.07);
+    energyNet = gridNetKwh >= 0 ? gridNetKwh * sellRate : gridNetKwh * buyRate;
+    if (inputs.nemVersion === 'NEM1') {
+      feesAnnual = energyNet >= 0 ? 0 : NEM2_CONNECTION_FEE * 12; // overproducers: none
+    } else {
+      feesAnnual = NEM2_CONNECTION_FEE * 12; // NEM 2.0: always
+    }
   }
 
   const total = energyNet - feesAnnual;
