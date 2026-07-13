@@ -19,8 +19,10 @@ import BatteryStabilization from './BatteryStabilization';
  * The overlay (built from the selected profile + the client's system data)
  * is computed once here and shared, so every section stays in sync.
  */
-const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null }) => {
-  const [profileKey, setProfileKey] = useState('evening_heavy');
+const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null , consumptionProfile = null, onConsumptionProfileChange = null }) => {
+  const [profileKeyInternal, setProfileKeyInternal] = useState('evening_heavy');
+  const profileKey = consumptionProfile || profileKeyInternal;
+  const setProfileKey = (k) => { setProfileKeyInternal(k); if (onConsumptionProfileChange) onConsumptionProfileChange(k); };
 
   // AUTHORITATIVE true-up / annual-check — from full annual usage vs production
   // at the real utility rate. Prefer the value computed by the audit tool
