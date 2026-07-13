@@ -13,6 +13,7 @@ import SaveToCRM from './components/SaveToCRM';
 import { apiFetch } from './lib/supabaseClient';
 import ContactFormModal from './components/ContactFormModal';
 import GuideTour from './components/GuideTour';
+import AINarrative from './components/AINarrative';
 import { openConsultationReport } from './report/ConsultationReport';
 import { deriveAnnualUsage } from './greenbutton/GreenButtonParser';
 import SystemSpecsSheet from './components/SystemSpecsSheet';
@@ -46,6 +47,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
   // Green Button measured profile. STATIC once applied — the authoritative
   // consumption baseline (the thing the simulator layers extra usage onto).
   const [saveClientOpen, setSaveClientOpen] = useState(false);
+  const [showPersonalized, setShowPersonalized] = useState(false);
   const [ratePlan, setRatePlan] = useState('standard');
 
   // ---- Persistence: auto-load saved Green Button profile + settings ----
@@ -55,18 +57,32 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
       try {
         const data = await apiFetch(`/api/gb-profile?contactId=${encodeURIComponent(clientContext.contactId)}`);
         if (data.settings && data.settings.ratePlan) setRatePlan(data.settings.ratePlan);
+        if (data.settings && data.settings.consumptionProfile) {
+          setInputs((prev) => ({ ...prev, consumptionProfile: data.settings.consumptionProfile }));
+        }
         if (data.gbProfile && data.gbProfile.ok) {
           setGbProfile(data.gbProfile);
           setGbApplied(true);
+          setInputs((prev) => ({ ...prev, measuredImportKwh: data.gbProfile.annualImportKwh || 0, measuredExportKwh: data.gbProfile.annualExportKwh || 0 }));
           const derived = deriveAnnualUsage(data.gbProfile, inputs.annualProduction);
           if (derived != null) setInputs((prev) => ({ ...prev, currentAnnualUsage: derived }));
           const when = data.updatedAt ? new Date(data.updatedAt).toLocaleDateString() : 'previously';
-          setGbNote({ ok: true, message: `Loaded saved measured data (uploaded ${when}). Battery figures use the meter data${derived != null ? `; Current Annual Usage set to ${derived.toLocaleString()} kWh` : ''}.` });
+          setGbNote({ ok: true, message: `Loaded saved measured data (uploaded ${when}). Battery figures use the meter data${derived != null ? `; Current Annual Usage set to ${derived.toLocaleString()} kWh` : ''}. Recommendation: make sure the original installed production or current annual production is correct.` });
         }
       } catch (e) { /* no saved profile or persistence not configured — silent */ }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientContext && clientContext.contactId]);
+
+  const persistConsumptionProfile = (key) => {
+    setInputs((prev) => ({ ...prev, consumptionProfile: key }));
+    if (clientContext && clientContext.contactId) {
+      apiFetch('/api/gb-profile', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId: clientContext.contactId, settings: { consumptionProfile: key } })
+      }).catch(() => {});
+    }
+  };
 
   const persistRatePlan = (plan) => {
     setRatePlan(plan);
@@ -108,6 +124,8 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
   const handleGreenButtonApply = (profile, derivedUsage) => {
     setGbProfile(profile);
     setGbApplied(true);
+    // Feed measured grid flows into the true-up math.
+    setInputs((prev) => ({ ...prev, measuredImportKwh: profile.annualImportKwh || 0, measuredExportKwh: profile.annualExportKwh || 0 }));
     if (clientContext && clientContext.contactId) {
       apiFetch('/api/gb-profile', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -119,7 +137,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
       setInputs((prev) => ({ ...prev, currentAnnualUsage: derivedUsage }));
       setGbNote({
         ok: true,
-        message: `Current Annual Usage overwritten with ${derivedUsage.toLocaleString()} kWh — taken from Green Button data, assuming the system is functioning properly. Battery figures now use the meter data.`
+        message: `Current Annual Usage overwritten with ${derivedUsage.toLocaleString()} kWh — taken from Green Button data, assuming the system is functioning properly. Battery figures now use the meter data. Recommendation: make sure the original installed production or current annual production is correct.`
       });
     } else {
       setGbNote({
@@ -367,7 +385,12 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
           calculations={calculations}
           extraUsage={extraUsage}
           gbProfile={gbApplied ? gbProfile : null}
+          onTogglePersonalized={() => setShowPersonalized((v) => !v)}
         />
+
+        {showPersonalized && (
+          <AINarrative inputs={inputs} calculations={calculations} narrative={narrative} onNarrativeGenerated={setNarrative} />
+        )}
 
         {/* Charts — priority two on page 1, rest flow to page 2 (handled in print CSS) */}
         <ChartsSection
