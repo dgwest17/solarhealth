@@ -2,7 +2,6 @@ import React, { useState, useRef } from 'react';
 import { Upload, FileCheck2, AlertCircle, Zap, Sun, Moon, X } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { parseGreenButton, deriveAnnualUsage } from './GreenButtonParser';
-import { GB_INSTRUCTIONS } from '../config/tooltips';
 
 /**
  * Green Button upload card.
@@ -14,7 +13,6 @@ import { GB_INSTRUCTIONS } from '../config/tooltips';
  * The parent decides what to do with it (set usage, seed battery import/export).
  */
 const GreenButtonUpload = ({ utility = 'SDGE', annualProduction = 0, onApply, applied = false }) => {
-  const [showHow, setShowHow] = useState(false);
   const [profile, setProfile] = useState(null);
   const [error, setError] = useState('');
   const [parsing, setParsing] = useState(false);
@@ -55,16 +53,6 @@ const GreenButtonUpload = ({ utility = 'SDGE', annualProduction = 0, onApply, ap
         <h3 className="font-bold text-emerald-300 flex items-center gap-2">
           <Zap size={18} className="text-emerald-400" /> Green Button Data
         </h3>
-      <span className="relative inline-block ml-1 align-middle">
-        <button type="button" onClick={() => setShowHow((v) => !v)} onBlur={() => setTimeout(() => setShowHow(false), 150)}
-          className="w-4 h-4 rounded-full bg-orange-500/90 hover:bg-orange-400 text-[10px] font-bold text-white leading-none inline-flex items-center justify-center" aria-label="How to download">i</button>
-        {showHow && (
-          <span className="absolute z-[120] left-0 top-6 w-80 bg-slate-900 border border-orange-400/60 rounded-lg p-3 text-xs text-slate-200 shadow-2xl font-normal">
-            <span className="block font-semibold text-orange-300 mb-1">How to download from {utility === 'PGE' ? 'PG&E' : utility === 'SDGE' ? 'SDG&E' : utility}:</span>
-            {GB_INSTRUCTIONS[utility] || GB_INSTRUCTIONS.SDGE}
-          </span>
-        )}
-      </span>
         {profile && (
           <button onClick={() => { setProfile(null); if (fileRef.current) fileRef.current.value = ''; }}
             className="text-slate-400 hover:text-emerald-300" title="Clear">
@@ -138,6 +126,9 @@ const GreenButtonUpload = ({ utility = 'SDGE', annualProduction = 0, onApply, ap
             <Cell label="Bought super-off-peak" value={pct(profile.touImportShare.superOffPeak)} accent="text-emerald-300" icon={<Sun size={12} />} />
           </div>
 
+          {profile.clippedToLatestYear && (
+            <p className="text-[11px] text-slate-400 mb-1">File covered more than a year — only the most recent 365 days were used.</p>
+          )}
           {derivedUsage != null ? (
             <p className="text-xs text-slate-400 mb-3">
               With production of {Number(annualProduction).toLocaleString()} kWh/yr, total house consumption works out to
