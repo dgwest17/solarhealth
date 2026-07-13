@@ -53,8 +53,9 @@ const GridFutureGraphic = () => {
 
         {/* crossing flare */}
         <circle cx="452" cy="163" r="7" fill="#ef4444" filter="url(#gfGlow)" />
-        <rect x="376" y="176" width="154" height="16" rx="4" fill="#060b18" opacity="0.85" />
-        <text x="453" y="188" fontSize="9.5" fill="#fecaca" textAnchor="middle" fontWeight="700">the squeeze — prices spike here</text>
+        <rect x="466" y="128" width="158" height="16" rx="4" fill="#060b18" opacity="0.85" />
+        <text x="545" y="140" fontSize="9.5" fill="#fecaca" textAnchor="middle" fontWeight="700">the squeeze — prices spike here</text>
+        <line x1="470" y1="145" x2="458" y2="160" stroke="#fecaca" strokeWidth="1" strokeDasharray="2 2" opacity="0.7" />
 
         {/* battery savior */}
         <circle cx="320" cy="228" r="44" fill="url(#gfBattGlow)" />
@@ -70,7 +71,7 @@ const GridFutureGraphic = () => {
         {/* axis */}
         <line x1="40" y1="252" x2="600" y2="252" stroke="#1e3050" strokeWidth="1" />
         {['2026','2029','2032','2035'].map((yr, i) => (
-          <text key={yr} x={40 + i * 186} y="266" fontSize="9" fill="#64748b">{yr}</text>
+          <text key={yr} x={188 + i * 88} y="266" fontSize="9.5" fill="#7d8aa0" textAnchor="middle">{yr}</text>
         ))}
       </svg>
       <p className="text-xs text-slate-300 mt-2 leading-relaxed">
