@@ -32,6 +32,10 @@ export const DEFAULT_INPUTS = {
   // PPA/Lease specific
   ppaInitialRate: 0.12,
   ppaCurrentPayment: 0,
+  currentProductionOverride: 0, // 0 = use degradation model
+  measuredImportKwh: 0,  // set by Green Button apply
+  measuredExportKwh: 0,  // set by Green Button apply
+  consumptionProfile: 'evening_heavy',
   escalator: 2.9,
   ppaDownpayment: 0,
   ppaPaidOff: false,  // NEW: Track if PPA paid off
