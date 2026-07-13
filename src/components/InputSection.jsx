@@ -78,6 +78,7 @@ const InputSection = ({
   // the whole screen. Each collapsed header shows a live summary of its values.
   const [openSections, setOpenSections] = useState({ system: true, financing: false, battery: false });
   const [ppaMode, setPpaMode] = useState('rate'); // 'rate' | 'payment'
+  const [showProdOverride, setShowProdOverride] = useState(false);
   const toggleSection = (id) => setOpenSections((p) => ({ ...p, [id]: !p[id] }));
 
   const utilShort = (UTILITY_OPTIONS.find((u) => u.value === inputs.utility)?.label.match(/\(([^)]+)\)/)?.[1]) || inputs.utility;
@@ -345,9 +346,27 @@ const InputSection = ({
             onChange={(e) => onInputChange('annualProduction', parseInt(e.target.value))}
             className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
-          <p className="text-xs text-gray-400 mt-1">
-            Current (with 0.55% degradation): {calculations.currentDegradedProduction} kWh/yr
-          </p>
+          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+            <span className="text-base font-semibold text-cyan-300">
+              Current calculated production: {Number(calculations.currentDegradedProduction).toLocaleString()} kWh/yr
+              {calculations.productionIsOverridden
+                ? <span className="text-emerald-400 text-xs ml-1">(overridden)</span>
+                : <span className="text-gray-500 text-xs ml-1">(0.55%/yr degradation)</span>}
+            </span>
+            <button type="button" onClick={() => setShowProdOverride((v) => !v)}
+              className="text-xs px-2.5 py-1 rounded-lg border border-cyan-400/40 text-cyan-300 hover:bg-cyan-900/30">
+              {showProdOverride ? 'Hide override' : 'Override'}
+            </button>
+          </div>
+          {showProdOverride && (
+            <div className="mt-2">
+              <label className="block text-xs text-cyan-300/80 mb-1">Override if you know the exact current annual production from the monitoring app</label>
+              <input type="number" value={inputs.currentProductionOverride || ''}
+                onChange={(e) => onInputChange('currentProductionOverride', parseFloat(e.target.value) || 0)}
+                placeholder="e.g. 9,850 kWh/yr — leave empty to use the degradation model"
+                className="w-full md:w-72 px-2.5 py-1.5 border border-emerald-400/40 rounded-lg bg-slate-900/60 text-emerald-300 text-sm" />
+            </div>
+          )}
         </div>
         <div>
           <label className="block text-sm text-cyan-300 mb-1">Usage Offset</label>
