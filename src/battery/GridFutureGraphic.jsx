@@ -34,7 +34,7 @@ const GridFutureGraphic = () => {
           <circle key={i} cx={cx} cy={cy} r={i % 3 === 0 ? 1.6 : 1} fill="#7dd3fc" opacity="0.7" />
         ))}
         <text x="40" y="32" fontSize="17" fill="#e2f4ff" fontWeight="900" letterSpacing="3" filter="url(#gfGlow)">THE NIGHT GRID</text>
-        <text x="210" y="32" fontSize="11" fill="#7dd3fc" letterSpacing="2">2026 → 2035</text>
+        <text x="320" y="32" fontSize="13" fill="#bfe8ff" fontWeight="700" letterSpacing="3" textAnchor="middle">2026 → 2035</text>
 
         {/* danger zone where demand exceeds supply */}
         <ellipse cx="500" cy="140" rx="150" ry="95" fill="url(#gfDanger)" />
