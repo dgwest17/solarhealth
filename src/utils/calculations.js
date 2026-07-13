@@ -87,6 +87,73 @@ export const calculateBatteryArbitrage = (hasBattery, useTOU, utility, batteryCa
 /**
  * Calculate NEM impact - credits for overproduction or true-up for under-production
  */
+
+/**
+ * NEM POSITION V2 — the true-up done at the rates power is actually
+ * bought and sold, using measured grid flows when available.
+ *
+ *   imports/exports: Green Button (measured) when present; otherwise
+ *     estimated from the consumption profile (self-use share of production).
+ *   buy rate: TOU-share-weighted when measured; typical blend otherwise;
+ *     CARE discount applied.
+ *   sell rate: NEM 1.0 retail · NEM 2.0 the export-rate input · NEM 3.0 ~$0.035.
+ *   connection fees: NEM 2.0/3.0 always (12 × monthly fee).
+ *     NEM 1.0 overproducers: NO fees in the true-up.
+ *
+ *   NEM 2.0 overconsumer: true-up = fees×12 + owed kWh × avg buy rate.
+ */
+export const calculateNEMPosition = (inputs, buyRateFallback) => {
+  const production = Number(inputs.annualProduction) || 0;
+  const usage = Number(inputs.currentAnnualUsage) || 0;
+
+  const SELF_USE_SHARE = { evening_heavy: 0.40, balanced: 0.50, daytime_heavy: 0.62 };
+  let importKwh, exportKwh, measured = false;
+  if ((Number(inputs.measuredImportKwh) || 0) > 0 || (Number(inputs.measuredExportKwh) || 0) > 0) {
+    importKwh = Number(inputs.measuredImportKwh) || 0;
+    exportKwh = Number(inputs.measuredExportKwh) || 0;
+    measured = true;
+  } else {
+    const share = SELF_USE_SHARE[inputs.consumptionProfile] !== undefined ? SELF_USE_SHARE[inputs.consumptionProfile] : 0.40;
+    const selfUse = Math.min(production, usage) * share;
+    exportKwh = Math.max(0, production - selfUse);
+    importKwh = Math.max(0, usage - selfUse);
+  }
+
+  const tou = TOU_RATES[inputs.utility] || TOU_RATES.SCE;
+  const shares = measured && inputs.measuredTouShares
+    ? inputs.measuredTouShares
+    : { peak: 0.30, offPeak: 0.50, superOffPeak: 0.20 };
+  let buyRate = tou.peak * (shares.peak || 0) + tou.offPeak * (shares.offPeak || 0) + tou.superOffPeak * (shares.superOffPeak || 0);
+  if (!Number.isFinite(buyRate) || buyRate <= 0) buyRate = buyRateFallback;
+  if (inputs.onCareProgram) buyRate *= 0.70;
+
+  let sellRate;
+  if (inputs.nemVersion === 'NEM1') sellRate = buyRate;
+  else if (inputs.nemVersion === 'NEM2') sellRate = Number(inputs.exportRate) || 0.07;
+  else sellRate = 0.035;
+
+  const buyCost = importKwh * buyRate;
+  const sellCredit = exportKwh * sellRate;
+  const energyNet = sellCredit - buyCost;
+
+  let feesAnnual;
+  if (inputs.nemVersion === 'NEM1') {
+    feesAnnual = energyNet >= 0 ? 0 : NEM2_CONNECTION_FEE * 12;
+  } else {
+    feesAnnual = NEM2_CONNECTION_FEE * 12;
+  }
+
+  const total = energyNet - feesAnnual;
+  const base = {
+    importKwh: Math.round(importKwh), exportKwh: Math.round(exportKwh),
+    buyRate, sellRate, feesAnnual, energyNet: Math.round(energyNet),
+    measured, netProduction: Math.round(production - usage), shortage: Math.max(0, Math.round(usage - production))
+  };
+  return total >= 0
+    ? { ...base, type: 'credit', amount: Math.round(total), rate: sellRate }
+    : { ...base, type: 'trueup', amount: Math.round(-total), rate: buyRate };
+};
+
 export const calculateNEMImpact = (annualProduction, annualUsage, utilityRate, nemVersion, exportRate) => {
   const netProduction = annualProduction - annualUsage;
   
@@ -601,15 +668,16 @@ export const calculateComprehensiveSavings = (inputs) => {
   }
   const grossAnnualBenefit = yearsSinceInstall > 0 ? cumulativeGrossBenefit / yearsSinceInstall : 0;
   const paybackYears = grossAnnualBenefit > 0 ? Math.max(0, netSystemCost) / grossAnnualBenefit : 0;
-  const offsetPercentage = (getDegradedProduction(inputs.annualProduction, yearsSinceInstall) / inputs.currentAnnualUsage) * 100;
+  const override = parseFloat(inputs.currentProductionOverride);
+  const currentProduction = Number.isFinite(override) && override > 0
+    ? override
+    : getDegradedProduction(inputs.annualProduction, yearsSinceInstall);
+  const offsetPercentage = (currentProduction / inputs.currentAnnualUsage) * 100;
   const roi = ((cumulativeSavings / totalInvestment) * 100);
   
-  const currentNEMImpact = calculateNEMImpact(
-    getDegradedProduction(inputs.annualProduction, yearsSinceInstall),
-    inputs.currentAnnualUsage, 
-    currentRate,
-    inputs.nemVersion,
-    inputs.exportRate
+  const currentNEMImpact = calculateNEMPosition(
+    { ...inputs, annualProduction: currentProduction },
+    currentRate
   );
   
   // Calculate System Score
@@ -685,6 +753,7 @@ export const calculateComprehensiveSavings = (inputs) => {
     utilityBillNow: utilityBillNow.toFixed(2),
     utilityBillIncrease: ((utilityBillNow - utilityBillAtInstall) / utilityBillAtInstall * 100).toFixed(1),
     currentAnnualUtilityCost: currentAnnualUtilityCost.toFixed(2),
-    currentDegradedProduction: getDegradedProduction(inputs.annualProduction, yearsSinceInstall).toFixed(0)
+    currentDegradedProduction: currentProduction.toFixed(0),
+    productionIsOverridden: Number.isFinite(override) && override > 0
   };
 };
