@@ -126,6 +126,9 @@ const GreenButtonUpload = ({ utility = 'SDGE', annualProduction = 0, onApply, ap
             <Cell label="Bought super-off-peak" value={pct(profile.touImportShare.superOffPeak)} accent="text-emerald-300" icon={<Sun size={12} />} />
           </div>
 
+          {profile.clippedToLatestYear && (
+            <p className="text-[11px] text-slate-400 mb-1">File covered more than a year — only the most recent 365 days were used.</p>
+          )}
           {derivedUsage != null ? (
             <p className="text-xs text-slate-400 mb-3">
               With production of {Number(annualProduction).toLocaleString()} kWh/yr, total house consumption works out to
