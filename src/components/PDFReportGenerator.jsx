@@ -10,7 +10,7 @@ import { openConsultationReport } from '../report/ConsultationReport';
  *     recommendations, manufacturer contacts, contact banner, disclaimer.
  *  2. Dashboard print — saves the live dashboard exactly as shown.
  */
-const PDFReportGenerator = ({ clientName, setClientName, clientAddress, setClientAddress, repName, setRepName, branding, inputs, calculations, extraUsage, gbProfile }) => {
+const PDFReportGenerator = ({ clientName, setClientName, clientAddress, setClientAddress, repName, setRepName, branding, inputs, calculations, extraUsage, gbProfile, onTogglePersonalized }) => {
   const handleConsultationReport = () => {
     openConsultationReport({
       clientName, clientAddress, repName, inputs, calculations, extraUsage, gbProfile,
@@ -20,10 +20,17 @@ const PDFReportGenerator = ({ clientName, setClientName, clientAddress, setClien
 
   return (
     <div className="print:hidden bg-slate-800/60 backdrop-blur-md border border-amber-400/40 rounded-xl shadow-2xl p-6 md:p-8 mb-6">
-      <h2 className="text-2xl font-bold text-amber-300 flex items-center gap-2 mb-2">
-        <FileDown size={24} className="text-amber-400" />
-        Customer Report
-      </h2>
+      <div className="flex items-start justify-between mb-2">
+        <h2 className="text-2xl font-bold text-amber-300 flex items-center gap-2">
+          <FileDown size={24} className="text-amber-400" />
+          Customer Report
+        </h2>
+        <button type="button" onClick={() => onTogglePersonalized && onTogglePersonalized()}
+          className="text-xs text-slate-500 hover:text-slate-400 border border-slate-700 rounded-lg px-3 py-1.5"
+          title="Coming soon: an AI-personalized report from this audit plus your consultation recording/notes (Granola integration planned). Click to preview the card.">
+          ✨ Personalized Report — soon
+        </button>
+      </div>
       <p className="text-slate-300 text-sm mb-5">
         The Consultation Report is the client leave-behind: equipment & warranty schedule, savings
         history and 10-year outlook, NEM expiration, battery impact, and recommendations — with the
@@ -69,14 +76,6 @@ const PDFReportGenerator = ({ clientName, setClientName, clientAddress, setClien
         >
           <FileText size={18} />
           Consultation Report
-        </button>
-        <button
-          type="button"
-          disabled
-          className="bg-slate-800 text-slate-500 font-medium px-4 py-2.5 rounded-lg border border-slate-700 cursor-not-allowed text-sm"
-          title="Coming soon: an AI-personalized report generated from this audit plus your consultation recording/notes (Granola integration planned)"
-        >
-          ✨ Personalized Report — soon
         </button>
         <button
           onClick={() => window.print()}
