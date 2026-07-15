@@ -59,9 +59,11 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
     const dir = sortDir === 'asc' ? 1 : -1;
     const val = (c) => {
       switch (sortBy) {
-        case 'installDate': return c.installDate || '';
+        case 'installDate': return c.ptoDate || c.installDate || '';
         case 'lastReportSent': return c.lastReportSent || '';
         case 'annualSavings': return c.annualSavings;
+        case 'zip': return c.zip || '';
+        case 'systemSizeKw': return c.systemSizeKw;
         case 'creditOwe':
           if (c.nemAmount == null) return null;
           return c.nemType === 'trueup' ? -c.nemAmount : c.nemAmount;
@@ -84,7 +86,7 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a1628] via-[#0f1e36] to-[#0a1628] p-6">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-[1400px] mx-auto">
         {/* Header */}
         {!hideHeader ? (
           <div className="flex items-center justify-between mb-6">
@@ -217,89 +219,84 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filtered.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => onOpen(c.id)}
-                className="text-left bg-slate-800/50 border border-slate-700/60 rounded-xl p-4 hover:border-amber-400/50 hover:bg-slate-800/80 transition-all group"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="min-w-0">
-                    <div className="font-semibold text-slate-100 truncate">
-                      {c.fullName || '(no name)'}
-                    </div>
-                    {c.email && (
-                      <div className="text-xs text-slate-400 flex items-center gap-1 mt-1 truncate">
-                        <Mail size={11} className="shrink-0" /> <span className="truncate">{c.email}</span>
-                      </div>
-                    )}
-                    {c.city && (
-                      <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                        <MapPin size={11} /> {c.city} {c.zip}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={(e) => { e.stopPropagation(); setEditing(c); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setEditing(c); } }}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-amber-300 hover:bg-slate-700/60"
-                      title="Edit contact info"
+          <div className="bg-slate-900/40 border border-slate-700/60 rounded-xl overflow-x-auto">
+            <table className="w-full text-[12.5px] leading-tight">
+              <thead>
+                <tr className="text-left text-slate-400 border-b border-slate-700/80 select-none">
+                  {[
+                    ['name', 'Name'],
+                    [null, 'Street Address'],
+                    ['zip', 'Zip'],
+                    ['installDate', 'PTO Date'],
+                    ['creditOwe', 'Est. True-Up'],
+                    [null, 'Battery Target'],
+                    ['annualSavings', 'Savings/yr'],
+                    ['systemSizeKw', 'kW'],
+                    ['lastReportSent', 'Last Contacted'],
+                    [null, '']
+                  ].map(([key, label], i) => (
+                    <th
+                      key={i}
+                      onClick={() => {
+                        if (!key) return;
+                        if (sortBy === key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+                        else { setSortBy(key); setSortDir(key === 'name' || key === 'zip' ? 'asc' : 'desc'); }
+                      }}
+                      className={`px-3 py-2 font-semibold whitespace-nowrap ${key ? 'cursor-pointer hover:text-amber-300' : ''}`}
                     >
-                      <MoreVertical size={16} />
-                    </span>
-                    <ChevronRight size={18} className="text-slate-600 group-hover:text-amber-400 shrink-0" />
-                  </div>
-                </div>
-
-                {/* Sort-relevant data footer */}
-                <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-                  {c.installDate && (
-                    <div className="flex items-center gap-1 text-slate-400">
-                      <Calendar size={10} /> Installed {c.installDate}
-                    </div>
-                  )}
-                  {c.lastReportSent ? (
-                    <div className="flex items-center gap-1 text-slate-400">
-                      <Mail size={10} /> Report {c.lastReportSent}
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1 text-slate-600">
-                      <Mail size={10} /> No report sent
-                    </div>
-                  )}
-                  {c.annualSavings != null && (
-                    <div className="flex items-center gap-1 text-green-300/80">
-                      <DollarSign size={10} /> ${c.annualSavings.toLocaleString()}/yr saved
-                    </div>
-                  )}
-                  {c.nemAmount != null && (
-                    <div className={`flex items-center gap-1 ${c.nemType === 'credit' ? 'text-green-300/80' : 'text-red-300/80'}`}>
-                      <DollarSign size={10} />
-                      {c.nemType === 'credit'
-                        ? `+$${c.nemAmount.toLocaleString()} credit`
-                        : `−$${c.nemAmount.toLocaleString()} owed`}
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-3 flex items-center gap-2 flex-wrap">
-                  {c.lifecycleStage && (
-                    <span className="inline-block text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-slate-700/60 text-amber-200/80">
-                      {c.lifecycleStage}
-                    </span>
-                  )}
-                  {c.nemType === 'trueup' && (
-                    <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-red-500/20 text-red-200 border border-red-400/40">
-                      <Zap size={9} /> Battery target
-                    </span>
-                  )}
-                </div>
-              </button>
-            ))}
+                      {label}{key && sortBy === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((c) => {
+                  const batteryTarget = c.nemType === 'trueup' && (c.nemAmount || 0) >= 300;
+                  return (
+                    <tr
+                      key={c.id}
+                      onClick={() => onOpen(c.id)}
+                      className="border-b border-slate-800/70 hover:bg-slate-800/60 cursor-pointer group"
+                    >
+                      <td className="px-3 py-1.5 whitespace-nowrap font-medium text-slate-100">
+                        {c.fullName || '(no name)'}
+                        {c.lifecycleStage === 'Prospect' && <span className="ml-1.5 text-[10px] text-sky-400">prospect</span>}
+                      </td>
+                      <td className="px-3 py-1.5 whitespace-nowrap text-slate-300 max-w-[220px] truncate">{c.street || '—'}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap text-slate-400">{c.zip || '—'}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap text-slate-300">{c.ptoDate || c.installDate || '—'}</td>
+                      <td className={`px-3 py-1.5 whitespace-nowrap font-semibold ${c.nemAmount == null ? 'text-slate-600' : c.nemType === 'credit' ? 'text-green-400' : 'text-red-400'}`}>
+                        {c.nemAmount == null ? '—' : c.nemType === 'credit' ? `+$${c.nemAmount.toLocaleString()}` : `−$${c.nemAmount.toLocaleString()}`}
+                      </td>
+                      <td className="px-3 py-1.5 whitespace-nowrap">
+                        {batteryTarget
+                          ? <span className="text-purple-300 font-semibold">🔋 Yes</span>
+                          : <span className="text-slate-600">—</span>}
+                      </td>
+                      <td className="px-3 py-1.5 whitespace-nowrap text-green-300/90">
+                        {c.annualSavings != null ? `$${c.annualSavings.toLocaleString()}` : '—'}
+                      </td>
+                      <td className="px-3 py-1.5 whitespace-nowrap text-slate-400">{c.systemSizeKw != null ? c.systemSizeKw : '—'}</td>
+                      <td className={`px-3 py-1.5 whitespace-nowrap ${c.lastReportSent ? 'text-slate-300' : 'text-amber-500/80'}`}>
+                        {c.lastReportSent || 'never'}
+                      </td>
+                      <td className="px-2 py-1.5 whitespace-nowrap text-right">
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => { e.stopPropagation(); setEditing(c); }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setEditing(c); } }}
+                          className="inline-flex p-1 rounded-lg text-slate-500 hover:text-amber-300 hover:bg-slate-700/60"
+                          title="Edit contact info"
+                        >
+                          <MoreVertical size={15} />
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
