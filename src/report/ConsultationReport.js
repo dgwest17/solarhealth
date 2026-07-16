@@ -245,6 +245,8 @@ export function buildConsultationReportHtml({ clientName, clientAddress, repName
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Solar System Analysis${clientName ? ' — ' + esc(clientName) : ''}</title>
 <style>
+    @keyframes shFlash { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.9); opacity: 1; } 50% { box-shadow: 0 0 26px 9px rgba(239,68,68,0.55); opacity: 0.72; } }
+    .score-critical { animation: shFlash 1.1s ease-in-out infinite; }
   :root { --bg:#0a1424; --panel:#0f1e36; --line:#22344f; --gold:#c9982a; --cyan:#22d3ee; --ink:#dbe4f0; --dim:#8a97ab; }
   * { box-sizing:border-box; margin:0; padding:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   body { background:var(--bg); color:var(--ink); font-family:'Segoe UI', -apple-system, Helvetica, Arial, sans-serif; font-size:12.5px; line-height:1.55; padding:30px 40px; }
@@ -300,7 +302,7 @@ ${heroSvg()}
 </div>
 
 <div class="panelbox" style="display:flex;align-items:center;gap:16px;border-color:${score.hex}">
-  <div style="min-width:84px;height:84px;border-radius:16px;background:${score.hex}22;border:2px solid ${score.hex};display:flex;align-items:center;justify-content:center;">
+  <div class="${score.critical ? 'score-critical' : ''}" style="min-width:84px;height:84px;border-radius:16px;background:${score.hex}22;border:2px solid ${score.hex};display:flex;align-items:center;justify-content:center;">
     <span style="font-size:44px;font-weight:900;color:${score.hex}">${score.grade}</span>
   </div>
   <div>
