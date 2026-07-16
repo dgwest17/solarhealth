@@ -10,7 +10,7 @@ const SystemScore = ({ calculations, inputs }) => {
   return (
     <div className={`${score.bgColor} border-2 ${score.borderColor} rounded-xl shadow-xl p-8 mb-6`}>
       <div className="flex items-center gap-6 mb-6">
-        <div className={`w-32 h-32 rounded-2xl bg-gradient-to-br ${score.color} flex items-center justify-center shadow-2xl`}>
+        <div className={`w-32 h-32 rounded-2xl bg-gradient-to-br ${score.color} flex items-center justify-center shadow-2xl ${score.critical ? 'animate-pulse ring-4 ring-red-500/70' : ''}`}>
           <div className="text-center">
             <div className="text-7xl font-black text-white">{score.grade}</div>
           </div>
