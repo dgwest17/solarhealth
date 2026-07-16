@@ -9,6 +9,7 @@ import { supabase, supabaseConfigured } from '../lib/supabaseClient';
 export function useAuth() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
 
   useEffect(() => {
     if (!supabaseConfigured) {
@@ -21,8 +22,9 @@ export function useAuth() {
       setLoading(false);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
+      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true);
     });
 
     return () => sub?.subscription?.unsubscribe();
@@ -32,6 +34,8 @@ export function useAuth() {
     session,
     user: session?.user || null,
     loading,
-    configured: supabaseConfigured
+    configured: supabaseConfigured,
+    passwordRecovery,
+    clearPasswordRecovery: () => setPasswordRecovery(false)
   };
 }
