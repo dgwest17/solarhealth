@@ -37,6 +37,16 @@ const LoginScreen = () => {
     if (e.key === 'Enter') handleLogin();
   };
 
+  const forgotPassword = async () => {
+    setError(''); setNotice('');
+    if (!email) { setError('Enter your email above first, then click "Forgot password?"'); return; }
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin
+    });
+    if (err) setError(err.message);
+    else setNotice(`Password reset link sent to ${email} — check your inbox.`);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a1628] via-[#0f1e36] to-[#0a1628] flex items-center justify-center p-6">
       <div className="w-full max-w-md">
@@ -89,6 +99,11 @@ const LoginScreen = () => {
               className="w-full pl-10 pr-3 py-2.5 border border-slate-600 rounded-lg bg-slate-900/70 text-slate-100 focus:border-amber-400/60 focus:outline-none"
               placeholder="••••••••"
             />
+          </div>
+          <div className="text-right -mt-4 mb-5">
+            <button type="button" onClick={forgotPassword} className="text-xs text-amber-400/80 hover:text-amber-300 underline underline-offset-2">
+              Forgot password?
+            </button>
           </div>
 
           <button
