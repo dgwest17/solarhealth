@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { supabase, apiFetch } from './lib/supabaseClient';
 import LoginScreen from './components/LoginScreen';
+import ResetPasswordScreen from './components/ResetPasswordScreen';
 import ClientDashboard from './components/ClientDashboard';
 import SolarCalculator from './SolarCalculator';
 import { ArrowLeft, RefreshCw, AlertCircle, FlaskConical } from 'lucide-react';
@@ -17,7 +18,11 @@ import { ArrowLeft, RefreshCw, AlertCircle, FlaskConical } from 'lucide-react';
  * via the dashboard, but the default authenticated view is the client list.
  */
 export default function App() {
-  const { user, loading, configured } = useAuth();
+  const { user, loading, configured, passwordRecovery, clearPasswordRecovery } = useAuth();
+
+  if (passwordRecovery) {
+    return <ResetPasswordScreen onDone={clearPasswordRecovery} />;
+  }
   const [selectedId, setSelectedId] = useState(null);
   const [clientData, setClientData] = useState(null);
   const [loadingClient, setLoadingClient] = useState(false);
@@ -123,6 +128,7 @@ export default function App() {
               projectId: clientData.project ? clientData.project.id : null,
               canWrite: role === 'admin' && !!clientData.project,
               name: clientData.contact.fullName || clientData.contact.email || '',
+              contact: clientData.contact,
               address: [clientData.contact.street, clientData.contact.city, clientData.contact.state, clientData.contact.zip].filter(Boolean).join(', ')
             } : null}
           />
