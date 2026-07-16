@@ -43,11 +43,15 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
   // Instead it reports an additive "extra usage" result, shown as a separate
   // line on the audit + battery tabs. Baselines/profile stay static.
   const [extraUsage, setExtraUsage] = useState({ addedKwh: 0, billableKwh: 0, cost: 0, daytimePct: 0 });
+  const [simLoads, setSimLoads] = useState(null);
+  const simLoadsTimer = React.useRef(null);
 
   // Green Button measured profile. STATIC once applied — the authoritative
   // consumption baseline (the thing the simulator layers extra usage onto).
   const [saveClientOpen, setSaveClientOpen] = useState(false);
   const [showPersonalized, setShowPersonalized] = useState(false);
+  const [editContactOpen, setEditContactOpen] = useState(false);
+  const [contactOverride, setContactOverride] = useState(null);
   const [ratePlan, setRatePlan] = useState('standard');
 
   // ---- Persistence: auto-load saved Green Button profile + settings ----
@@ -57,6 +61,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
       try {
         const data = await apiFetch(`/api/gb-profile?contactId=${encodeURIComponent(clientContext.contactId)}`);
         if (data.settings && data.settings.ratePlan) setRatePlan(data.settings.ratePlan);
+        if (data.settings && data.settings.simLoads) setSimLoads(data.settings.simLoads);
         if (data.settings && data.settings.consumptionProfile) {
           setInputs((prev) => ({ ...prev, consumptionProfile: data.settings.consumptionProfile }));
         }
@@ -73,6 +78,18 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientContext && clientContext.contactId]);
+
+  const persistSimLoads = (loads) => {
+    setSimLoads(loads);
+    if (!(clientContext && clientContext.contactId)) return;
+    if (simLoadsTimer.current) clearTimeout(simLoadsTimer.current);
+    simLoadsTimer.current = setTimeout(() => {
+      apiFetch('/api/gb-profile', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId: clientContext.contactId, settings: { simLoads: loads } })
+      }).catch(() => {});
+    }, 1200);
+  };
 
   const persistConsumptionProfile = (key) => {
     setInputs((prev) => ({ ...prev, consumptionProfile: key }));
@@ -257,6 +274,8 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
               ratePlan={ratePlan}
               onRatePlanChange={persistRatePlan}
               onExtraUsageChange={setExtraUsage}
+              initialLoads={simLoads}
+              onLoadsChange={persistSimLoads}
             />
           </div>
         )}
@@ -265,12 +284,69 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         <div style={{ display: activeTab === 'audit' ? 'block' : 'none' }}>
         <div className="print:hidden">
         {clientContext && clientContext.name && (
-          <div className="mb-4 print:hidden">
-            <h1 className="text-3xl font-extrabold text-slate-100">{clientContext.name}</h1>
-            {clientContext.address && (
-              <p className="text-sm text-slate-400 mt-0.5">{clientContext.address}</p>
-            )}
+          <div className="mb-4 print:hidden flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-3xl font-extrabold text-slate-100 flex items-center gap-2">
+                {(contactOverride && contactOverride.name) || clientContext.name}
+                {clientContext.contact && (
+                  <button
+                    type="button"
+                    onClick={() => setEditContactOpen(true)}
+                    className="text-sm font-normal text-slate-500 hover:text-amber-300 border border-slate-700 rounded-lg px-2 py-1"
+                    title="Edit client info (name, address, phone, email, review)"
+                  >✎ Edit info</button>
+                )}
+              </h1>
+              {((contactOverride && contactOverride.address) || clientContext.address) && (
+                <p className="text-sm text-slate-400 mt-0.5">{(contactOverride && contactOverride.address) || clientContext.address}</p>
+              )}
+            </div>
+            <div className="flex gap-2 items-end">
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-0.5">Project Status</label>
+                <select
+                  value={inputs.projectStatus || ''}
+                  onChange={(e) => handleInputChange('projectStatus', e.target.value)}
+                  className="px-2 py-1.5 text-xs rounded-lg bg-slate-800/80 border border-slate-600 text-slate-200"
+                >
+                  <option value="">— not set —</option>
+                  {['Pre-PTO','PTO-Approved','Abandoned','Cancelled/Lost','Battery Installed','HVAC Installed'].map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-0.5">Opportunity</label>
+                <select
+                  value={inputs.opportunityType || ''}
+                  onChange={(e) => handleInputChange('opportunityType', e.target.value)}
+                  className="px-2 py-1.5 text-xs rounded-lg bg-slate-800/80 border border-slate-600 text-slate-200"
+                >
+                  <option value="">Audit / Review (default)</option>
+                  {['New Solar Install','Solar Owner – Add Battery','Solar Owner – Audit / Review','Solar Owner – Service / Repair','Solar Owner – Under Service Plan','HVAC Only (future-proofing)','Other'].map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
+        )}
+
+        {editContactOpen && clientContext && clientContext.contact && (
+          <ContactFormModal
+            mode="edit"
+            initial={contactOverride ? { ...clientContext.contact, ...contactOverride.raw } : clientContext.contact}
+            onClose={() => setEditContactOpen(false)}
+            onSaved={(_result, updated) => {
+              setEditContactOpen(false);
+              const u = { ...clientContext.contact, ...(updated || {}) };
+              setContactOverride({
+                raw: updated || {},
+                name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.fullName || clientContext.name,
+                address: [u.street, u.city, u.state, u.zip].filter(Boolean).join(', ')
+              });
+            }}
+          />
         )}
 
         <SaveToCRM inputs={inputs} clientContext={clientContext} clientLabel={clientLabel} onSendAudit={sendAuditReport} />
