@@ -42,10 +42,37 @@ const LoadSimulator = ({
   currentNemImpact = null,
   ratePlan = 'standard',
   onRatePlanChange = null,
-  onExtraUsageChange
+  onExtraUsageChange,
+  initialLoads = null,
+  onLoadsChange = null
 }) => {
   // activeLoads: { [id]: { kwh, daytimePct } }
-  const [activeLoads, setActiveLoads] = useState({});
+  const [activeLoads, setActiveLoadsRaw] = useState(() => {
+    const seed = {};
+    for (const [id, l] of Object.entries(initialLoads || {})) {
+      if (getLoadType(id)) seed[id] = l;
+    }
+    return seed;
+  });
+  const setActiveLoads = (next) => {
+    setActiveLoadsRaw((prev) => {
+      const v = typeof next === 'function' ? next(prev) : next;
+      if (onLoadsChange) onLoadsChange(v);
+      return v;
+    });
+  };
+  // Adopt persisted loads when they arrive after mount (async settings load)
+  React.useEffect(() => {
+    if (initialLoads && Object.keys(initialLoads).length && Object.keys(activeLoads).length === 0) {
+      // Drop ids no longer in the catalog (stale persisted data can't crash the UI)
+      const known = {};
+      for (const [id, l] of Object.entries(initialLoads)) {
+        if (getLoadType(id)) known[id] = l;
+      }
+      setActiveLoadsRaw(known);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialLoads]);
   const touRates = TOU_RATES[utility] || TOU_RATES.SCE;
 
   const added = totalAddedKwh(activeLoads);
