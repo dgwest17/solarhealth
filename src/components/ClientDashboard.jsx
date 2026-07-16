@@ -16,6 +16,10 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [projStatusFilter, setProjStatusFilter] = useState('all');
+  const [oppFilter, setOppFilter] = useState('all');
+  const [batteryOnly, setBatteryOnly] = useState(false);
+  const [bucket, setBucket] = useState('all'); // all | notsigned | signed
   const [sortBy, setSortBy] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
   const [trueUpOnly, setTrueUpOnly] = useState(false);
@@ -47,7 +51,15 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
     const q = search.toLowerCase().trim();
     const list = clients.filter((c) => {
       if (trueUpOnly && c.nemType !== 'trueup') return false;
+      if (bucket === 'notsigned' && (c.lifecycleStage || '') !== 'Prospect') return false;
+      if (bucket === 'signed' && (c.projectStatus || '') !== 'Pre-PTO') return false;
       if (statusFilter !== 'all' && (c.lifecycleStage || '').toLowerCase() !== statusFilter) return false;
+      if (projStatusFilter !== 'all' && (c.projectStatus || '') !== projStatusFilter) return false;
+      if (oppFilter !== 'all') {
+        const opp = c.opportunityType || 'Solar Owner – Audit / Review';
+        if (opp !== oppFilter) return false;
+      }
+      if (batteryOnly && !(c.nemType === 'trueup' && (c.nemAmount || 0) >= 300)) return false;
       if (!q) return true;
       return (
         c.fullName.toLowerCase().includes(q) ||
@@ -82,7 +94,7 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
       if (av > bv) return 1 * dir;
       return 0;
     });
-  }, [clients, search, statusFilter, sortBy, sortDir, trueUpOnly]);
+  }, [clients, search, statusFilter, projStatusFilter, oppFilter, batteryOnly, bucket, sortBy, sortDir, trueUpOnly]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a1628] via-[#0f1e36] to-[#0a1628] p-6">
@@ -125,6 +137,16 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
 
         {/* Search + filter + sort */}
         <div className="flex flex-col sm:flex-row gap-3 mb-3">
+        <div className="flex gap-1 mb-3">
+          {[['all', 'All Clients'], ['notsigned', 'Not Signed'], ['signed', 'Signed · Pre-PTO']].map(([k, label]) => (
+            <button key={k} onClick={() => setBucket(k)}
+              className={`px-4 py-2 rounded-t-lg text-sm font-semibold border-b-2 ${bucket === k
+                ? 'text-amber-300 border-amber-400 bg-slate-800/60'
+                : 'text-slate-400 border-transparent hover:text-slate-200'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
           <div className="relative flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
@@ -144,6 +166,32 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
             <option value="prospect">Prospect</option>
             <option value="past client">Past Client</option>
           </select>
+          <select
+            value={projStatusFilter}
+            onChange={(e) => setProjStatusFilter(e.target.value)}
+            className="px-3 py-2 text-sm rounded-lg bg-slate-800/80 border border-slate-600 text-slate-200"
+            title="Filter by project status"
+          >
+            <option value="all">Status: all</option>
+            {['Pre-PTO','PTO-Approved','Abandoned','Cancelled/Lost','Battery Installed','HVAC Installed'].map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
+          <select
+            value={oppFilter}
+            onChange={(e) => setOppFilter(e.target.value)}
+            className="px-3 py-2 text-sm rounded-lg bg-slate-800/80 border border-slate-600 text-slate-200"
+            title="Filter by opportunity type (blank records count as Audit / Review)"
+          >
+            <option value="all">Opportunity: all</option>
+            {['New Solar Install','Solar Owner – Add Battery','Solar Owner – Audit / Review','Solar Owner – Service / Repair','Solar Owner – Under Service Plan','HVAC Only (future-proofing)','Other'].map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
+          <label className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg bg-slate-800/80 border border-slate-600 text-purple-300 cursor-pointer" title="Only clients owing $300+/yr — battery prospects">
+            <input type="checkbox" checked={batteryOnly} onChange={(e) => setBatteryOnly(e.target.checked)} className="w-3.5 h-3.5 accent-purple-400" />
+            🔋 Battery targets
+          </label>
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
@@ -230,7 +278,11 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
                     ['installDate', 'PTO Date'],
                     ['creditOwe', 'Est. True-Up'],
                     [null, 'Battery Target'],
+                    [null, 'Status'],
+                    [null, 'Opportunity'],
+                    [null, '⭐'],
                     ['annualSavings', 'Savings/yr'],
+                    [null, 'Finance'],
                     ['systemSizeKw', 'kW'],
                     ['lastReportSent', 'Last Contacted'],
                     [null, '']
@@ -273,9 +325,13 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
                           ? <span className="text-purple-300 font-semibold">🔋 Yes</span>
                           : <span className="text-slate-600">—</span>}
                       </td>
+                      <td className="px-3 py-1.5 whitespace-nowrap text-slate-300">{c.projectStatus || '—'}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap text-slate-400 max-w-[150px] truncate">{(c.opportunityType || 'Audit / Review').replace('Solar Owner – ', '')}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap text-center">{c.leftReview ? <span title="Left a 5-star review">⭐</span> : <span className="text-slate-600" title="No review yet — ask!">☆</span>}</td>
                       <td className="px-3 py-1.5 whitespace-nowrap text-green-300/90">
                         {c.annualSavings != null ? `$${c.annualSavings.toLocaleString()}` : '—'}
                       </td>
+                      <td className="px-3 py-1.5 whitespace-nowrap text-slate-400 max-w-[130px] truncate">{c.financeProvider || '—'}</td>
                       <td className="px-3 py-1.5 whitespace-nowrap text-slate-400">{c.systemSizeKw != null ? c.systemSizeKw : '—'}</td>
                       <td className={`px-3 py-1.5 whitespace-nowrap ${c.lastReportSent ? 'text-slate-300' : 'text-amber-500/80'}`}>
                         {c.lastReportSent || 'never'}
