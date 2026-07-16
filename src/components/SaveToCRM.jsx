@@ -12,7 +12,8 @@ const WRITABLE_KEYS = [
   'systemSize', 'annualProduction', 'annualUsageAtInstall', 'currentAnnualUsage',
   'utility', 'nemVersion', 'exportRate', 'onCareProgram', 'hasBattery', 'batteryCapacity',
   // financial product
-  'program', 'loanPrincipal', 'loanTerm', 'loanInterestRate', 'escalator', 'cashGrossCost'
+  'program', 'loanPrincipal', 'loanTerm', 'loanInterestRate', 'escalator', 'cashGrossCost',
+  'projectStatus', 'opportunityType'
 ];
 
 const snapshot = (inputs) => JSON.stringify(WRITABLE_KEYS.map((k) => inputs[k]));
