@@ -10,6 +10,16 @@ export function calculateSystemScore(calculations, inputs) {
   const annualCredit = currentNEMImpact?.type === 'credit' ? currentNEMImpact.amount : 0;
   const onlyConnectionFees = inputs.nemVersion === 'NEM2' && annualTrueUp === 0;
 
+  // HARD RULE: an annual true-up over $2,000 is a failing system no matter
+  // what it saved historically — something needs to be done NOW.
+  if (annualTrueUp > 2000) {
+    return {
+      grade: 'F', label: 'Critical', icon: '🚨', hex: '#ef4444', critical: true,
+      color: 'from-red-600 to-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-400', textColor: 'text-red-600',
+      recommendation: `Your annual true-up is over $${Math.round(annualTrueUp).toLocaleString()} — this system is not doing its job. Something needs to be done now: a system inspection, added panels, and/or a battery to stop the bleeding.`
+    };
+  }
+
   if (onlyConnectionFees && cumulativeSavings > 0 && savingsTrend && annualCredit > 250) {
     return {
       grade: 'S', label: 'SuperSolar', icon: '🌟', hex: '#c084fc',
