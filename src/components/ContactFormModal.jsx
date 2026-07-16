@@ -21,7 +21,7 @@ const Field = ({ label, value, onChange, type = 'text', span = 1, ac }) => (
   </div>
 );
 
-const EMPTY = { firstName: '', lastName: '', email: '', phone: '', street: '', city: '', state: 'CA', zip: '', sendAnnualReport: false };
+const EMPTY = { firstName: '', lastName: '', email: '', phone: '', street: '', city: '', state: 'CA', zip: '', sendAnnualReport: false, leftReview: false };
 
 const ContactFormModal = ({ mode = 'edit', initial = null, auditInputs = null, onClose, onSaved }) => {
   const [form, setForm] = useState({ ...EMPTY, ...(initial || {}) });
@@ -85,6 +85,11 @@ const ContactFormModal = ({ mode = 'edit', initial = null, auditInputs = null, o
             <AlertCircle size={14} className="mt-0.5 shrink-0" /> {error}
           </div>
         )}
+          <label className="flex items-center gap-2 mb-4 cursor-pointer">
+            <input type="checkbox" checked={!!form.leftReview} onChange={set('leftReview')} className="w-4 h-4 accent-amber-400" />
+            <span className="text-sm text-amber-300">⭐ Client has left a 5-star review</span>
+          </label>
+
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-300 border border-slate-600 hover:text-amber-300">Cancel</button>
           <button onClick={save} disabled={saving}
