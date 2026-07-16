@@ -86,7 +86,7 @@ export default async function handler(req, res) {
       `Annual_Usage_at_Install_kWh, Current_Annual_Usage_kWh, Utility_Provider, ` +
       `NEM_Version, Export_Rate, On_CARE_Program, Battery_Capacity_kWh, ` +
       `Monthly_Payment, Term, Escalator_or_Interest, Purchase_Type, ` +
-      `Contract_Value, Install_Date, PTO_Date, Project_Status, ` +
+      `Contract_Value, Install_Date, PTO_Date, Project_Status, Opportunity_Type, ` +
       `Battery_Manufacturer, Inverter_Type, Number_of_Modules, Panel_Model ` +
       `from Solar_Projects where Contact = ${contactId}`;
 
@@ -107,6 +107,8 @@ export default async function handler(req, res) {
 
     // Map into the audit engine input shape (mirrors DEFAULT_INPUTS keys)
     const auditInputs = {
+      projectStatus: primary.Project_Status || '',
+      opportunityType: primary.Opportunity_Type || '',
       installedYear: install.year || 2020,
       installedMonth: install.month || 1,
       utility: UTILITY_MAP[primary.Utility_Provider] || 'SCE',
