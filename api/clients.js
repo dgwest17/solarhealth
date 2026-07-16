@@ -11,13 +11,13 @@ const CONTACT_FIELDS = [
   'id', 'First_Name', 'Last_Name', 'Full_Name', 'Email', 'Phone',
   'Mailing_Street', 'Mailing_City', 'Mailing_State', 'Mailing_Zip', 'Lifecycle_Stage', 'Ownership_Status',
   'Send_Annual_Report', 'Last_Report_Sent'
-];
+, 'Left_Review'];
 
 const PROJECT_FIELDS = [
   'id', 'Contact', 'Install_Date', 'PTO_Date', 'System_Size_kW',
   'Annual_System_Production', 'Current_Annual_Usage_kWh', 'Utility_Provider',
   'NEM_Version', 'Export_Rate', 'On_CARE_Program', 'Project_Status'
-];
+, 'Finance_Provider', 'Opportunity_Type'];
 
 const UTILITY_RATE_2026 = { PGE: 0.495, SCE: 0.341, SDGE: 0.540, SMUD: 0.253 };
 const UTILITY_MAP = {
@@ -159,11 +159,14 @@ export default async function handler(req, res) {
         lifecycleStage: c.Lifecycle_Stage || '',
         ownershipStatus: c.Ownership_Status || '',
         sendAnnualReport: !!c.Send_Annual_Report,
+        leftReview: !!c.Left_Review,
         lastReportSent: c.Last_Report_Sent || null,
         installDate: p ? (p.Install_Date || null) : null,
         ptoDate: p ? (p.PTO_Date || null) : null,
         systemSizeKw: p ? num(p.System_Size_kW) : null,
         projectStatus: p ? (p.Project_Status || '') : '',
+        financeProvider: p ? (p.Finance_Provider || '') : '',
+        opportunityType: p ? (p.Opportunity_Type || '') : '',
         annualSavings: savings != null ? Math.round(savings) : null,
         nemType: nem ? nem.type : null,
         nemAmount: nem ? Math.round(nem.amount) : null
