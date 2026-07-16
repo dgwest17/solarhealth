@@ -33,13 +33,26 @@ export default async function handler(req, res) {
     if (!contactId || !contact) return res.status(400).json({ error: 'contactId and contact are required.' });
 
     const fields = mapContact(contact);
+    if (contact.leftReview !== undefined) fields.Left_Review = !!contact.leftReview;
     if (Object.keys(fields).length === 0) return res.status(400).json({ error: 'No writable fields in payload.' });
 
-    const result = await zohoFetch(`/crm/v2/Contacts/${encodeURIComponent(contactId)}`, {
+    let result = await zohoFetch(`/crm/v2/Contacts/${encodeURIComponent(contactId)}`, {
       method: 'PUT',
       body: JSON.stringify({ data: [{ id: contactId, ...fields }] })
     });
-    const status = result.data && result.data[0];
+    let status = result.data && result.data[0];
+    // If the Left_Review checkbox field hasn't been created in Zoho yet,
+    // retry without it so the rest of the edit still lands.
+    if ((!status || status.code !== 'SUCCESS') && fields.Left_Review !== undefined) {
+      delete fields.Left_Review;
+      if (Object.keys(fields).length > 0) {
+        result = await zohoFetch(`/crm/v2/Contacts/${encodeURIComponent(contactId)}`, {
+          method: 'PUT',
+          body: JSON.stringify({ data: [{ id: contactId, ...fields }] })
+        });
+        status = result.data && result.data[0];
+      }
+    }
     if (!status || status.code !== 'SUCCESS') {
       return res.status(502).json({ error: `Zoho rejected the update: ${status ? status.message || status.code : 'unknown'}` });
     }
