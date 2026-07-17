@@ -11,7 +11,7 @@ const CONTACT_FIELDS = [
   'id', 'First_Name', 'Last_Name', 'Full_Name', 'Email', 'Phone',
   'Mailing_Street', 'Mailing_City', 'Mailing_State', 'Mailing_Zip', 'Lifecycle_Stage', 'Ownership_Status',
   'Send_Annual_Report', 'Last_Report_Sent'
-, 'Left_Review'];
+, 'Left_Review', 'Created_By_Rep'];
 
 const PROJECT_FIELDS = [
   'id', 'Contact', 'Install_Date', 'PTO_Date', 'System_Size_kW',
@@ -85,7 +85,7 @@ export default async function handler(req, res) {
 
     let whereClause;
     if (user.role === 'admin') {
-      whereClause = 'Email is not null';
+      whereClause = 'Last_Name is not null'; // mandatory field — includes clients without email
     } else if (user.role === 'rep') {
       // Reps don't yet own real clients (ownership + write-back come later).
       // For now each rep sees a shared TEST client so they can exercise the
@@ -160,6 +160,7 @@ export default async function handler(req, res) {
         ownershipStatus: c.Ownership_Status || '',
         sendAnnualReport: !!c.Send_Annual_Report,
         leftReview: !!c.Left_Review,
+        createdBy: c.Created_By_Rep || '',
         lastReportSent: c.Last_Report_Sent || null,
         installDate: p ? (p.Install_Date || null) : null,
         ptoDate: p ? (p.PTO_Date || null) : null,
