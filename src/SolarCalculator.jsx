@@ -1,500 +1,116 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { calculateComprehensiveSavings } from './utils/calculations';
-import { DEFAULT_INPUTS, DEFAULT_API_STATUS } from './constants/defaults';
-import InputSection from './components/InputSection';
-import ResultsDashboard from './components/ResultsDashboard';
-import NEMStatusCard from './components/NEMStatusCard';
-import SystemHealthAlert from './components/SystemHealthAlert';
-import ChartsSection from './components/ChartsSection';
-import SummaryTables from './components/SummaryTables';
-import SystemScore from './components/SystemScore';
-import PDFReportGenerator from './components/PDFReportGenerator';
-import SaveToCRM from './components/SaveToCRM';
-import { apiFetch } from './lib/supabaseClient';
-import ContactFormModal from './components/ContactFormModal';
-import GuideTour from './components/GuideTour';
-import AINarrative from './components/AINarrative';
-import { openConsultationReport } from './report/ConsultationReport';
-import { deriveAnnualUsage } from './greenbutton/GreenButtonParser';
-import SystemSpecsSheet from './components/SystemSpecsSheet';
-import BatteryAnalysis from './battery/BatteryAnalysis';
-import LoadSimulator from './simulator/LoadSimulator';
-import GreenButtonUpload from './greenbutton/GreenButtonUpload';
+/**
+ * POST /api/create-client — "Save Client" from the sandbox.
+ * Creates a new Contact + linked Solar_Project from the sandbox audit.
+ * Admin only in v1 (reps gain this with ownership stamping in write-back B).
+ */
+import { zohoFetch } from './_zoho.js';
+import { requireUser, sendError } from './_auth.js';
 
-const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = null, clientContext = null, canSaveClient = false }) => {
-  const [inputs, setInputs] = useState(prefilledInputs ? { ...DEFAULT_INPUTS, ...prefilledInputs } : DEFAULT_INPUTS);
-  const [dataSource, setDataSource] = useState('manual');
-  const [apiStatus, setApiStatus] = useState(DEFAULT_API_STATUS);
-  const [showHistoricalRates, setShowHistoricalRates] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
+const UTILITY_TO_ZOHO = { SDGE: 'SDG&E', PGE: 'PG&E', SCE: 'SCE', SMUD: 'SMUD' };
+const NEM_TO_ZOHO = { NEM1: 'NEM 1.0', NEM2: 'NEM 2.0', NEM3: 'NEM 3.0' };
+const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
+const int = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : null; };
 
-  // Phase 2: AI-generated narrative (shared between the UI card and the PDF)
-  const [narrative, setNarrative] = useState(null);
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const user = await requireUser(req);
+    if (user.role !== 'admin' && user.role !== 'rep') return res.status(403).json({ error: 'Saving new clients requires an admin or rep login.' });
 
-  // Client name shown on the printed report header
-  const [clientName, setClientName] = useState(clientLabel || '');
-  const [clientAddress, setClientAddress] = useState('');
-  const [repName, setRepName] = useState('');
-
-  // Tab switcher: 'audit' | 'battery' | 'simulator'
-  const [activeTab, setActiveTab] = useState('audit');
-
-  // The Load Simulator is NON-DESTRUCTIVE. It never changes currentAnnualUsage.
-  // Instead it reports an additive "extra usage" result, shown as a separate
-  // line on the audit + battery tabs. Baselines/profile stay static.
-  const [extraUsage, setExtraUsage] = useState({ addedKwh: 0, billableKwh: 0, cost: 0, daytimePct: 0 });
-  const [simLoads, setSimLoads] = useState(null);
-  const simLoadsTimer = React.useRef(null);
-
-  // Green Button measured profile. STATIC once applied — the authoritative
-  // consumption baseline (the thing the simulator layers extra usage onto).
-  const [saveClientOpen, setSaveClientOpen] = useState(false);
-  const [showPersonalized, setShowPersonalized] = useState(false);
-  const [editContactOpen, setEditContactOpen] = useState(false);
-  const [contactOverride, setContactOverride] = useState(null);
-  const [ratePlan, setRatePlan] = useState('standard');
-
-  // ---- Persistence: auto-load saved Green Button profile + settings ----
-  useEffect(() => {
-    if (!clientContext || !clientContext.contactId) return;
-    (async () => {
-      try {
-        const data = await apiFetch(`/api/gb-profile?contactId=${encodeURIComponent(clientContext.contactId)}`);
-        if (data.settings && data.settings.ratePlan) setRatePlan(data.settings.ratePlan);
-        if (data.settings && data.settings.simLoads) setSimLoads(data.settings.simLoads);
-        if (data.settings && data.settings.consumptionProfile) {
-          setInputs((prev) => ({ ...prev, consumptionProfile: data.settings.consumptionProfile }));
-        }
-        if (data.gbProfile && data.gbProfile.ok) {
-          setGbProfile(data.gbProfile);
-          setGbApplied(true);
-          setInputs((prev) => ({ ...prev, measuredImportKwh: data.gbProfile.annualImportKwh || 0, measuredExportKwh: data.gbProfile.annualExportKwh || 0 }));
-          const derived = deriveAnnualUsage(data.gbProfile, inputs.annualProduction);
-          if (derived != null) setInputs((prev) => ({ ...prev, currentAnnualUsage: derived }));
-          const when = data.updatedAt ? new Date(data.updatedAt).toLocaleDateString() : 'previously';
-          setGbNote({ ok: true, message: `Loaded saved measured data (uploaded ${when}). Battery figures use the meter data${derived != null ? `; Current Annual Usage set to ${derived.toLocaleString()} kWh` : ''}. Recommendation: make sure the original installed production or current annual production is correct.` });
-        }
-      } catch (e) { /* no saved profile or persistence not configured — silent */ }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientContext && clientContext.contactId]);
-
-  const persistSimLoads = (loads) => {
-    setSimLoads(loads);
-    if (!(clientContext && clientContext.contactId)) return;
-    if (simLoadsTimer.current) clearTimeout(simLoadsTimer.current);
-    simLoadsTimer.current = setTimeout(() => {
-      apiFetch('/api/gb-profile', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contactId: clientContext.contactId, settings: { simLoads: loads } })
-      }).catch(() => {});
-    }, 1200);
-  };
-
-  const persistConsumptionProfile = (key) => {
-    setInputs((prev) => ({ ...prev, consumptionProfile: key }));
-    if (clientContext && clientContext.contactId) {
-      apiFetch('/api/gb-profile', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contactId: clientContext.contactId, settings: { consumptionProfile: key } })
-      }).catch(() => {});
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    const { contact = {}, inputs = {} } = body;
+    if (!contact.lastName || !String(contact.lastName).trim()) {
+      return res.status(400).json({ error: 'Last name is required.' });
     }
-  };
 
-  const persistRatePlan = (plan) => {
-    setRatePlan(plan);
-    if (clientContext && clientContext.contactId) {
-      apiFetch('/api/gb-profile', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contactId: clientContext.contactId, settings: { ratePlan: plan } })
-      }).catch(() => {});
-    }
-  };
-
-  const sendAuditReport = () => {
-    // Opens the preview tab AND returns { reportHtml, summary } for emailing.
-    const html = openConsultationReport({
-      clientName: (clientContext && clientContext.name) || clientName,
-      clientAddress: (clientContext && clientContext.address) || clientAddress,
-      repName,
-      inputs, calculations, extraUsage,
-      gbProfile: gbApplied ? gbProfile : null
-    });
-    const nem = calculations.currentNEMImpact;
-    return {
-      reportHtml: html,
-      summary: {
-        cumulativeSavings: calculations.cumulativeSavings,
-        avgMonthlySavings: calculations.avgMonthlySavings,
-        nemLine: nem ? (nem.type === 'credit'
-          ? `Earning ~$${Math.round(nem.amount).toLocaleString()}/yr in credits`
-          : `~$${Math.round(nem.amount).toLocaleString()}/yr annual true-up`) : null
-      }
+    // 1) Create the Contact
+    const contactFields = {
+      Last_Name: String(contact.lastName).trim(),
+      First_Name: (contact.firstName || '').trim(),
+      Email: (contact.email || '').trim() || null,
+      Phone: (contact.phone || '').trim() || null,
+      Mailing_Street: (contact.street || '').trim() || null,
+      Mailing_City: (contact.city || '').trim() || null,
+      Mailing_State: (contact.state || '').trim() || null,
+      Mailing_Zip: (contact.zip || '').trim() || null,
+      Send_Annual_Report: !!contact.sendAnnualReport,
+      Lifecycle_Stage: 'Client',
+      Ownership_Status: 'Installed by Other' // audit clients: system exists, we didn't install
     };
-  };
-
-  const [gbProfile, setGbProfile] = useState(null);
-  const [gbApplied, setGbApplied] = useState(false);
-
-  const [gbNote, setGbNote] = useState(null); // rep guidance after apply
-
-  const handleGreenButtonApply = (profile, derivedUsage) => {
-    setGbProfile(profile);
-    setGbApplied(true);
-    // Feed measured grid flows into the true-up math.
-    setInputs((prev) => ({ ...prev, measuredImportKwh: profile.annualImportKwh || 0, measuredExportKwh: profile.annualExportKwh || 0 }));
-    if (clientContext && clientContext.contactId) {
-      apiFetch('/api/gb-profile', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contactId: clientContext.contactId, gbProfile: profile })
-      }).catch(() => {});
+    // Rep ownership stamp — lets reps see their own leads on the dashboard.
+    // If the Created_By_Rep field doesn't exist in Zoho yet, retry without it.
+    let repStampWarning = null;
+    if (user.role === 'rep' || user.role === 'admin') {
+      contactFields.Created_By_Rep = (user.email || '').toLowerCase();
     }
-    if (derivedUsage != null) {
-      // Total house consumption derived from measured grid flows + production.
-      setInputs((prev) => ({ ...prev, currentAnnualUsage: derivedUsage }));
-      setGbNote({
-        ok: true,
-        message: `Current Annual Usage overwritten with ${derivedUsage.toLocaleString()} kWh — taken from Green Button data, assuming the system is functioning properly. Battery figures now use the meter data. Recommendation: make sure the original installed production or current annual production is correct.`
+    let cRes = await zohoFetch('/crm/v2/Contacts', {
+      method: 'POST',
+      body: JSON.stringify({ data: [contactFields] })
+    });
+    let cStatus = cRes.data && cRes.data[0];
+    if (cStatus && cStatus.code !== 'SUCCESS' && contactFields.Created_By_Rep) {
+      delete contactFields.Created_By_Rep;
+      repStampWarning = 'Created_By_Rep field missing in Zoho — lead saved without rep stamp. Add a single-line field with API name Created_By_Rep to Contacts.';
+      cRes = await zohoFetch('/crm/v2/Contacts', {
+        method: 'POST',
+        body: JSON.stringify({ data: [contactFields] })
       });
-    } else {
-      setGbNote({
-        ok: false,
-        message: 'Measured data applied to the battery tool only — Current Annual Usage was NOT updated because Annual Production is missing or zero. Enter the system\u2019s Annual Production above, then click "Re-apply measured data" so usage connects to the meter data.'
-      });
+      cStatus = cRes.data && cRes.data[0];
     }
-  };
+    if (!cStatus || cStatus.code !== 'SUCCESS') {
+      return res.status(502).json({ error: `Zoho rejected the contact: ${cStatus ? cStatus.message || cStatus.code : 'unknown'}` });
+    }
+    const contactId = cStatus.details.id;
 
-  // Auto-update current date on mount
-  useEffect(() => {
-    const now = new Date();
-    setInputs(prev => ({
-      ...prev,
-      nowYear: now.getFullYear(),
-      nowMonth: now.getMonth() + 1
-    }));
-  }, []);
-
-  const calculations = useMemo(
-    () => calculateComprehensiveSavings(inputs),
-    [inputs]
-  );
-
-  const handleInputChange = (field, value) => {
-    setInputs(prev => ({ ...prev, [field]: value }));
-    // Audit data changed — any existing narrative is now stale
-    setNarrative(null);
-  };
-
-  const handleApiConnect = () => {
-    setApiStatus({ connected: false, lastSync: null, error: 'Connecting...' });
-    setTimeout(() => {
-      if (inputs.apiKey && inputs.systemId) {
-        setApiStatus({ connected: true, lastSync: new Date().toISOString(), error: null });
-      } else {
-        setApiStatus({ connected: false, lastSync: null, error: 'Invalid API credentials' });
+    // 2) Create the linked Solar_Project from the sandbox audit
+    const projectFields = {
+      Name: `${contactFields.First_Name ? contactFields.First_Name + ' ' : ''}${contactFields.Last_Name} System`.trim(),
+      Contact: contactId,
+      Opportunity_Type: 'Solar Owner – Audit / Review' // default opportunity
+    };
+    const sz = num(inputs.systemSize); if (sz != null) projectFields.System_Size_kW = sz;
+    const prod = int(inputs.annualProduction); if (prod != null) projectFields.Annual_System_Production = prod;
+    const uai = int(inputs.annualUsageAtInstall); if (uai != null) projectFields.Annual_Usage_at_Install_kWh = uai;
+    const cur = int(inputs.currentAnnualUsage); if (cur != null) projectFields.Current_Annual_Usage_kWh = cur;
+    if (inputs.utility && UTILITY_TO_ZOHO[inputs.utility]) projectFields.Utility_Provider = UTILITY_TO_ZOHO[inputs.utility];
+    if (inputs.nemVersion && NEM_TO_ZOHO[inputs.nemVersion]) projectFields.NEM_Version = NEM_TO_ZOHO[inputs.nemVersion];
+    const exp = num(inputs.exportRate); if (exp != null) projectFields.Export_Rate = exp;
+    if (typeof inputs.onCareProgram === 'boolean') projectFields.On_CARE_Program = inputs.onCareProgram;
+    if (inputs.hasBattery) { const cap = num(inputs.batteryCapacity); if (cap != null) projectFields.Battery_Capacity_kWh = cap; }
+    // Financial product (verified writable fields)
+    if (['Cash', 'Loan', 'PPA'].includes(inputs.program)) {
+      projectFields.Purchase_Type = inputs.program;
+      const term = int(inputs.loanTerm);
+      const rate = num(inputs.loanInterestRate);
+      const esc = num(inputs.escalator);
+      if (inputs.program === 'Loan') {
+        const principal = num(inputs.loanPrincipal);
+        if (principal != null && principal > 0) projectFields.Contract_Value = principal;
+        if (term != null && term > 0) projectFields.Term = term; // YEARS
+        if (rate != null && rate > 0) projectFields.Escalator_or_Interest = rate;
+      } else if (inputs.program === 'Cash') {
+        const gross = num(inputs.cashGrossCost);
+        if (gross != null && gross > 0) projectFields.Contract_Value = gross;
+      } else if (inputs.program === 'PPA') {
+        if (esc != null && esc >= 0) projectFields.Escalator_or_Interest = esc;
       }
-    }, 1500);
-  };
+    }
 
-  const handleUpdateSystem = () => {
-    setIsUpdating(true);
-    const now = new Date();
-    setInputs(prev => ({
-      ...prev,
-      nowYear: now.getFullYear(),
-      nowMonth: now.getMonth() + 1
-    }));
-    setTimeout(() => setIsUpdating(false), 1500);
-  };
+    // New record → safe to write Install_Date from year/month (day defaults to 1st)
+    const iy = int(inputs.installedYear); const im = int(inputs.installedMonth);
+    if (iy && im) projectFields.Install_Date = `${iy}-${String(im).padStart(2, '0')}-01`;
 
-  return (
-    <div className="app-root min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
-      <GuideTour />
-      <div className="max-w-7xl mx-auto">
-        {/* Print-only report header */}
-        <div className="hidden print:block mb-4 pb-3 border-b-2 border-amber-500">
-          <div className="flex justify-between items-end">
-            <h1 className="text-2xl font-bold text-slate-900">California Solar Audit</h1>
-            <div className="text-right text-xs text-slate-600">
-              {clientName && <p>Prepared for: <strong>{clientName}</strong></p>}
-              <p>{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Tab navigation (hidden in print) */}
-        <div className="print:hidden flex gap-2 mb-6 bg-slate-900/60 p-1.5 rounded-xl border border-slate-700/50 w-fit">
-          <button
-            onClick={() => setActiveTab('audit')}
-            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
-              activeTab === 'audit'
-                ? 'bg-amber-400 text-slate-900'
-                : 'text-slate-300 hover:bg-slate-800'
-            }`}
-          >
-            Financial Audit
-          </button>
-          <button
-            onClick={() => setActiveTab('battery')}
-            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
-              activeTab === 'battery'
-                ? 'bg-amber-400 text-slate-900'
-                : 'text-slate-300 hover:bg-slate-800'
-            }`}
-          >
-            Battery Analysis
-          </button>
-          <button
-            onClick={() => setActiveTab('simulator')}
-            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
-              activeTab === 'simulator'
-                ? 'bg-amber-400 text-slate-900'
-                : 'text-slate-300 hover:bg-slate-800'
-            }`}
-          >
-            Load Simulator
-          </button>
-        </div>
-
-        {/* BATTERY ANALYSIS TAB */}
-        {activeTab === 'battery' && (
-          <div className="print:hidden">
-            <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} extraUsage={extraUsage} measured={gbApplied ? gbProfile : null} />
-          </div>
-        )}
-
-        {/* LOAD SIMULATOR TAB */}
-        {activeTab === 'simulator' && (
-          <div className="print:hidden">
-            <LoadSimulator
-              baseUsage={inputs.currentAnnualUsage}
-              production={inputs.annualProduction}
-              utility={inputs.utility}
-              currentNemImpact={calculations.currentNEMImpact}
-              ratePlan={ratePlan}
-              onRatePlanChange={persistRatePlan}
-              onExtraUsageChange={setExtraUsage}
-              initialLoads={simLoads}
-              onLoadsChange={persistSimLoads}
-            />
-          </div>
-        )}
-
-        {/* FINANCIAL AUDIT TAB */}
-        <div style={{ display: activeTab === 'audit' ? 'block' : 'none' }}>
-        <div className="print:hidden">
-        {clientContext && clientContext.name && (
-          <div className="mb-4 print:hidden flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-3xl font-extrabold text-slate-100 flex items-center gap-2">
-                {(contactOverride && contactOverride.name) || clientContext.name}
-                {clientContext.contact && (
-                  <button
-                    type="button"
-                    onClick={() => setEditContactOpen(true)}
-                    className="text-sm font-normal text-slate-500 hover:text-amber-300 border border-slate-700 rounded-lg px-2 py-1"
-                    title="Edit client info (name, address, phone, email, review)"
-                  >✎ Edit info</button>
-                )}
-              </h1>
-              {((contactOverride && contactOverride.address) || clientContext.address) && (
-                <p className="text-sm text-slate-400 mt-0.5">{(contactOverride && contactOverride.address) || clientContext.address}</p>
-              )}
-            </div>
-            <div className="flex gap-2 items-end">
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-0.5">Project Status</label>
-                <select
-                  value={inputs.projectStatus || ''}
-                  onChange={(e) => handleInputChange('projectStatus', e.target.value)}
-                  className="px-2 py-1.5 text-xs rounded-lg bg-slate-800/80 border border-slate-600 text-slate-200"
-                >
-                  <option value="">— not set —</option>
-                  {['Pre-PTO','PTO-Approved','Abandoned','Cancelled/Lost','Battery Installed','HVAC Installed'].map((v) => (
-                    <option key={v} value={v}>{v}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-0.5">Opportunity</label>
-                <select
-                  value={inputs.opportunityType || ''}
-                  onChange={(e) => handleInputChange('opportunityType', e.target.value)}
-                  className="px-2 py-1.5 text-xs rounded-lg bg-slate-800/80 border border-slate-600 text-slate-200"
-                >
-                  <option value="">Audit / Review (default)</option>
-                  {['New Solar Install','Solar Owner – Add Battery','Solar Owner – Audit / Review','Solar Owner – Service / Repair','Solar Owner – Under Service Plan','HVAC Only (future-proofing)','Other'].map((v) => (
-                    <option key={v} value={v}>{v}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {editContactOpen && clientContext && clientContext.contact && (
-          <ContactFormModal
-            mode="edit"
-            initial={contactOverride ? { ...clientContext.contact, ...contactOverride.raw } : clientContext.contact}
-            onClose={() => setEditContactOpen(false)}
-            onSaved={(_result, updated) => {
-              setEditContactOpen(false);
-              const u = { ...clientContext.contact, ...(updated || {}) };
-              setContactOverride({
-                raw: updated || {},
-                name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.fullName || clientContext.name,
-                address: [u.street, u.city, u.state, u.zip].filter(Boolean).join(', ')
-              });
-            }}
-          />
-        )}
-
-        <SaveToCRM inputs={inputs} clientContext={clientContext} clientLabel={clientLabel} onSendAudit={sendAuditReport} />
-
-        {!clientContext && canSaveClient && (
-          <div className="print:hidden mb-4 flex justify-end">
-            <button
-              onClick={() => setSaveClientOpen(true)}
-              className="px-5 py-2 rounded-lg font-semibold text-sm bg-emerald-500 hover:bg-emerald-400 text-[#0a1628] flex items-center gap-2"
-              title="Save this sandbox audit as a new client in your CRM"
-            >
-              + Save Client
-            </button>
-          </div>
-        )}
-
-        {saveClientOpen && (
-          <ContactFormModal
-            mode="create"
-            auditInputs={inputs}
-            onClose={() => setSaveClientOpen(false)}
-            onSaved={(result) => { /* new contact + project created in Zoho */ }}
-          />
-        )}
-
-        <InputSection
-          inputs={inputs}
-          onInputChange={handleInputChange}
-          dataSource={dataSource}
-          setDataSource={setDataSource}
-          apiStatus={apiStatus}
-          onApiConnect={handleApiConnect}
-          calculations={calculations}
-          onUpdate={handleUpdateSystem}
-          isUpdating={isUpdating}
-          ratePlan={ratePlan}
-          onRatePlanChange={persistRatePlan}
-          gbApplied={gbApplied}
-        />
-
-        {/* Green Button measured data — upload + apply */}
-        <GreenButtonUpload
-          utility={inputs.utility}
-          annualProduction={inputs.annualProduction}
-          onApply={handleGreenButtonApply}
-          applied={gbApplied}
-        />
-        {gbNote && (
-          <div className={`print:hidden -mt-3 mb-6 rounded-lg border p-3 text-sm ${
-            gbNote.ok ? 'bg-emerald-500/10 border-emerald-400/40 text-emerald-200' : 'bg-amber-500/10 border-amber-400/50 text-amber-200'
-          }`}>
-            {gbNote.ok ? '✓ ' : '⚠ '}{gbNote.message}
-          </div>
-        )}
-        </div>
-
-        {/* Sections render in natural source order. In print, page breaks
-            (.print-break-before) split them into the client-facing PDF pages
-            without affecting the on-screen layout. */}
-
-        {/* System Score */}
-        <SystemScore
-          calculations={calculations}
-          inputs={inputs}
-        />
-
-        {/* NEM Analysis */}
-        <NEMStatusCard
-          currentNEMImpact={calculations.currentNEMImpact}
-          nemVersion={inputs.nemVersion}
-          cumulativeNEMCredits={calculations.cumulativeNEMCredits}
-          cumulativeTrueUpCharges={calculations.cumulativeTrueUpCharges}
-        />
-
-        {/* Extra Usage True-Up — from the Load Simulator, shown SEPARATELY so it
-            never alters the real current true-up/credit above. */}
-        {extraUsage && extraUsage.cost > 0 && (
-          <div className="bg-red-500/10 border-2 border-red-400/40 rounded-xl p-5 mb-6 flex items-center justify-between print:hidden">
-            <div>
-              <div className="text-xs uppercase tracking-wider text-red-300 flex items-center gap-1.5 mb-1">
-                ⚡ Extra Usage True-Up (from Load Simulator)
-              </div>
-              <p className="text-sm text-slate-300">
-                {extraUsage.addedKwh.toLocaleString()} kWh of added load · {extraUsage.billableKwh.toLocaleString()} kWh billed at time-of-use
-              </p>
-            </div>
-            <div className="text-right">
-              <div className="text-3xl font-extrabold text-red-400">
-                −${Math.round(extraUsage.cost).toLocaleString()}<span className="text-sm font-normal text-slate-400">/yr</span>
-              </div>
-              <div className="text-[11px] text-slate-500">on top of your current position</div>
-            </div>
-          </div>
-        )}
-
-        {/* Savings/Payback summary (the 4 KPI cards) — last thing on PDF page 1 */}
-        <ResultsDashboard calculations={calculations} />
-
-        {/* AI Narrative — on screen only, excluded from the PDF (print:hidden) */}
-        <div className="print:hidden">
-        </div>
-
-        {/* PDF: hidden (config UI, not for clients) */}
-        <PDFReportGenerator
-          clientName={clientName}
-          setClientName={setClientName}
-          clientAddress={clientAddress}
-          setClientAddress={setClientAddress}
-          repName={repName}
-          setRepName={setRepName}
-          inputs={inputs}
-          calculations={calculations}
-          extraUsage={extraUsage}
-          gbProfile={gbApplied ? gbProfile : null}
-          onTogglePersonalized={() => setShowPersonalized((v) => !v)}
-        />
-
-        {showPersonalized && (
-          <AINarrative inputs={inputs} calculations={calculations} narrative={narrative} onNarrativeGenerated={setNarrative} />
-        )}
-
-        {/* Charts — priority two on page 1, rest flow to page 2 (handled in print CSS) */}
-        <ChartsSection
-          yearlyData={calculations.yearlyData}
-          inputs={inputs}
-          showHistoricalRates={showHistoricalRates}
-          setShowHistoricalRates={setShowHistoricalRates}
-        />
-
-        {/* PDF page 2: Financial Summary + System Metrics */}
-        <SummaryTables calculations={calculations} inputs={inputs} />
-
-        {/* PDF page 3: System Specifications (print-only, has its own page break) */}
-        <SystemSpecsSheet inputs={inputs} />
-
-        <div className="print:hidden bg-slate-800/50 border border-cyan-500/30 rounded-lg p-4 text-sm text-cyan-300/80">
-          <p className="font-semibold mb-2 text-cyan-400">Data Sources:</p>
-          <ul className="list-disc list-inside space-y-1">
-            <li>Utility rates: CPUC reports with updated 2025 rates (PG&E: $0.48/kWh, SDG&E: $0.52/kWh, SCE: $0.314/kWh)</li>
-            <li>NEM calculations: Retail rate (NEM 1.0), wholesale rate (NEM 2.0), reduced rate (NEM 3.0)</li>
-            <li>CARE Program: 30% discount applied to all utility rates</li>
-            <li>Performance: California average 1400 kWh/kW/year</li>
-          </ul>
-        </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default SolarCalculator;
+    const pRes = await zohoFetch('/crm/v2/Solar_Projects', {
+      method: 'POST',
+      body: JSON.stringify({ data: [projectFields] })
+    });
+    const pStatus = pRes.data && pRes.data[0];
+    if (!pStatus || pStatus.code !== 'SUCCESS') {
+      return res.status(502).json({
+        error: `Contact created (id ${contactId}) but Zoho rejected the project: ${pStatus ? pStatus.message || pStatus.code : 'unknown'}`,
+        contactId
+      });
+    }
+    res.status(200).json({ ok: true, contactId, projectId: pStatus.details.id, message: 'Client and system saved to Zoho.', warning: repStampWarning });
+  } catch (e) { sendError(res, e); }
+}
