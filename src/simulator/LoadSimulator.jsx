@@ -3,10 +3,12 @@ import {
   Car, Thermometer, Droplets, Snowflake, Waves, Plug, Plus,
   Zap, TrendingUp, RotateCcw, Home, Sun, Moon, Bath
 } from 'lucide-react';
-import { TOU_RATES } from '../utils/rateData';
+import { TOU_RATES, EV_TOU_PLANS } from '../utils/rateData';
+import EvVsGasPanel from './EvVsGasPanel';
 import {
   LOAD_TYPES, totalAddedKwh, getLoadType, blendedDaytimePct, calcExtraUsageCost,
-  EV_MODELS, evAnnualKwh, HOTTUB_SIZES, hottubAnnualKwh
+  EV_MODELS, evAnnualKwh, HOTTUB_SIZES, hottubAnnualKwh,
+  GAS_CARS, GAS_PRICE_DEFAULT, gasAnnualCost, evChargeAnnualCost
 , calcExtraUsageCostEvTou
 } from './LoadModel';
 
@@ -128,7 +130,7 @@ const LoadSimulator = ({
         const lt = getLoadType(id);
         if (id === 'ev') {
           const m = EV_MODELS[0];
-          next[id] = { kwh: evAnnualKwh(12000, m.miPerKwh), daytimePct: lt.defaultDaytimePct, evModel: m.id, milesPerYear: 12000, miPerKwh: m.miPerKwh };
+          next[id] = { kwh: evAnnualKwh(12000, m.miPerKwh), daytimePct: lt.defaultDaytimePct, evModel: m.id, milesPerYear: 12000, miPerKwh: m.miPerKwh, gasCar: 'camry', gasMpg: 32, gasPrice: GAS_PRICE_DEFAULT };
         } else if (id === 'hottub') {
           next[id] = { kwh: hottubAnnualKwh('medium', 1), daytimePct: lt.defaultDaytimePct, tubSize: 'medium', hoursPerDay: 1 };
         } else {
@@ -434,6 +436,15 @@ const LoadSimulator = ({
           })}
         </div>
       </div>
+
+      {activeLoads.ev && (
+        <EvVsGasPanel
+          ev={activeLoads.ev}
+          isEvTou={isEvTou}
+          chargeRate={isEvTou ? EV_TOU_PLANS.SDGE_EVTOU5.superOffPeak : touRates.offPeak}
+          onPatch={(patch) => setActiveLoads((prev) => ({ ...prev, ev: { ...(prev.ev || {}), ...patch } }))}
+        />
+      )}
 
       <p className="text-xs text-slate-500 mt-5">
         Estimates are typical California figures and vary by climate, home size, and habits. The
