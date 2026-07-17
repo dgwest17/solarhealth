@@ -33,7 +33,9 @@ export default async function handler(req, res) {
       Mailing_City: (contact.city || '').trim() || null,
       Mailing_State: (contact.state || '').trim() || null,
       Mailing_Zip: (contact.zip || '').trim() || null,
-      Send_Annual_Report: !!contact.sendAnnualReport
+      Send_Annual_Report: !!contact.sendAnnualReport,
+      Lifecycle_Stage: 'Client',
+      Ownership_Status: 'Installed by Other' // audit clients: system exists, we didn't install
     };
     // Rep ownership stamp — lets reps see their own leads on the dashboard.
     // If the Created_By_Rep field doesn't exist in Zoho yet, retry without it.
@@ -63,7 +65,8 @@ export default async function handler(req, res) {
     // 2) Create the linked Solar_Project from the sandbox audit
     const projectFields = {
       Name: `${contactFields.First_Name ? contactFields.First_Name + ' ' : ''}${contactFields.Last_Name} System`.trim(),
-      Contact: contactId
+      Contact: contactId,
+      Opportunity_Type: 'Solar Owner – Audit / Review' // default opportunity
     };
     const sz = num(inputs.systemSize); if (sz != null) projectFields.System_Size_kW = sz;
     const prod = int(inputs.annualProduction); if (prod != null) projectFields.Annual_System_Production = prod;
