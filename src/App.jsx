@@ -142,7 +142,7 @@ export default function App() {
     return (
       <div>
         <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} />
-        <SolarCalculator canSaveClient={role === 'admin' || role === 'rep'} />
+        <SolarCalculator onOpenClient={openClient} canSaveClient={role === 'admin' || role === 'rep'} />
       </div>
     );
   }
