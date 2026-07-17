@@ -20,9 +20,6 @@ import { ArrowLeft, RefreshCw, AlertCircle, FlaskConical } from 'lucide-react';
 export default function App() {
   const { user, loading, configured, passwordRecovery, clearPasswordRecovery } = useAuth();
 
-  if (passwordRecovery) {
-    return <ResetPasswordScreen onDone={clearPasswordRecovery} />;
-  }
   const [selectedId, setSelectedId] = useState(null);
   const [clientData, setClientData] = useState(null);
   const [loadingClient, setLoadingClient] = useState(false);
@@ -56,6 +53,12 @@ export default function App() {
     if (supabase) await supabase.auth.signOut();
     backToDashboard();
   };
+
+  // Password-recovery link takes over the screen. Must come AFTER all hooks —
+  // an early return above hooks changes hook order between renders (React #300).
+  if (passwordRecovery) {
+    return <ResetPasswordScreen onDone={clearPasswordRecovery} />;
+  }
 
   // ---- Auth gates ----
   if (loading) {
