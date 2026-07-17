@@ -285,6 +285,7 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
                     [null, 'Finance'],
                     ['systemSizeKw', 'kW'],
                     ['lastReportSent', 'Last Contacted'],
+                    [null, 'Created By'],
                     [null, '']
                   ].map(([key, label], i) => (
                     <th
@@ -335,6 +336,9 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
                       <td className="px-3 py-1.5 whitespace-nowrap text-slate-400">{c.systemSizeKw != null ? c.systemSizeKw : '—'}</td>
                       <td className={`px-3 py-1.5 whitespace-nowrap ${c.lastReportSent ? 'text-slate-300' : 'text-amber-500/80'}`}>
                         {c.lastReportSent || 'never'}
+                      </td>
+                      <td className="px-3 py-1.5 whitespace-nowrap text-slate-500 max-w-[120px] truncate" title={c.createdBy || 'Imported / owner'}>
+                        {c.createdBy ? c.createdBy.split('@')[0] : '—'}
                       </td>
                       <td className="px-2 py-1.5 whitespace-nowrap text-right">
                         <span
