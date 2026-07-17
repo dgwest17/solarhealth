@@ -244,3 +244,34 @@ export function calcExtraUsageCostEvTou(billableKwh, planId) {
   const fallbackCost = billableKwh * plan.offPeak;
   return { cost: Math.round(cost), fallbackCost: Math.round(fallbackCost), plan };
 }
+
+
+// ---- EV vs GAS comparison ----
+// Popular gas cars with EPA-combined MPG for the "what would gas cost" story.
+export const GAS_CARS = [
+  { id: 'camry', label: 'Toyota Camry', mpg: 32 },
+  { id: 'rav4', label: 'Toyota RAV4', mpg: 30 },
+  { id: 'crv', label: 'Honda CR-V', mpg: 30 },
+  { id: 'civic', label: 'Honda Civic', mpg: 36 },
+  { id: 'f150', label: 'Ford F-150', mpg: 20 },
+  { id: 'silverado', label: 'Chevy Silverado', mpg: 19 },
+  { id: 'wrangler', label: 'Jeep Wrangler', mpg: 22 },
+  { id: 'highlander', label: 'Toyota Highlander', mpg: 24 },
+  { id: 'accord', label: 'Honda Accord', mpg: 32 },
+  { id: 'custom', label: 'Custom MPG…', mpg: 25 }
+];
+
+// California average regular gas ($/gal) — editable in the UI; update as prices move.
+export const GAS_PRICE_DEFAULT = 4.79;
+
+/** Annual gas cost for the same miles the EV would drive. */
+export function gasAnnualCost(milesPerYear, mpg, pricePerGal) {
+  const m = Number(milesPerYear) || 0, e = Number(mpg) || 1, p = Number(pricePerGal) || 0;
+  if (e <= 0) return 0;
+  return (m / e) * p;
+}
+
+/** Annual cost to home-charge the EV's kWh at the given rate. */
+export function evChargeAnnualCost(evKwh, ratePerKwh) {
+  return (Number(evKwh) || 0) * (Number(ratePerKwh) || 0);
+}
