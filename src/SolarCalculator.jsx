@@ -22,7 +22,17 @@ import LoadSimulator from './simulator/LoadSimulator';
 import GreenButtonUpload from './greenbutton/GreenButtonUpload';
 
 const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = null, clientContext = null, canSaveClient = false, onOpenClient = null }) => {
-  const [inputs, setInputs] = useState(prefilledInputs ? { ...DEFAULT_INPUTS, ...prefilledInputs } : DEFAULT_INPUTS);
+  // Merge Zoho data over defaults, but keep explicit nulls as EMPTY so the UI
+  // shows "—" instead of a fabricated default the rep might trust.
+  const mergeClient = (base, incoming) => {
+    if (!incoming) return base;
+    const out = { ...base };
+    for (const [k, v] of Object.entries(incoming)) {
+      out[k] = v === null ? '' : v;
+    }
+    return out;
+  };
+  const [inputs, setInputs] = useState(mergeClient(DEFAULT_INPUTS, prefilledInputs));
   const [dataSource, setDataSource] = useState('manual');
   const [apiStatus, setApiStatus] = useState(DEFAULT_API_STATUS);
   const [showHistoricalRates, setShowHistoricalRates] = useState(false);
@@ -283,6 +293,25 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         {/* FINANCIAL AUDIT TAB */}
         <div style={{ display: activeTab === 'audit' ? 'block' : 'none' }}>
         <div className="print:hidden">
+        {clientContext && (() => {
+          const need = [
+            [!inputs.systemSize, 'system size'],
+            [!inputs.annualProduction, 'annual production'],
+            [!inputs.currentAnnualUsage, 'current usage'],
+            [!inputs.utility, 'utility'],
+            [!inputs.nemVersion, 'NEM version'],
+            [!inputs.program, 'financing type'],
+            [!inputs.installedYear, 'PTO / install date']
+          ].filter(([missing]) => missing).map(([, label]) => label);
+          if (!need.length) return null;
+          return (
+            <div className="mb-4 print:hidden bg-amber-900/20 border border-amber-400/40 rounded-lg px-4 py-2.5 text-sm text-amber-200">
+              <span className="font-semibold">Missing from the CRM:</span> {need.join(' · ')}.
+              <span className="text-amber-300/70"> Fill these in below and hit Save to CRM — blanks show as “—” rather than guesses.</span>
+            </div>
+          );
+        })()}
+
         {clientContext && clientContext.name && (
           <div className="mb-4 print:hidden flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -310,7 +339,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
                   className="px-2 py-1.5 text-xs rounded-lg bg-slate-800/80 border border-slate-600 text-slate-200"
                 >
                   <option value="">— not set —</option>
-                  {['Pre-PTO','PTO-Approved','Abandoned','Cancelled/Lost','Battery Installed','HVAC Installed'].map((v) => (
+                  {['Pre-PTO', 'PTO-Approved', 'Service Client', 'Battery Installed', 'HVAC Installed', 'Abandoned', 'Cancelled/Lost'].map((v) => (
                     <option key={v} value={v}>{v}</option>
                   ))}
                 </select>
