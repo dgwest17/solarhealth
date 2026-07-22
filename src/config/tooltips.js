@@ -30,6 +30,7 @@ export const TOOLTIPS = {
   panelManufacturer: 'Brand on the panels — check the contract, permit, or a photo of the panel label. Drives the warranty schedule on the report.',
   inverterManufacturer: 'Enphase/APsystems = micro (small boxes under each panel). SolarEdge/SMA/Fronius = one wall box. Check the wall by the meter.',
   batteryManufacturer: 'Brand of the battery system. Drives warranty and replacement planning on the report.',
+  financeProvider: 'Who holds the loan/PPA paper — GoodLeap, Mosaic, Sunnova, Sunrun, etc. On the client\u2019s monthly statement or the original contract. Type any name if it\u2019s not in the list.',
   greenButton: 'Free 15-minute usage data from the utility website (Green Button Download). Makes this audit measured instead of estimated.'
 };
 
