@@ -14,7 +14,9 @@ import {
  * Get utility rate for a specific year with optional CARE discount
  */
 export const getUtilityRate = (year, utility, careDiscount = false) => {
-  const rates = UTILITY_RATES[utility];
+  // Blank/unknown utility (client not filled in yet) → fall back to SCE curve
+  // so the tool renders instead of crashing; the UI flags the missing field.
+  const rates = UTILITY_RATES[utility] || UTILITY_RATES.SCE;
   let rate;
   
   if (rates[year]) {
@@ -73,7 +75,7 @@ export const getUsageGrowthRate = (annualUsageAtInstall, currentAnnualUsage, yea
 export const calculateBatteryArbitrage = (hasBattery, useTOU, utility, batteryCapacity, batteryEfficiency) => {
   if (!hasBattery || !useTOU) return 0;
   
-  const touRates = TOU_RATES[utility];
+  const touRates = TOU_RATES[utility] || TOU_RATES.SCE;
   const dailyCycles = 1;
   const daysPerYear = 365;
   const usableCapacity = batteryCapacity * (batteryEfficiency / 100);
