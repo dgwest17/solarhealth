@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { Database, RefreshCw, AlertCircle, Battery, ChevronDown, ChevronRight } from 'lucide-react';
-import { UTILITY_OPTIONS, NEM_OPTIONS, PROGRAM_OPTIONS, API_PROVIDERS, TOU_RATES, PPA_ESCALATOR_OPTIONS, INSTALLER_OPTIONS } from '../utils/rateData';
+import { FINANCE_PROVIDERS, UTILITY_OPTIONS, NEM_OPTIONS, PROGRAM_OPTIONS, API_PROVIDERS, TOU_RATES, PPA_ESCALATOR_OPTIONS, INSTALLER_OPTIONS } from '../utils/rateData';
 import { calculateMonthlyPayment } from '../utils/loanCalculations';
 import { PANEL_MANUFACTURERS, INVERTER_MANUFACTURERS, BATTERY_MANUFACTURERS } from '../tech/equipmentData';
 import { BRANDING } from '../config/branding';
 import Tip from './Tip';
+
+// Blank input stays blank (so "—" placeholders survive) instead of becoming NaN.
+const numOrBlank = (v) => (v === '' || v === null || v === undefined ? '' : (Number.isFinite(parseFloat(v)) ? parseFloat(v) : ''));
 
 const InputSection = ({ 
   inputs, 
@@ -215,7 +218,7 @@ const InputSection = ({
             <label className="block text-sm text-cyan-300 mb-1">Year<Tip k="installYear" /></label>
             <select
               value={inputs.installedYear}
-              onChange={(e) => onInputChange('installedYear', parseInt(e.target.value))}
+              onChange={(e) => onInputChange('installedYear', numOrBlank(e.target.value))}
               className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
             >
               {yearOptions.map(year => (
@@ -227,7 +230,7 @@ const InputSection = ({
             <label className="block text-sm text-cyan-300 mb-1">Month<Tip k="installMonth" /></label>
             <select
               value={inputs.installedMonth}
-              onChange={(e) => onInputChange('installedMonth', parseInt(e.target.value))}
+              onChange={(e) => onInputChange('installedMonth', numOrBlank(e.target.value))}
               className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
             >
               {monthOptions.map(month => (
@@ -270,6 +273,7 @@ const InputSection = ({
               onChange={(e) => onInputChange('utility', e.target.value)}
               className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
             >
+              <option value="">— not set —</option>
               {UTILITY_OPTIONS.map(util => (
                 <option key={util.value} value={util.value}>{util.label}</option>
               ))}
@@ -302,8 +306,9 @@ const InputSection = ({
           <input
             type="number"
             step="0.1"
-            value={inputs.systemSize}
-            onChange={(e) => onInputChange('systemSize', parseFloat(e.target.value))}
+            value={inputs.systemSize ?? ''}
+            onChange={(e) => onInputChange('systemSize', numOrBlank(e.target.value))}
+            placeholder="—"
             className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
         </div>
@@ -311,8 +316,9 @@ const InputSection = ({
           <label className="block text-sm text-cyan-300 mb-1">Usage at Install (kWh/yr)<Tip k="usageAtInstall" /></label>
           <input
             type="number"
-            value={inputs.annualUsageAtInstall}
-            onChange={(e) => onInputChange('annualUsageAtInstall', parseInt(e.target.value))}
+            value={inputs.annualUsageAtInstall ?? ''}
+            onChange={(e) => onInputChange('annualUsageAtInstall', numOrBlank(e.target.value))}
+            placeholder="—"
             className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
         </div>
@@ -323,8 +329,9 @@ const InputSection = ({
           )}
           <input
             type="number"
-            value={inputs.currentAnnualUsage}
-            onChange={(e) => onInputChange('currentAnnualUsage', parseInt(e.target.value))}
+            value={inputs.currentAnnualUsage ?? ''}
+            onChange={(e) => onInputChange('currentAnnualUsage', numOrBlank(e.target.value))}
+            placeholder="—"
             className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
         </div>
@@ -342,8 +349,9 @@ const InputSection = ({
           <label className="block text-sm text-cyan-300 mb-1">INSTALLED Annual System Production (kWh/yr)<Tip k="annualProduction" /></label>
           <input
             type="number"
-            value={inputs.annualProduction}
-            onChange={(e) => onInputChange('annualProduction', parseInt(e.target.value))}
+            value={inputs.annualProduction ?? ''}
+            onChange={(e) => onInputChange('annualProduction', numOrBlank(e.target.value))}
+            placeholder="—"
             className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
           <div className="mt-1.5 flex items-center gap-2 flex-wrap">
@@ -381,6 +389,7 @@ const InputSection = ({
             onChange={(e) => onInputChange('nemVersion', e.target.value)}
             className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           >
+            <option value="">— not set —</option>
             {NEM_OPTIONS.map(nem => (
               <option key={nem.value} value={nem.value}>{nem.label}</option>
             ))}
@@ -470,14 +479,31 @@ const InputSection = ({
 
       {/* ============ SECTION: FINANCING ============ */}
       {renderSection('financing', '💳 Financing', financingSummary, (<>
+      {/* Finance Provider — who holds the paper */}
+      <div className="mb-4">
+        <label className="block text-sm text-cyan-300 mb-1">Finance Provider<Tip k="financeProvider" /></label>
+        <input
+          list="sh-finance-providers"
+          type="text"
+          value={inputs.financeProvider || ''}
+          onChange={(e) => onInputChange('financeProvider', e.target.value)}
+          placeholder="— pick or type —"
+          className="w-full md:w-1/2 px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
+        />
+        <datalist id="sh-finance-providers">
+          {FINANCE_PROVIDERS.map((f) => <option key={f} value={f} />)}
+        </datalist>
+      </div>
+
       {/* Solar Program Selection */}
       <div className="mb-6">
         <label className="block text-sm text-cyan-300 mb-2">Solar Program<Tip k="program" /></label>
         <select
-          value={inputs.program}
+          value={inputs.program || ''}
           onChange={(e) => onInputChange('program', e.target.value)}
           className="w-full md:w-1/2 px-4 py-3 border-2 border-cyan-400/50 rounded-lg bg-slate-900/60 text-cyan-300 text-sm font-medium"
         >
+          <option value="">— not set —</option>
           {PROGRAM_OPTIONS.map(prog => (
             <option key={prog.value} value={prog.value}>{prog.label}</option>
           ))}
@@ -508,7 +534,7 @@ const InputSection = ({
               <input
                 type="number"
                 value={inputs.ppaDownpayment}
-                onChange={(e) => onInputChange('ppaDownpayment', parseFloat(e.target.value))}
+                onChange={(e) => onInputChange('ppaDownpayment', numOrBlank(e.target.value))}
                 className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
                 placeholder="0"
               />
@@ -520,7 +546,7 @@ const InputSection = ({
                 type="number"
                 step="0.01"
                 value={inputs.ppaInitialRate}
-                onChange={(e) => onInputChange('ppaInitialRate', parseFloat(e.target.value))}
+                onChange={(e) => onInputChange('ppaInitialRate', numOrBlank(e.target.value))}
                 className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
               />
             </div>
@@ -552,7 +578,7 @@ const InputSection = ({
               <label className="block text-sm text-purple-200 mb-1">Escalator<Tip k="escalator" /></label>
               <select
                 value={inputs.escalator}
-                onChange={(e) => onInputChange('escalator', parseFloat(e.target.value))}
+                onChange={(e) => onInputChange('escalator', numOrBlank(e.target.value))}
                 className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
               >
                 {PPA_ESCALATOR_OPTIONS.map(opt => (
@@ -591,7 +617,7 @@ const InputSection = ({
               <label className="block text-sm text-purple-200 mb-1">Year Paid Off</label>
               <select
                 value={inputs.ppaPaidOffYear}
-                onChange={(e) => onInputChange('ppaPaidOffYear', parseInt(e.target.value))}
+                onChange={(e) => onInputChange('ppaPaidOffYear', numOrBlank(e.target.value))}
                 className="w-full md:w-64 px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
               >
                 {yearOptions.filter(y => y >= inputs.installedYear && y <= currentYear).map(year => (
@@ -632,7 +658,7 @@ const InputSection = ({
               <input
                 type="number"
                 value={inputs.loanPrincipal}
-                onChange={(e) => onInputChange('loanPrincipal', parseFloat(e.target.value))}
+                onChange={(e) => onInputChange('loanPrincipal', numOrBlank(e.target.value))}
                 className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-sm"
               />
             </div>
@@ -642,7 +668,7 @@ const InputSection = ({
                 type="number"
                 step="0.01"
                 value={inputs.loanInterestRate}
-                onChange={(e) => onInputChange('loanInterestRate', parseFloat(e.target.value))}
+                onChange={(e) => onInputChange('loanInterestRate', numOrBlank(e.target.value))}
                 className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-sm"
               />
             </div>
@@ -651,7 +677,7 @@ const InputSection = ({
               <input
                 type="number"
                 value={inputs.loanTerm}
-                onChange={(e) => onInputChange('loanTerm', parseInt(e.target.value))}
+                onChange={(e) => onInputChange('loanTerm', numOrBlank(e.target.value))}
                 className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-sm"
               />
             </div>
@@ -660,7 +686,7 @@ const InputSection = ({
               <input
                 type="number"
                 value={inputs.loanDownpayment}
-                onChange={(e) => onInputChange('loanDownpayment', parseFloat(e.target.value))}
+                onChange={(e) => onInputChange('loanDownpayment', numOrBlank(e.target.value))}
                 className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-sm"
                 placeholder="0"
               />
@@ -673,7 +699,7 @@ const InputSection = ({
               <input
                 type="number"
                 value={taxCredit}
-                onChange={(e) => onInputChange('taxCredit', parseFloat(e.target.value))}
+                onChange={(e) => onInputChange('taxCredit', numOrBlank(e.target.value))}
                 className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-sm"
                 placeholder={(inputs.loanPrincipal * 0.30).toFixed(2)}
               />
@@ -709,7 +735,7 @@ const InputSection = ({
               <label className="block text-sm text-green-200 mb-1">Year Paid Off</label>
               <select
                 value={inputs.loanPaidOffYear}
-                onChange={(e) => onInputChange('loanPaidOffYear', parseInt(e.target.value))}
+                onChange={(e) => onInputChange('loanPaidOffYear', numOrBlank(e.target.value))}
                 className="w-full md:w-64 px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-sm"
               >
                 {yearOptions.filter(y => y >= inputs.installedYear && y <= currentYear).map(year => (
@@ -795,8 +821,9 @@ const InputSection = ({
           <input
             type="number"
             step="0.01"
-            value={inputs.exportRate}
-            onChange={(e) => onInputChange('exportRate', parseFloat(e.target.value))}
+            value={inputs.exportRate ?? ''}
+            onChange={(e) => onInputChange('exportRate', numOrBlank(e.target.value))}
+            placeholder="—"
             className="w-full md:w-64 px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
           <p className="text-xs text-gray-400 mt-1">Typical range: $0.06 - $0.08/kWh | Connection fee: $12/month</p>
@@ -843,8 +870,9 @@ const InputSection = ({
               <input
                 type="number"
                 step="0.1"
-                value={inputs.batteryCapacity}
-                onChange={(e) => onInputChange('batteryCapacity', parseFloat(e.target.value))}
+                value={inputs.batteryCapacity ?? ''}
+                onChange={(e) => onInputChange('batteryCapacity', numOrBlank(e.target.value))}
+                placeholder="—"
                 className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
               />
             </div>
@@ -853,8 +881,8 @@ const InputSection = ({
               <label className="block text-sm text-purple-200 mb-1">Efficiency (%)<Tip k="batteryEfficiency" /></label>
               <input
                 type="number"
-                value={inputs.batteryEfficiency}
-                onChange={(e) => onInputChange('batteryEfficiency', parseFloat(e.target.value))}
+                value={inputs.batteryEfficiency ?? ''}
+                onChange={(e) => onInputChange('batteryEfficiency', numOrBlank(e.target.value))}
                 className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
                 min="70"
                 max="100"
@@ -866,7 +894,7 @@ const InputSection = ({
               <input
                 type="number"
                 value={inputs.batteryMonthlyPayment}
-                onChange={(e) => onInputChange('batteryMonthlyPayment', parseFloat(e.target.value))}
+                onChange={(e) => onInputChange('batteryMonthlyPayment', numOrBlank(e.target.value))}
                 className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
               />
             </div>
