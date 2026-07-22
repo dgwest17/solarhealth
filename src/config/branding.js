@@ -7,11 +7,11 @@
  * this from the database; keeping the shape stable now makes that a drop-in.
  */
 export const BRANDING = {
-  appName: 'SolarHealth',            // the product/app name (rename freely)
+  appName: 'ReCharge',            // the product/app name (rename freely)
   brandName: 'Your Energy Best',     // customer-facing brand
   legalName: 'Beacon Energies LLC',  // LLC for the fine print
-  phone: '',                         // shown in the report contact banner
-  email: '',
-  website: '',
+  phone: '303.941.9131',                         // shown in the report contact banner
+  email: 'dwest@yourenergybest.com',
+  website: 'yourenergybest.com',
   tagline: 'Keep this system earning for the next 20 years'
 };
