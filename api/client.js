@@ -86,7 +86,7 @@ export default async function handler(req, res) {
       `Annual_Usage_at_Install_kWh, Current_Annual_Usage_kWh, Utility_Provider, ` +
       `NEM_Version, Export_Rate, On_CARE_Program, Battery_Capacity_kWh, ` +
       `Monthly_Payment, Term, Escalator_or_Interest, Purchase_Type, ` +
-      `Contract_Value, Install_Date, PTO_Date, Project_Status, Opportunity_Type, ` +
+      `Contract_Value, Install_Date, PTO_Date, Project_Status, Opportunity_Type, Finance_Provider, Install_Company, ` +
       `Battery_Manufacturer, Inverter_Type, Number_of_Modules, Panel_Model ` +
       `from Solar_Projects where Contact = ${contactId}`;
 
@@ -103,28 +103,40 @@ export default async function handler(req, res) {
     }
 
     const primary = projects[0] || {};
-    const install = parseYearMonth(primary.Install_Date);
+    // Turn-on date: PTO is the truth; fall back to Install_Date when PTO is blank.
+    const install = parseYearMonth(primary.PTO_Date) || parseYearMonth(primary.Install_Date) || {};
+    const dateSource = primary.PTO_Date ? 'pto' : (primary.Install_Date ? 'install' : null);
 
     // Map into the audit engine input shape (mirrors DEFAULT_INPUTS keys)
+    // Empty in Zoho stays EMPTY here (null) — the tool shows "—" and the rep
+    // fills it in. Never invent a default that looks like real client data.
+    const orNull = (v) => {
+      if (v === null || v === undefined || v === '') return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
     const auditInputs = {
       projectStatus: primary.Project_Status || '',
       opportunityType: primary.Opportunity_Type || '',
-      installedYear: install.year || 2020,
-      installedMonth: install.month || 1,
-      utility: UTILITY_MAP[primary.Utility_Provider] || 'SCE',
-      systemSize: num(primary.System_Size_kW, 8.0),
-      annualUsageAtInstall: num(primary.Annual_Usage_at_Install_kWh, 10000),
-      currentAnnualUsage: num(primary.Current_Annual_Usage_kWh, 11500),
-      annualProduction: num(primary.Annual_System_Production, 12000),
-      program: PURCHASE_MAP[primary.Purchase_Type] || 'Loan',
-      nemVersion: NEM_MAP[primary.NEM_Version] || 'NEM2',
-      exportRate: num(primary.Export_Rate, 0.07),
+      financeProvider: primary.Finance_Provider || '',
+      installCompany: primary.Install_Company || '',
+      installedYear: install.year || null,
+      installedMonth: install.month || null,
+      installDateSource: dateSource,
+      utility: UTILITY_MAP[primary.Utility_Provider] || '',
+      systemSize: orNull(primary.System_Size_kW),
+      annualUsageAtInstall: orNull(primary.Annual_Usage_at_Install_kWh),
+      currentAnnualUsage: orNull(primary.Current_Annual_Usage_kWh),
+      annualProduction: orNull(primary.Annual_System_Production),
+      program: PURCHASE_MAP[primary.Purchase_Type] || '',
+      nemVersion: NEM_MAP[primary.NEM_Version] || '',
+      exportRate: orNull(primary.Export_Rate),
       onCareProgram: !!primary.On_CARE_Program,
-      hasBattery: num(primary.Battery_Capacity_kWh, 0) > 0,
-      batteryCapacity: num(primary.Battery_Capacity_kWh, 13.5),
-      monthlyPayment: num(primary.Monthly_Payment, 0),
-      loanInitialPayment: num(primary.Monthly_Payment, 150),
-      contractValue: num(primary.Contract_Value, 0)
+      hasBattery: (orNull(primary.Battery_Capacity_kWh) || 0) > 0,
+      batteryCapacity: orNull(primary.Battery_Capacity_kWh),
+      monthlyPayment: orNull(primary.Monthly_Payment),
+      loanInitialPayment: orNull(primary.Monthly_Payment),
+      contractValue: orNull(primary.Contract_Value)
     };
 
     // ---- Financial product round-trip (Zoho -> audit inputs) ----
