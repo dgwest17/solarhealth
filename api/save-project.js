@@ -49,10 +49,15 @@ function mapInputsToZoho(inputs) {
     out.Purchase_Type = inputs.program;
   }
   // Verified picklists (pulled live 2026-07-15)
-  const OK_STATUS = ['Pre-PTO', 'PTO-Approved', 'Abandoned', 'Cancelled/Lost', 'Battery Installed', 'HVAC Installed'];
+  const OK_STATUS = ['Pre-PTO', 'PTO-Approved', 'Service Client', 'Battery Installed', 'HVAC Installed', 'Abandoned', 'Cancelled/Lost'];
   const OK_OPP = ['New Solar Install', 'Solar Owner – Add Battery', 'Solar Owner – Audit / Review', 'Solar Owner – Service / Repair', 'Solar Owner – Under Service Plan', 'HVAC Only (future-proofing)', 'Other'];
   if (OK_STATUS.includes(inputs.projectStatus)) out.Project_Status = inputs.projectStatus;
   if (OK_OPP.includes(inputs.opportunityType)) out.Opportunity_Type = inputs.opportunityType;
+  // Finance Provider is a free-text field in Zoho — trim and cap at field length.
+  if (typeof inputs.financeProvider === 'string') {
+    const fp = inputs.financeProvider.trim().slice(0, 255);
+    if (fp) out.Finance_Provider = fp;
+  }
   {
     const term = int(inputs.loanTerm);
     const rate = num(inputs.loanInterestRate);
