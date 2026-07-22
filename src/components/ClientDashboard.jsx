@@ -173,7 +173,7 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
             title="Filter by project status"
           >
             <option value="all">Status: all</option>
-            {['Pre-PTO','PTO-Approved','Abandoned','Cancelled/Lost','Battery Installed','HVAC Installed'].map((v) => (
+            {['Pre-PTO', 'PTO-Approved', 'Service Client', 'Battery Installed', 'HVAC Installed', 'Abandoned', 'Cancelled/Lost'].map((v) => (
               <option key={v} value={v}>{v}</option>
             ))}
           </select>
