@@ -12,8 +12,8 @@ export const UTILITY_RATES = {
   },
   SDGE: {
     2010: 0.14, 2011: 0.15, 2012: 0.18, 2013: 0.19,
-    2014: 0.19, 2015: 0.20, 2016: 0.23, 2017: 0.235, 2018: 0.245,
-    2019: 0.25, 2020: 0.265, 2021: 0.340, 2022: 0.420, 2023: 0.440,
+    2014: 0.232, 2015: 0.235, 2016: 0.249, 2017: 0.265, 2018: 0.285,
+    2019: 0.315, 2020: 0.265, 2021: 0.340, 2022: 0.420, 2023: 0.440,
     2024: 0.450, 2025: 0.490, 2026: 0.51
   },
   SMUD: {
@@ -166,3 +166,11 @@ export const EV_TOU_PLANS = {
 export function getEvTouPlan(planId) {
   return EV_TOU_PLANS[planId] || null;
 }
+
+
+// Common CA solar finance providers (Zoho field is free text — type anything).
+export const FINANCE_PROVIDERS = [
+  'GoodLeap', 'Mosaic', 'Sunlight Financial', 'Dividend Finance', 'Sunnova',
+  'Sunrun', 'LightReach', 'EverBright', 'Service Finance', 'Solar Mosaic',
+  'Enfin', 'Aurora/SolarAPP', 'Cash — no financing', 'Other'
+];
