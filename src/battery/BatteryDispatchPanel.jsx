@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Battery, TrendingUp, AlertTriangle, Check } from 'lucide-react';
-import { compareBatteryScenarios, RATE_PLANS } from './BatteryDispatch';
+import { compareBatteryScenarios, compareHardwareOptions, BATTERY_CATALOG, RATE_PLANS } from './BatteryDispatch';
 
 const money = (v) => (v < 0 ? '-' : '') + '$' + Math.abs(Math.round(v)).toLocaleString();
 const signed = (v) => (v >= 0 ? '+' : '-') + '$' + Math.abs(Math.round(v)).toLocaleString();
@@ -11,12 +11,14 @@ const kwh = (v) => Math.round(v).toLocaleString();
  * client, and — just as important — what it cannot do.
  */
 const BatteryDispatchPanel = ({ inputs, calculations }) => {
-  const [capacity, setCapacity] = useState(inputs.batteryCapacity || 13.5);
+  const [batteryId, setBatteryId] = useState('pw3');
   const [units, setUnits] = useState(1);
+  const [showCompare, setShowCompare] = useState(false);
+  const hw = BATTERY_CATALOG[batteryId] || BATTERY_CATALOG.pw3;
 
   const production = Number(calculations?.currentDegradedProduction) || Number(inputs.annualProduction) || 0;
   const usage = Number(inputs.currentAnnualUsage) || 0;
-  const totalCapacity = capacity * units;
+  const totalCapacity = hw.usableKwh * units;
 
   const result = useMemo(() => {
     if (!production || !usage) return null;
@@ -26,10 +28,26 @@ const BatteryDispatchPanel = ({ inputs, calculations }) => {
       consumptionProfile: inputs.consumptionProfile || 'evening_heavy',
       nemVersion: inputs.nemVersion || 'NEM2',
       batteryCapacityKwh: totalCapacity,
+      roundTripEfficiency: hw.rte,
+      maxPowerKw: hw.continuousKw * units,
       onCareProgram: !!inputs.onCareProgram,
       currentPlanId: 'SDGE_TOU_DR1'
     });
-  }, [production, usage, inputs.consumptionProfile, inputs.nemVersion, inputs.onCareProgram, totalCapacity]);
+  }, [production, usage, inputs.consumptionProfile, inputs.nemVersion, inputs.onCareProgram, totalCapacity, hw, units]);
+
+  // Hardware ladder — only computed when the comparison is open.
+  const hardware = useMemo(() => {
+    if (!showCompare || !production || !usage) return null;
+    return compareHardwareOptions({
+      annualProductionKwh: production,
+      annualUsageKwh: usage,
+      consumptionProfile: inputs.consumptionProfile || 'evening_heavy',
+      nemVersion: inputs.nemVersion || 'NEM2',
+      onCareProgram: !!inputs.onCareProgram,
+      currentPlanId: 'SDGE_TOU_DR1',
+      maxUnits: 3
+    });
+  }, [showCompare, production, usage, inputs.consumptionProfile, inputs.nemVersion, inputs.onCareProgram]);
 
   if (!result) {
     return (
@@ -56,26 +74,34 @@ const BatteryDispatchPanel = ({ inputs, calculations }) => {
         <h3 className="text-lg font-bold text-purple-300 flex items-center gap-2">
           <Battery size={20} className="text-purple-400" /> Battery Economics — hour by hour
         </h3>
-        <div className="flex items-center gap-2 text-xs text-slate-400">
-          <span>Battery</span>
+        <div className="flex items-center gap-2 text-xs text-slate-400 flex-wrap">
           <select
-            value={capacity}
-            onChange={(e) => setCapacity(Number(e.target.value))}
+            value={batteryId}
+            onChange={(e) => setBatteryId(e.target.value)}
             className="px-2 py-1 rounded-lg bg-slate-900/70 border border-slate-600 text-slate-200"
           >
-            <option value={13.5}>Powerwall 3 · 13.5 kWh</option>
-            <option value={16}>Franklin aPower · 15 kWh</option>
-            <option value={10}>Enphase 10C · 10 kWh</option>
-            <option value={5}>Enphase 5P · 5 kWh</option>
+            {Object.values(BATTERY_CATALOG).map((b) => (
+              <option key={b.id} value={b.id}>{b.brand} {b.model} · {b.usableKwh} kWh</option>
+            ))}
           </select>
           <select
             value={units}
             onChange={(e) => setUnits(Number(e.target.value))}
             className="px-2 py-1 rounded-lg bg-slate-900/70 border border-slate-600 text-slate-200"
           >
-            {[1, 2, 3].map((n) => <option key={n} value={n}>×{n}</option>)}
+            {Array.from({ length: hw.maxUnits }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>×{n}</option>
+            ))}
           </select>
-          <span className="text-purple-300 font-semibold">= {totalCapacity} kWh</span>
+          <span className="text-purple-300 font-semibold">= {totalCapacity.toFixed(1)} kWh</span>
+          <span className="text-slate-500">· {(hw.continuousKw * units).toFixed(1)} kW · {(hw.rte * 100).toFixed(0)}% RTE · {hw.coupling}</span>
+          <button
+            type="button"
+            onClick={() => setShowCompare((v) => !v)}
+            className="px-2.5 py-1 rounded-lg border border-purple-400/50 text-purple-300 hover:bg-purple-900/30"
+          >
+            {showCompare ? 'Hide comparison' : 'Compare batteries'}
+          </button>
         </div>
       </div>
 
@@ -129,6 +155,60 @@ const BatteryDispatchPanel = ({ inputs, calculations }) => {
           </div>
         </div>
       </div>
+
+      {/* ---- hardware comparison ladder ---- */}
+      {hardware && (
+        <div className="rounded-xl p-4 border border-slate-700 bg-slate-900/40 overflow-x-auto">
+          <h4 className="text-sm font-bold text-purple-300 mb-1">Hardware comparison</h4>
+          <p className="text-[11px] text-slate-500 mb-3">
+            Same client, same rates — only the battery changes. <span className="text-amber-300">Marginal</span> is
+            what each <em>additional</em> unit adds; when it collapses toward zero the system has run out of
+            surplus solar and evening load to work with, and more storage stops paying.
+          </p>
+          <table className="w-full text-[11.5px]">
+            <thead>
+              <tr className="text-slate-400 border-b border-slate-700">
+                <th className="text-left py-1.5 pr-2 font-semibold">Battery</th>
+                <th className="text-right px-2 font-semibold">Units</th>
+                <th className="text-right px-2 font-semibold">kWh</th>
+                <th className="text-right px-2 font-semibold">Gain/yr</th>
+                <th className="text-right px-2 font-semibold">Marginal</th>
+                <th className="text-right px-2 font-semibold">Solar fill</th>
+                <th className="text-left pl-2 font-semibold">Verdict</th>
+              </tr>
+            </thead>
+            <tbody>
+              {hardware.options.map((o) =>
+                o.ladder.map((l, i) => {
+                  const saturated = l.units > 1 && l.marginalGain < 75;
+                  return (
+                    <tr key={o.battery.id + l.units} className={`border-b border-slate-800/70 ${i === 0 ? 'bg-slate-800/20' : ''}`}>
+                      <td className="py-1.5 pr-2 text-slate-200">
+                        {i === 0 ? <span className="font-semibold">{o.battery.brand} {o.battery.model}</span> : <span className="text-slate-600">↳</span>}
+                      </td>
+                      <td className="text-right px-2 text-slate-300">×{l.units}</td>
+                      <td className="text-right px-2 text-slate-400">{l.capacityKwh.toFixed(1)}</td>
+                      <td className="text-right px-2 font-semibold text-emerald-300">{signed(l.gain)}</td>
+                      <td className={`text-right px-2 font-semibold ${l.units === 1 ? 'text-slate-600' : saturated ? 'text-red-400' : 'text-amber-300'}`}>
+                        {l.units === 1 ? '—' : signed(l.marginalGain)}
+                      </td>
+                      <td className="text-right px-2 text-cyan-300/80">{l.solarFillPct.toFixed(0)}%</td>
+                      <td className="pl-2 text-slate-500">
+                        {saturated ? 'saturated — adds nothing' : l.units === 1 ? (l.bindingConstraint === 'solar' ? 'solar-limited' : 'capacity-limited') : 'still earning'}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+          <p className="text-[10.5px] text-amber-300/80 mt-2 leading-relaxed">
+            ⚠ Every option above plateaus at roughly the same annual figure. That plateau is set by this
+            home’s surplus solar and evening load — not by the badge on the battery. Once you hit it,
+            the next unit buys backup runtime, not savings.
+          </p>
+        </div>
+      )}
 
       {/* ---- the honest ceiling ---- */}
       <div className="rounded-xl p-4 border border-slate-700 bg-slate-900/40">
