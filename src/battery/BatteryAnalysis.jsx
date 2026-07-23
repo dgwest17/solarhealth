@@ -8,6 +8,7 @@ import BatteryEnergyLoss from './BatteryEnergyLoss';
 import BatteryExportInefficiencies from './BatteryExportInefficiencies';
 import BatteryRecovery from './BatteryRecovery';
 import BatteryStabilization from './BatteryStabilization';
+import BatteryDispatchPanel from './BatteryDispatchPanel';
 
 /**
  * Battery Analysis tab — four stacked sections:
@@ -19,7 +20,7 @@ import BatteryStabilization from './BatteryStabilization';
  * The overlay (built from the selected profile + the client's system data)
  * is computed once here and shared, so every section stays in sync.
  */
-const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null , consumptionProfile = null, onConsumptionProfileChange = null }) => {
+const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null , consumptionProfile = null, onConsumptionProfileChange = null, calculations = null }) => {
   const [profileKeyInternal, setProfileKeyInternal] = useState('evening_heavy');
   const profileKey = consumptionProfile || profileKeyInternal;
   const setProfileKey = (k) => { setProfileKeyInternal(k); if (onConsumptionProfileChange) onConsumptionProfileChange(k); };
@@ -187,6 +188,11 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
         arbitrageRecovered={arbitrageRecovered}
         totalRecoveredPerYear={totalRecoveredPerYear}
       />
+
+      {/* Hour-by-hour dispatch economics — the accurate version */}
+      <div className="mb-6">
+        <BatteryDispatchPanel inputs={inputs} calculations={calculations} />
+      </div>
 
       <BatteryStabilization
         recoveredValuePerYear={totalRecoveredPerYear}
