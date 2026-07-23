@@ -1,22 +1,33 @@
-// Historical utility rates ($/kWh) - Updated with correct current rates
+// Historical average residential utility rates ($/kWh), 2010 → 2026.
+//
+// 2010-2013 back-history lets NEM 1.0 clients (2010-2016 installs) get a full
+// savings picture instead of a truncated one. SDG&E 2010 = $0.136 is a known
+// figure; the other 2010-2013 values are estimates consistent with the 2014
+// anchors and CPUC/EIA-reported averages — adjust if you have better data.
+//
+// Installs older than 2010 clamp to the 2010 rate (conservative: understates
+// early savings rather than inventing them).
 export const UTILITY_RATES = {
   PGE: {
+    2010: 0.152, 2011: 0.157, 2012: 0.163, 2013: 0.176,
     2014: 0.189, 2015: 0.191, 2016: 0.199, 2017: 0.216, 2018: 0.229,
     2019: 0.245, 2020: 0.263, 2021: 0.285, 2022: 0.329, 2023: 0.375,
     2024: 0.420, 2025: 0.480, 2026: 0.495
   },
   SCE: {
+    2010: 0.145, 2011: 0.148, 2012: 0.155, 2013: 0.165,
     2014: 0.172, 2015: 0.171, 2016: 0.177, 2017: 0.188, 2018: 0.198,
     2019: 0.213, 2020: 0.226, 2021: 0.248, 2022: 0.284, 2023: 0.303,
     2024: 0.316, 2025: 0.314, 2026: 0.341
   },
   SDGE: {
-    2010: 0.14, 2011: 0.15, 2012: 0.18, 2013: 0.19,
+    2010: 0.136, 2011: 0.150, 2012: 0.180, 2013: 0.190,
     2014: 0.232, 2015: 0.235, 2016: 0.249, 2017: 0.265, 2018: 0.285,
     2019: 0.315, 2020: 0.265, 2021: 0.340, 2022: 0.420, 2023: 0.440,
     2024: 0.450, 2025: 0.490, 2026: 0.51
   },
   SMUD: {
+    2010: 0.099, 2011: 0.103, 2012: 0.107, 2013: 0.112,
     2014: 0.118, 2015: 0.121, 2016: 0.124, 2017: 0.128, 2018: 0.133,
     2019: 0.139, 2020: 0.146, 2021: 0.158, 2022: 0.178, 2023: 0.205,
     2024: 0.228, 2025: 0.245, 2026: 0.253
