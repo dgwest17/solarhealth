@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Battery, TrendingUp, AlertTriangle, Check } from 'lucide-react';
+import { Battery, TrendingUp, AlertTriangle, Check, SlidersHorizontal, RotateCcw } from 'lucide-react';
 import { compareBatteryScenarios, compareHardwareOptions, BATTERY_CATALOG, RATE_PLANS } from './BatteryDispatch';
 
 const money = (v) => (v < 0 ? '-' : '') + '$' + Math.abs(Math.round(v)).toLocaleString();
@@ -10,10 +10,29 @@ const kwh = (v) => Math.round(v).toLocaleString();
  * Hour-by-hour battery economics: what storage is actually worth for THIS
  * client, and — just as important — what it cannot do.
  */
-const BatteryDispatchPanel = ({ inputs, calculations }) => {
+const EMPTY_OV = () => ({
+  current: { summer: {}, winter: {}, sellSummer: {}, sellWinter: {} },
+  battery: { summer: {}, winter: {}, sellSummer: {}, sellWinter: {} }
+});
+
+const BatteryDispatchPanel = ({ inputs, calculations, rateOverride = null, onRateOverrideChange = null }) => {
   const [batteryId, setBatteryId] = useState('pw3');
   const [units, setUnits] = useState(1);
   const [showCompare, setShowCompare] = useState(false);
+  const [overrideOn, setOverrideOn] = useState(!!(rateOverride && rateOverride.enabled));
+  const [ov, setOv] = useState(() => (rateOverride && rateOverride.rates) || EMPTY_OV());
+
+  const pushOverride = (nextOn, nextRates) => {
+    if (onRateOverrideChange) onRateOverrideChange({ enabled: nextOn, rates: nextRates });
+  };
+  const setRate = (planKey, group, period, value) => {
+    const next = {
+      ...ov,
+      [planKey]: { ...ov[planKey], [group]: { ...ov[planKey][group], [period]: value } }
+    };
+    setOv(next);
+    pushOverride(overrideOn, next);
+  };
   const hw = BATTERY_CATALOG[batteryId] || BATTERY_CATALOG.pw3;
 
   const production = Number(calculations?.currentDegradedProduction) || Number(inputs.annualProduction) || 0;
@@ -31,9 +50,10 @@ const BatteryDispatchPanel = ({ inputs, calculations }) => {
       roundTripEfficiency: hw.rte,
       maxPowerKw: hw.continuousKw * units,
       onCareProgram: !!inputs.onCareProgram,
-      currentPlanId: 'SDGE_TOU_DR1'
+      currentPlanId: 'SDGE_TOU_DR1',
+      rateOverride: overrideOn ? ov : null
     });
-  }, [production, usage, inputs.consumptionProfile, inputs.nemVersion, inputs.onCareProgram, totalCapacity, hw, units]);
+  }, [production, usage, inputs.consumptionProfile, inputs.nemVersion, inputs.onCareProgram, totalCapacity, hw, units, overrideOn, ov]);
 
   // Hardware ladder — only computed when the comparison is open.
   const hardware = useMemo(() => {
@@ -45,9 +65,10 @@ const BatteryDispatchPanel = ({ inputs, calculations }) => {
       nemVersion: inputs.nemVersion || 'NEM2',
       onCareProgram: !!inputs.onCareProgram,
       currentPlanId: 'SDGE_TOU_DR1',
+      rateOverride: overrideOn ? ov : null,
       maxUnits: 3
     });
-  }, [showCompare, production, usage, inputs.consumptionProfile, inputs.nemVersion, inputs.onCareProgram]);
+  }, [showCompare, production, usage, inputs.consumptionProfile, inputs.nemVersion, inputs.onCareProgram, overrideOn, ov]);
 
   if (!result) {
     return (
@@ -102,8 +123,89 @@ const BatteryDispatchPanel = ({ inputs, calculations }) => {
           >
             {showCompare ? 'Hide comparison' : 'Compare batteries'}
           </button>
+          <button
+            type="button"
+            onClick={() => { const n = !overrideOn; setOverrideOn(n); pushOverride(n, ov); }}
+            className={`px-2.5 py-1 rounded-lg border flex items-center gap-1 ${overrideOn
+              ? 'border-amber-400 bg-amber-500/20 text-amber-200'
+              : 'border-slate-600 text-slate-400 hover:text-amber-300'}`}
+            title="Enter the client's exact buy and sell rates from their bill"
+          >
+            <SlidersHorizontal size={12} /> {overrideOn ? 'Using your rates' : 'Override rates'}
+          </button>
         </div>
       </div>
+
+      {/* ---- manual rate override ---- */}
+      {overrideOn && (() => {
+        const PERIODS = [['peak', 'On-peak 4–9pm'], ['offPeak', 'Off-peak'], ['superOffPeak', 'Super off-peak']];
+        const planCols = [
+          { key: 'current', label: `Current plan — ${RATE_PLANS.SDGE_TOU_DR1.label}`, base: RATE_PLANS.SDGE_TOU_DR1 },
+          { key: 'battery', label: 'Battery plan — EV-TOU-5', base: RATE_PLANS.SDGE_EVTOU5 }
+        ];
+        const cell = (planKey, group, period, base) => (
+          <input
+            type="number"
+            step="0.001"
+            value={ov[planKey][group][period] ?? ''}
+            onChange={(e) => setRate(planKey, group, period, e.target.value)}
+            placeholder={base.toFixed(3)}
+            className="w-16 px-1.5 py-1 text-[11px] rounded border border-slate-600 bg-slate-900/70 text-amber-200 text-right"
+          />
+        );
+        return (
+          <div className="rounded-xl p-4 border border-amber-400/40 bg-amber-900/10">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-bold text-amber-300">Your rates ($/kWh)</h4>
+              <button
+                type="button"
+                onClick={() => { const e = EMPTY_OV(); setOv(e); pushOverride(overrideOn, e); }}
+                className="text-[11px] text-slate-400 hover:text-amber-300 flex items-center gap-1"
+              >
+                <RotateCcw size={11} /> Clear all
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400 mb-3">
+              Blank fields use the published schedule (shown greyed as the placeholder). Fill in only what
+              you know from the client’s bill. <span className="text-amber-200">Sell</span> is the export
+              credit they actually receive — for NEM 1.0 that’s usually the same as buy; for NEM 2.0 it’s
+              a few cents lower.
+            </p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {planCols.map((col) => (
+                <div key={col.key} className="rounded-lg border border-slate-700 p-3">
+                  <div className="text-[11px] font-semibold text-slate-200 mb-2">{col.label}</div>
+                  <table className="w-full text-[10.5px]">
+                    <thead>
+                      <tr className="text-slate-500">
+                        <th className="text-left font-medium" />
+                        <th className="font-medium">Buy S</th>
+                        <th className="font-medium">Buy W</th>
+                        <th className="font-medium text-amber-300/80">Sell S</th>
+                        <th className="font-medium text-amber-300/80">Sell W</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {PERIODS.map(([pk, plabel]) => (
+                        <tr key={pk}>
+                          <td className="text-slate-400 py-1 pr-2 whitespace-nowrap">{plabel}</td>
+                          <td className="py-1 text-center">{cell(col.key, 'summer', pk, col.base.summer[pk])}</td>
+                          <td className="py-1 text-center">{cell(col.key, 'winter', pk, col.base.winter[pk])}</td>
+                          <td className="py-1 text-center">{cell(col.key, 'sellSummer', pk, col.base.summer[pk])}</td>
+                          <td className="py-1 text-center">{cell(col.key, 'sellWinter', pk, col.base.winter[pk])}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-500 mt-2">
+              S = summer (Jun–Oct) · W = winter (Nov–May). Every figure below recalculates as you type.
+            </p>
+          </div>
+        );
+      })()}
 
       {/* ---- three scenarios ---- */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -283,7 +385,7 @@ const BatteryDispatchPanel = ({ inputs, calculations }) => {
       <p className="text-[10px] text-slate-600 leading-relaxed">
         Modelled hour by hour across 12 months using this client’s production, usage, and consumption
         profile. Only solar-charged energy is credited as export (grid-charged kWh serve the home).
-        Rates are current SDG&amp;E schedules and move often — verify against the client’s bill.
+        {overrideOn ? 'Running on the rates you entered above.' : 'Rates are current SDG&E schedules and move often — use Override rates to enter the client\u2019s actual figures.'}
       </p>
     </div>
   );
