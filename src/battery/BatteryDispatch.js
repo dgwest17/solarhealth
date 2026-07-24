@@ -115,16 +115,18 @@ export const periodFor = (plan, hour) => {
  *   NEM 2.0 — retail minus non-bypassable charges.
  *   NEM 3.0 — avoided cost: pennies midday, meaningfully more in the evening.
  */
-export const exportRateFor = (plan, rates, hour, nemVersion, sellRates = null) => {
+export const exportRateFor = (plan, rates, hour, nemVersion, sellRates = null, exportBonus = 0) => {
   const period = periodFor(plan, hour);
   // Explicit override: the rep entered the client's actual export credits off
-  // their bill. Trust those over anything we would derive.
-  if (sellRates && Number.isFinite(sellRates[period])) return sellRates[period];
+  // their bill. Trust those over anything we would derive. The bonus (SDCP/
+  // SMUD community-program adder, $/kWh) stacks on top either way.
+  if (sellRates && Number.isFinite(sellRates[period])) return sellRates[period] + exportBonus;
   if (nemVersion === 'NEM3') {
-    return period === 'peak' ? NEM3_EXPORT_EVENING : NEM3_EXPORT_MIDDAY;
+    return (period === 'peak' ? NEM3_EXPORT_EVENING : NEM3_EXPORT_MIDDAY) + exportBonus;
   }
   const retail = rates[period];
-  return nemVersion === 'NEM2' ? Math.max(0, retail - NEM2_NBC) : retail;
+  const base = nemVersion === 'NEM2' ? Math.max(0, retail - NEM2_NBC) : retail;
+  return base + exportBonus;
 };
 
 /**
@@ -147,6 +149,7 @@ export const simulateDay = ({
   plan,
   rates,
   sellRates = null,
+  exportBonus = 0,
   nemVersion,
   batteryCapacityKwh = 0,
   roundTripEfficiency = 0.90,
@@ -192,7 +195,7 @@ export const simulateDay = ({
   for (let h = 0; h < 24; h++) {
     const period = periodFor(plan, h);
     const buy = rates[period];
-    const sell = exportRateFor(plan, rates, h, nemVersion, sellRates);
+    const sell = exportRateFor(plan, rates, h, nemVersion, sellRates, exportBonus);
     const solar = solarHourly[h];
     const load = loadHourly[h];
     const net = solar - load;
@@ -290,7 +293,8 @@ export const simulateYear = ({
   maxPowerKw = 5,
   allowGridCharging = false,
   reserveFraction = 0,
-  onCareProgram = false
+  onCareProgram = false,
+  exportBonus = 0
 }) => {
   const profile = CONSUMPTION_PROFILES[consumptionProfile] || CONSUMPTION_PROFILES.evening_heavy;
   const care = onCareProgram ? 0.70 : 1;
@@ -329,6 +333,7 @@ export const simulateYear = ({
       plan,
       rates,
       sellRates,
+      exportBonus,
       nemVersion,
       batteryCapacityKwh,
       roundTripEfficiency,
@@ -435,7 +440,8 @@ export const compareBatteryScenarios = ({
   currentPlanId = 'SDGE_TOU_DR1',
   onCareProgram = false,
   reserveFraction = 0,
-  rateOverride = null
+  rateOverride = null,
+  exportBonus = 0
 }) => {
   // Rate override: merge the rep's entered figures over the published plan.
   // Anything left blank falls back to the default schedule.
@@ -465,7 +471,7 @@ export const compareBatteryScenarios = ({
   const evPlan = applyOverride(RATE_PLANS.SDGE_EVTOU5, rateOverride && rateOverride.battery);
   const common = {
     annualProductionKwh, annualUsageKwh, consumptionProfile,
-    nemVersion, roundTripEfficiency, maxPowerKw, onCareProgram, reserveFraction
+    nemVersion, roundTripEfficiency, maxPowerKw, onCareProgram, reserveFraction, exportBonus
   };
 
   const today = simulateYear({ ...common, plan: currentPlan, batteryCapacityKwh: 0 });
@@ -678,4 +684,23 @@ export const compareHardwareOptions = ({
     options.push({ battery: b, ladder });
   }
   return { options };
+};
+
+
+/**
+ * ---------------------------------------------------------------------------
+ * EXPORT REBATE / COMMUNITY-PROGRAM ADDERS
+ * ---------------------------------------------------------------------------
+ * Some CCAs and munis pay ABOVE the utility's export rate for exported kWh —
+ * a flat $/kWh adder that stacks on top of NEM credits. It can flip a
+ * marginal battery into a clear win, especially paired with evening export.
+ *
+ * SDCP (San Diego Community Power) — verify current program terms.
+ * Amounts are EDITABLE and move with each program cycle.
+ */
+export const EXPORT_REBATE_PROGRAMS = {
+  none:  { id: 'none',  label: 'None', bonusPerKwh: 0 },
+  sdcp:  { id: 'sdcp',  label: 'SDCP — San Diego Community Power (+$0.10/kWh)', bonusPerKwh: 0.10 },
+  smud:  { id: 'smud',  label: 'SMUD storage/export incentive (+$0.05/kWh)', bonusPerKwh: 0.05 },
+  custom:{ id: 'custom', label: 'Custom adder…', bonusPerKwh: 0 }
 };
