@@ -115,8 +115,11 @@ export const periodFor = (plan, hour) => {
  *   NEM 2.0 — retail minus non-bypassable charges.
  *   NEM 3.0 — avoided cost: pennies midday, meaningfully more in the evening.
  */
-export const exportRateFor = (plan, rates, hour, nemVersion) => {
+export const exportRateFor = (plan, rates, hour, nemVersion, sellRates = null) => {
   const period = periodFor(plan, hour);
+  // Explicit override: the rep entered the client's actual export credits off
+  // their bill. Trust those over anything we would derive.
+  if (sellRates && Number.isFinite(sellRates[period])) return sellRates[period];
   if (nemVersion === 'NEM3') {
     return period === 'peak' ? NEM3_EXPORT_EVENING : NEM3_EXPORT_MIDDAY;
   }
@@ -143,6 +146,7 @@ export const simulateDay = ({
   usageShape,
   plan,
   rates,
+  sellRates = null,
   nemVersion,
   batteryCapacityKwh = 0,
   roundTripEfficiency = 0.90,
@@ -188,7 +192,7 @@ export const simulateDay = ({
   for (let h = 0; h < 24; h++) {
     const period = periodFor(plan, h);
     const buy = rates[period];
-    const sell = exportRateFor(plan, rates, h, nemVersion);
+    const sell = exportRateFor(plan, rates, h, nemVersion, sellRates);
     const solar = solarHourly[h];
     const load = loadHourly[h];
     const net = solar - load;
@@ -310,12 +314,21 @@ export const simulateYear = ({
     const dailyProduction = (annualProductionKwh * MONTHLY_SOLAR_SHAPE[m]) / days;
     const dailyUsage = (annualUsageKwh * MONTHLY_USAGE_SHAPE[m]) / days;
 
+    // Explicit sell rates (override mode) are seasonal, same shape as buy rates.
+    const rawSell = summer ? plan.sellSummer : plan.sellWinter;
+    const sellRates = rawSell ? {
+      peak: rawSell.peak * care,
+      offPeak: rawSell.offPeak * care,
+      superOffPeak: rawSell.superOffPeak * care
+    } : null;
+
     const day = simulateDay({
       dailyProductionKwh: dailyProduction,
       dailyUsageKwh: dailyUsage,
       usageShape: profile.hourly,
       plan,
       rates,
+      sellRates,
       nemVersion,
       batteryCapacityKwh,
       roundTripEfficiency,
@@ -421,10 +434,35 @@ export const compareBatteryScenarios = ({
   maxPowerKw = 5,
   currentPlanId = 'SDGE_TOU_DR1',
   onCareProgram = false,
-  reserveFraction = 0
+  reserveFraction = 0,
+  rateOverride = null
 }) => {
-  const currentPlan = RATE_PLANS[currentPlanId] || RATE_PLANS.SDGE_TOU_DR1;
-  const evPlan = RATE_PLANS.SDGE_EVTOU5;
+  // Rate override: merge the rep's entered figures over the published plan.
+  // Anything left blank falls back to the default schedule.
+  const applyOverride = (basePlan, ov) => {
+    if (!ov) return basePlan;
+    const merge = (base, patch) => {
+      if (!patch) return base;
+      const out = { ...base };
+      for (const k of ['peak', 'offPeak', 'superOffPeak']) {
+        const v = parseFloat(patch[k]);
+        if (Number.isFinite(v) && v > 0) out[k] = v;
+      }
+      return out;
+    };
+    const hasSell = (p) => p && ['peak', 'offPeak', 'superOffPeak']
+      .some((k) => Number.isFinite(parseFloat(p[k])) && parseFloat(p[k]) > 0);
+    return {
+      ...basePlan,
+      summer: merge(basePlan.summer, ov.summer),
+      winter: merge(basePlan.winter, ov.winter),
+      sellSummer: hasSell(ov.sellSummer) ? merge(basePlan.summer, ov.sellSummer) : undefined,
+      sellWinter: hasSell(ov.sellWinter) ? merge(basePlan.winter, ov.sellWinter) : undefined,
+      overridden: true
+    };
+  };
+  const currentPlan = applyOverride(RATE_PLANS[currentPlanId] || RATE_PLANS.SDGE_TOU_DR1, rateOverride && rateOverride.current);
+  const evPlan = applyOverride(RATE_PLANS.SDGE_EVTOU5, rateOverride && rateOverride.battery);
   const common = {
     annualProductionKwh, annualUsageKwh, consumptionProfile,
     nemVersion, roundTripEfficiency, maxPowerKw, onCareProgram, reserveFraction
