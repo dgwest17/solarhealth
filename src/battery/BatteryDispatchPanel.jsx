@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Battery, TrendingUp, AlertTriangle, Check, SlidersHorizontal, RotateCcw } from 'lucide-react';
-import { compareBatteryScenarios, compareHardwareOptions, BATTERY_CATALOG, RATE_PLANS } from './BatteryDispatch';
+import { Battery, TrendingUp, AlertTriangle, Check, SlidersHorizontal, RotateCcw, Gift, ExternalLink, Zap } from 'lucide-react';
+import { compareBatteryScenarios, compareHardwareOptions, BATTERY_CATALOG, RATE_PLANS, EXPORT_REBATE_PROGRAMS } from './BatteryDispatch';
 
 const money = (v) => (v < 0 ? '-' : '') + '$' + Math.abs(Math.round(v)).toLocaleString();
 const signed = (v) => (v >= 0 ? '+' : '-') + '$' + Math.abs(Math.round(v)).toLocaleString();
@@ -15,7 +15,7 @@ const EMPTY_OV = () => ({
   battery: { summer: {}, winter: {}, sellSummer: {}, sellWinter: {} }
 });
 
-const BatteryDispatchPanel = ({ inputs, calculations, rateOverride = null, onRateOverrideChange = null }) => {
+const BatteryDispatchPanel = ({ inputs, calculations, extraUsage = null, rateOverride = null, onRateOverrideChange = null }) => {
   const [batteryId, setBatteryId] = useState('pw3');
   const [units, setUnits] = useState(1);
   const [showCompare, setShowCompare] = useState(false);
@@ -34,9 +34,17 @@ const BatteryDispatchPanel = ({ inputs, calculations, rateOverride = null, onRat
     pushOverride(overrideOn, next);
   };
   const hw = BATTERY_CATALOG[batteryId] || BATTERY_CATALOG.pw3;
+  const [rebateId, setRebateId] = useState('none');
+  const [customBonus, setCustomBonus] = useState('');
+  const rebate = EXPORT_REBATE_PROGRAMS[rebateId] || EXPORT_REBATE_PROGRAMS.none;
+  const exportBonus = rebateId === 'custom' ? (parseFloat(customBonus) || 0) : rebate.bonusPerKwh;
 
   const production = Number(calculations?.currentDegradedProduction) || Number(inputs.annualProduction) || 0;
-  const usage = Number(inputs.currentAnnualUsage) || 0;
+  // Fold in anything modeled in the Load Simulator (planned EV, hot tub, etc.)
+  // so the battery is sized against the home's FUTURE load, not just today's.
+  const addedKwh = Number(extraUsage?.addedKwh) || 0;
+  const baseUsage = Number(inputs.currentAnnualUsage) || 0;
+  const usage = baseUsage + addedKwh;
   const totalCapacity = hw.usableKwh * units;
 
   const result = useMemo(() => {
@@ -51,9 +59,10 @@ const BatteryDispatchPanel = ({ inputs, calculations, rateOverride = null, onRat
       maxPowerKw: hw.continuousKw * units,
       onCareProgram: !!inputs.onCareProgram,
       currentPlanId: 'SDGE_TOU_DR1',
-      rateOverride: overrideOn ? ov : null
+      rateOverride: overrideOn ? ov : null,
+      exportBonus
     });
-  }, [production, usage, inputs.consumptionProfile, inputs.nemVersion, inputs.onCareProgram, totalCapacity, hw, units, overrideOn, ov]);
+  }, [production, usage, inputs.consumptionProfile, inputs.nemVersion, inputs.onCareProgram, totalCapacity, hw, units, overrideOn, ov, exportBonus]);
 
   // Hardware ladder — only computed when the comparison is open.
   const hardware = useMemo(() => {
@@ -66,9 +75,10 @@ const BatteryDispatchPanel = ({ inputs, calculations, rateOverride = null, onRat
       onCareProgram: !!inputs.onCareProgram,
       currentPlanId: 'SDGE_TOU_DR1',
       rateOverride: overrideOn ? ov : null,
+      exportBonus,
       maxUnits: 3
     });
-  }, [showCompare, production, usage, inputs.consumptionProfile, inputs.nemVersion, inputs.onCareProgram, overrideOn, ov]);
+  }, [showCompare, production, usage, inputs.consumptionProfile, inputs.nemVersion, inputs.onCareProgram, overrideOn, ov, exportBonus]);
 
   if (!result) {
     return (
@@ -133,8 +143,37 @@ const BatteryDispatchPanel = ({ inputs, calculations, rateOverride = null, onRat
           >
             <SlidersHorizontal size={12} /> {overrideOn ? 'Using your rates' : 'Override rates'}
           </button>
+          <span className="flex items-center gap-1 text-slate-500"><Gift size={12} className="text-emerald-400" />
+            <select
+              value={rebateId}
+              onChange={(e) => setRebateId(e.target.value)}
+              className="px-2 py-1 rounded-lg bg-slate-900/70 border border-slate-600 text-slate-200"
+              title="Community-program export adder (SDCP, SMUD)"
+            >
+              {Object.values(EXPORT_REBATE_PROGRAMS).map((r) => (
+                <option key={r.id} value={r.id}>{r.label}</option>
+              ))}
+            </select>
+            {rebateId === 'custom' && (
+              <input type="number" step="0.01" value={customBonus} onChange={(e) => setCustomBonus(e.target.value)}
+                placeholder="$/kWh" className="w-16 px-1.5 py-1 rounded border border-slate-600 bg-slate-900/70 text-emerald-300" />
+            )}
+          </span>
         </div>
       </div>
+
+      {addedKwh > 0 && (
+        <div className="rounded-lg px-3 py-2 border border-cyan-500/30 bg-cyan-900/15 text-[11px] text-cyan-200 flex items-center gap-2">
+          <Zap size={13} className="text-cyan-400" />
+          Modeling {Math.round(baseUsage).toLocaleString()} + <span className="font-semibold">{Math.round(addedKwh).toLocaleString()} kWh</span> of planned new load from the Load Simulator = {Math.round(usage).toLocaleString()} kWh/yr. The battery is sized against this future usage.
+        </div>
+      )}
+      {exportBonus > 0 && (
+        <div className="rounded-lg px-3 py-2 border border-emerald-500/30 bg-emerald-900/15 text-[11px] text-emerald-200 flex items-center gap-2">
+          <Gift size={13} className="text-emerald-400" />
+          {rebate.id === 'custom' ? 'Custom' : rebate.label.split(' —')[0]} export adder of <span className="font-semibold">+${exportBonus.toFixed(2)}/kWh</span> applied to every exported kWh — this stacks on top of their NEM credits.
+        </div>
+      )}
 
       {/* ---- manual rate override ---- */}
       {overrideOn && (() => {
@@ -387,6 +426,10 @@ const BatteryDispatchPanel = ({ inputs, calculations, rateOverride = null, onRat
         profile. Only solar-charged energy is credited as export (grid-charged kWh serve the home).
         {overrideOn ? 'Running on the rates you entered above.' : 'Rates are current SDG&E schedules and move often — use Override rates to enter the client\u2019s actual figures.'}
       </p>
+      <a href="https://battery.gokinobi.com/" target="_blank" rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 mt-2 text-xs font-semibold text-purple-300 hover:text-purple-200 underline underline-offset-2">
+        Explore battery options & financing at Kinobi <ExternalLink size={12} />
+      </a>
     </div>
   );
 };
