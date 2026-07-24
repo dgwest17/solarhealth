@@ -1,10 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 /**
  * Sci-fi "the night is getting hungrier" graphic: nighttime demand climbing
  * year over year while dispatchable supply shrinks — the gap is the danger
  * zone a battery steps into. Pure SVG, glows, no dependencies.
  */
+// Editable — add reporting on grid strain, blackouts, reliability here.
+export const GRID_RESOURCE_LINKS = [
+  { title: 'America\u2019s Biggest Utility Sees Blackouts Ahead', source: 'OilPrice.com',
+    url: 'https://oilprice.com/Energy/Energy-General/Americas-Biggest-Utility-Sees-Blackouts-Ahead.html' },
+  { title: 'DOE Report: Evaluating U.S. Grid Reliability and Security', source: 'U.S. Dept. of Energy',
+    url: 'https://www.energy.gov/articles/department-energy-releases-report-evaluating-us-grid-reliability-and-security' }
+];
+
 const GridFutureGraphic = () => {
   const W = 640, H = 300;
   // demand curve rises, supply curve falls, crossing mid-chart
@@ -80,6 +88,32 @@ const GridFutureGraphic = () => {
         that gap</span>: it stores your midday solar and discharges into the most expensive hours, recovering the value the grid
         squeeze takes — and the worse the squeeze gets, the more your battery is worth.
       </p>
+      <GridResourceLinks />
+    </div>
+  );
+};
+
+const GridResourceLinks = () => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-xs font-semibold text-cyan-300 hover:text-cyan-200 underline underline-offset-2"
+      >
+        {open ? 'Hide the evidence' : 'See the evidence — grid reliability reporting'}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 rounded-xl border border-cyan-500/25 bg-[#060b18] p-3">
+          {GRID_RESOURCE_LINKS.map((l) => (
+            <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer" className="block group">
+              <div className="text-[13px] font-semibold text-cyan-200 group-hover:text-cyan-100 leading-snug">{l.title} ↗</div>
+              <div className="text-[11px] text-slate-500">{l.source}</div>
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
