@@ -20,7 +20,7 @@ import BatteryDispatchPanel from './BatteryDispatchPanel';
  * The overlay (built from the selected profile + the client's system data)
  * is computed once here and shared, so every section stays in sync.
  */
-const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null , consumptionProfile = null, onConsumptionProfileChange = null, calculations = null }) => {
+const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null , consumptionProfile = null, onConsumptionProfileChange = null, calculations = null, rateOverride = null, onRateOverrideChange = null }) => {
   const [profileKeyInternal, setProfileKeyInternal] = useState('evening_heavy');
   const profileKey = consumptionProfile || profileKeyInternal;
   const setProfileKey = (k) => { setProfileKeyInternal(k); if (onConsumptionProfileChange) onConsumptionProfileChange(k); };
@@ -191,7 +191,7 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
 
       {/* Hour-by-hour dispatch economics — the accurate version */}
       <div className="mb-6">
-        <BatteryDispatchPanel inputs={inputs} calculations={calculations} />
+        <BatteryDispatchPanel inputs={inputs} calculations={calculations} rateOverride={rateOverride} onRateOverrideChange={onRateOverrideChange} />
       </div>
 
       <BatteryStabilization
