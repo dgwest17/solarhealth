@@ -191,7 +191,7 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
 
       {/* Hour-by-hour dispatch economics — the accurate version */}
       <div className="mb-6">
-        <BatteryDispatchPanel inputs={inputs} calculations={calculations} rateOverride={rateOverride} onRateOverrideChange={onRateOverrideChange} />
+        <BatteryDispatchPanel inputs={inputs} calculations={calculations} extraUsage={extraUsage} rateOverride={rateOverride} onRateOverrideChange={onRateOverrideChange} />
       </div>
 
       <BatteryStabilization
