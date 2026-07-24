@@ -54,6 +54,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
   // line on the audit + battery tabs. Baselines/profile stay static.
   const [extraUsage, setExtraUsage] = useState({ addedKwh: 0, billableKwh: 0, cost: 0, daytimePct: 0 });
   const [simLoads, setSimLoads] = useState(null);
+  const [batteryRateOverride, setBatteryRateOverride] = useState(null);
   const simLoadsTimer = React.useRef(null);
 
   // Green Button measured profile. STATIC once applied — the authoritative
@@ -72,6 +73,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         const data = await apiFetch(`/api/gb-profile?contactId=${encodeURIComponent(clientContext.contactId)}`);
         if (data.settings && data.settings.ratePlan) setRatePlan(data.settings.ratePlan);
         if (data.settings && data.settings.simLoads) setSimLoads(data.settings.simLoads);
+        if (data.settings && data.settings.batteryRateOverride) setBatteryRateOverride(data.settings.batteryRateOverride);
         if (data.settings && data.settings.consumptionProfile) {
           setInputs((prev) => ({ ...prev, consumptionProfile: data.settings.consumptionProfile }));
         }
@@ -99,6 +101,16 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         body: JSON.stringify({ contactId: clientContext.contactId, settings: { simLoads: loads } })
       }).catch(() => {});
     }, 1200);
+  };
+
+  const persistBatteryRateOverride = (payload) => {
+    setBatteryRateOverride(payload);
+    if (clientContext && clientContext.contactId) {
+      apiFetch('/api/gb-profile', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId: clientContext.contactId, settings: { batteryRateOverride: payload } })
+      }).catch(() => {});
+    }
   };
 
   const persistConsumptionProfile = (key) => {
@@ -269,7 +281,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         {/* BATTERY ANALYSIS TAB */}
         {activeTab === 'battery' && (
           <div className="print:hidden">
-            <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} extraUsage={extraUsage} measured={gbApplied ? gbProfile : null} calculations={calculations} />
+            <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} extraUsage={extraUsage} measured={gbApplied ? gbProfile : null} calculations={calculations} rateOverride={batteryRateOverride} onRateOverrideChange={persistBatteryRateOverride} />
           </div>
         )}
 
