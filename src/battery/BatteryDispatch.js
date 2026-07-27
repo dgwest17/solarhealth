@@ -115,18 +115,17 @@ export const periodFor = (plan, hour) => {
  *   NEM 2.0 — retail minus non-bypassable charges.
  *   NEM 3.0 — avoided cost: pennies midday, meaningfully more in the evening.
  */
-export const exportRateFor = (plan, rates, hour, nemVersion, sellRates = null, exportBonus = 0) => {
+export const exportRateFor = (plan, rates, hour, nemVersion, sellRates = null) => {
   const period = periodFor(plan, hour);
   // Explicit override: the rep entered the client's actual export credits off
   // their bill. Trust those over anything we would derive. The bonus (SDCP/
   // SMUD community-program adder, $/kWh) stacks on top either way.
-  if (sellRates && Number.isFinite(sellRates[period])) return sellRates[period] + exportBonus;
+  if (sellRates && Number.isFinite(sellRates[period])) return sellRates[period];
   if (nemVersion === 'NEM3') {
-    return (period === 'peak' ? NEM3_EXPORT_EVENING : NEM3_EXPORT_MIDDAY) + exportBonus;
+    return period === 'peak' ? NEM3_EXPORT_EVENING : NEM3_EXPORT_MIDDAY;
   }
   const retail = rates[period];
-  const base = nemVersion === 'NEM2' ? Math.max(0, retail - NEM2_NBC) : retail;
-  return base + exportBonus;
+  return nemVersion === 'NEM2' ? Math.max(0, retail - NEM2_NBC) : retail;
 };
 
 /**
@@ -149,7 +148,6 @@ export const simulateDay = ({
   plan,
   rates,
   sellRates = null,
-  exportBonus = 0,
   nemVersion,
   batteryCapacityKwh = 0,
   roundTripEfficiency = 0.90,
@@ -189,13 +187,14 @@ export const simulateDay = ({
     gridToBattery: 0,
     directSelfUse: 0,
     curtailedBySoc: 0,
-    unservedPeakLoad: 0
+    unservedPeakLoad: 0,
+    peakBatteryDischarge: 0
   };
 
   for (let h = 0; h < 24; h++) {
     const period = periodFor(plan, h);
     const buy = rates[period];
-    const sell = exportRateFor(plan, rates, h, nemVersion, sellRates, exportBonus);
+    const sell = exportRateFor(plan, rates, h, nemVersion, sellRates);
     const solar = solarHourly[h];
     const load = loadHourly[h];
     const net = solar - load;
@@ -234,6 +233,7 @@ export const simulateDay = ({
           socGrid -= fromGrid / legEff;
           socSolar -= (discharge - fromGrid) / legEff;
           out.batteryToLoad += discharge;
+          out.peakBatteryDischarge += discharge; // peak-window battery -> home
           throughput += discharge;
           deficit -= discharge;
         }
@@ -269,6 +269,7 @@ export const simulateDay = ({
       if (ex > 0) {
         socSolar -= ex / legEff;
         out.batteryToGrid += ex;
+        out.peakBatteryDischarge += ex; // peak-window battery -> grid
         out.exportByPeriod[period] += ex;
         out.exportCredit += ex * sell;
         throughput += ex;
@@ -294,7 +295,7 @@ export const simulateYear = ({
   allowGridCharging = false,
   reserveFraction = 0,
   onCareProgram = false,
-  exportBonus = 0
+  incentive = null  // { perKwh, weekdayOnly, upfront } — e.g. SDCP dispatch program
 }) => {
   const profile = CONSUMPTION_PROFILES[consumptionProfile] || CONSUMPTION_PROFILES.evening_heavy;
   const care = onCareProgram ? 0.70 : 1;
@@ -303,7 +304,7 @@ export const simulateYear = ({
   const total = {
     importKwh: 0, exportKwh: 0, peakImportKwh: 0, importCost: 0, exportCredit: 0,
     batteryToLoad: 0, batteryToGrid: 0, solarToBattery: 0, gridToBattery: 0,
-    curtailedBySoc: 0, unservedPeakLoad: 0, peakExportKwh: 0
+    curtailedBySoc: 0, unservedPeakLoad: 0, peakExportKwh: 0, peakBatteryDischarge: 0
   };
 
   for (let m = 0; m < 12; m++) {
@@ -333,7 +334,6 @@ export const simulateYear = ({
       plan,
       rates,
       sellRates,
-      exportBonus,
       nemVersion,
       batteryCapacityKwh,
       roundTripEfficiency,
@@ -358,6 +358,7 @@ export const simulateYear = ({
       peakImportKwh: day.importByPeriod.peak * days,
       exportKwh: exportKwh * days,
       peakExportKwh: day.exportByPeriod.peak * days,
+      peakBatteryDischarge: day.peakBatteryDischarge * days,
       importCost: day.importCost * days,
       exportCredit: day.exportCredit * days,
       batteryToLoad: day.batteryToLoad * days,
@@ -388,6 +389,21 @@ export const simulateYear = ({
     total.curtailedBySoc += monthRow.curtailedBySoc;
     total.unservedPeakLoad += monthRow.unservedPeakLoad;
     total.peakExportKwh += monthRow.peakExportKwh;
+    total.peakBatteryDischarge += monthRow.peakBatteryDischarge;
+  }
+
+  // ---- Performance incentive (SDCP-style dispatch program) ----
+  // Paid on battery energy DISCHARGED during weekday 4-9pm events — to home OR
+  // grid — NOT on solar exports. Weekdays are ~5/7 of days, so only that share
+  // of the modelled peak discharge is event-eligible. This stacks on top of
+  // whatever the kWh already earned (avoided peak purchase or export credit).
+  const WEEKDAY_FRACTION = 5 / 7;
+  let performanceIncentive = 0;
+  let eligibleDischargeKwh = 0;
+  if (incentive && incentive.perKwh > 0) {
+    const eligibleDays = incentive.weekdayOnly === false ? 1 : WEEKDAY_FRACTION;
+    eligibleDischargeKwh = total.peakBatteryDischarge * eligibleDays;
+    performanceIncentive = eligibleDischargeKwh * incentive.perKwh;
   }
 
   // ---- Annual settlement ----
@@ -402,7 +418,7 @@ export const simulateYear = ({
   } else {
     connectionFees = CONNECTION_FEE_YEAR;
   }
-  const netPosition = energyNet - connectionFees - planFees;
+  const netPosition = energyNet - connectionFees - planFees + performanceIncentive;
 
   return {
     months,
@@ -413,6 +429,9 @@ export const simulateYear = ({
     energyNet,
     connectionFees,
     planFees,
+    performanceIncentive,
+    eligibleDischargeKwh,
+    upfrontIncentive: incentive && incentive.upfront ? incentive.upfront : 0,
     netPurchaseKwh: total.importKwh - total.exportKwh, // the real energy gap
     netPosition,                                   // + = credit check, - = true-up
     trueUp: netPosition < 0 ? -netPosition : 0,
@@ -441,7 +460,7 @@ export const compareBatteryScenarios = ({
   onCareProgram = false,
   reserveFraction = 0,
   rateOverride = null,
-  exportBonus = 0
+  incentive = null
 }) => {
   // Rate override: merge the rep's entered figures over the published plan.
   // Anything left blank falls back to the default schedule.
@@ -471,7 +490,7 @@ export const compareBatteryScenarios = ({
   const evPlan = applyOverride(RATE_PLANS.SDGE_EVTOU5, rateOverride && rateOverride.battery);
   const common = {
     annualProductionKwh, annualUsageKwh, consumptionProfile,
-    nemVersion, roundTripEfficiency, maxPowerKw, onCareProgram, reserveFraction, exportBonus
+    nemVersion, roundTripEfficiency, maxPowerKw, onCareProgram, reserveFraction, incentive
   };
 
   const today = simulateYear({ ...common, plan: currentPlan, batteryCapacityKwh: 0 });
@@ -663,7 +682,17 @@ export const compareHardwareOptions = ({
     let prevGain = 0;
     const cap = Math.min(maxUnits, b.maxUnits);
     for (let u = 1; u <= cap; u++) {
-      const r = evaluateHardware({ batteryId: id, units: u, ...client });
+      // Rebuild the incentive for THIS rung's capacity so the upfront rebate
+      // and per-kWh eligibility track the actual pack size at each unit count.
+      const rungClient = { ...client };
+      if (client.incentive && client.incentive.programId && client.incentive.programId !== 'none') {
+        rungClient.incentive = buildIncentive(client.incentive.programId, {
+          capacityKwh: b.usableKwh * u,
+          addOn: client.incentive.addOn !== false,
+          perKwhOverride: client.incentive.perKwh
+        });
+      }
+      const r = evaluateHardware({ batteryId: id, units: u, ...rungClient });
       if (!r) continue;
       const gain = r.recommendation.gain;
       ladder.push({
@@ -699,8 +728,53 @@ export const compareHardwareOptions = ({
  * Amounts are EDITABLE and move with each program cycle.
  */
 export const EXPORT_REBATE_PROGRAMS = {
-  none:  { id: 'none',  label: 'None', bonusPerKwh: 0 },
-  sdcp:  { id: 'sdcp',  label: 'SDCP — San Diego Community Power (+$0.10/kWh)', bonusPerKwh: 0.10 },
-  smud:  { id: 'smud',  label: 'SMUD storage/export incentive (+$0.05/kWh)', bonusPerKwh: 0.05 },
-  custom:{ id: 'custom', label: 'Custom adder…', bonusPerKwh: 0 }
+  none: { id: 'none', label: 'None', perKwh: 0, weekdayOnly: true, upfrontPerKwh: 0, upfrontCap: 0 },
+  sdcp: {
+    id: 'sdcp',
+    label: 'SDCP Solar Battery Savings (San Diego Community Power)',
+    // Performance incentive: $0.10 per kWh DISCHARGED from the battery during
+    // WEEKDAY 4-9pm dispatch events — to the home or the grid. Not a solar-
+    // export adder. Verified against SDCP program materials (2025 cycle).
+    perKwh: 0.10,
+    weekdayOnly: true,
+    // Upfront rebate: $350/kWh usable for NEW solar+battery, $250/kWh when
+    // ADDING a battery to existing solar. $10,000 cap. 5-year enrollment.
+    upfrontPerKwhNew: 350,
+    upfrontPerKwhAddOn: 250,
+    upfrontCap: 10000,
+    enrollmentYears: 5,
+    note: 'Weekday 4-9pm battery-discharge events only. Upfront rebate requires 5-yr enrollment.'
+  },
+  smud: {
+    id: 'smud',
+    label: 'SMUD storage/export incentive',
+    perKwh: 0.05, weekdayOnly: true, upfrontPerKwhNew: 0, upfrontPerKwhAddOn: 0, upfrontCap: 0,
+    note: 'Representative — verify current SMUD program terms.'
+  },
+  custom: {
+    id: 'custom', label: 'Custom dispatch incentive…',
+    perKwh: 0, weekdayOnly: true, upfrontPerKwhNew: 0, upfrontPerKwhAddOn: 0, upfrontCap: 0
+  }
+};
+
+/**
+ * Build the `incentive` object a program implies for a given battery + install
+ * type, respecting the upfront $ cap. addOn = adding storage to existing solar.
+ */
+export const buildIncentive = (programId, { capacityKwh = 0, perKwhOverride = null, addOn = true } = {}) => {
+  const prog = EXPORT_REBATE_PROGRAMS[programId] || EXPORT_REBATE_PROGRAMS.none;
+  const perKwh = perKwhOverride != null ? perKwhOverride : prog.perKwh;
+  const upfrontRate = addOn ? (prog.upfrontPerKwhAddOn || 0) : (prog.upfrontPerKwhNew || 0);
+  const upfront = prog.upfrontCap
+    ? Math.min(prog.upfrontCap, upfrontRate * capacityKwh)
+    : upfrontRate * capacityKwh;
+  return {
+    programId: prog.id,
+    perKwh,
+    weekdayOnly: prog.weekdayOnly !== false,
+    upfront,
+    addOn,
+    enrollmentYears: prog.enrollmentYears || 0,
+    note: prog.note || ''
+  };
 };
