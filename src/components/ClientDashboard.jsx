@@ -10,7 +10,7 @@ import ContactFormModal from './ContactFormModal';
  * Client Dashboard — pulls the caller's clients from /api/clients (role-scoped
  * server-side), then sorts/filters client-side. Clicking a client calls onOpen.
  */
-const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = false, onRole }) => {
+const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = false, onRole, onLoaded }) => {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -32,6 +32,7 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
       const data = await apiFetch('/api/clients');
       setClients(data.clients || []);
       if (onRole && data.role) onRole(data.role);
+      if (onLoaded) onLoaded(data.clients || [], data.role);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -258,12 +259,18 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
             {clients.length === 0 ? (
               <>
                 <p className="text-slate-300 mb-1">
-                  {role === 'rep' ? "You haven't created any clients yet." : 'No clients found in Zoho yet.'}
+                  {role === 'client'
+                    ? "We couldn't find your system yet."
+                    : role === 'rep'
+                      ? "You haven't created any clients yet."
+                      : 'No clients found in Zoho yet.'}
                 </p>
                 <p className="text-sm">
-                  {role === 'rep'
-                    ? 'Use “Create Client” to add your first one — it’ll show up here under your name. Try the Sandbox tab to explore the tools meanwhile.'
-                    : "Once you add Contacts in Zoho, they'll appear here. Use the Sandbox tab to explore the tools meanwhile."}
+                  {role === 'client'
+                    ? 'If you recently went solar with us, your records may still be syncing. Reach out to your rep and we’ll get it connected.'
+                    : role === 'rep'
+                      ? 'Use “Create Client” to add your first one — it’ll show up here under your name. Try the Sandbox tab to explore the tools meanwhile.'
+                      : "Once you add Contacts in Zoho, they'll appear here. Use the Sandbox tab to explore the tools meanwhile."}
                 </p>
               </>
             ) : trueUpOnly ? (
