@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Battery, TrendingUp, AlertTriangle, Check, SlidersHorizontal, RotateCcw, Gift, ExternalLink, Zap } from 'lucide-react';
-import { compareBatteryScenarios, compareHardwareOptions, BATTERY_CATALOG, RATE_PLANS, EXPORT_REBATE_PROGRAMS } from './BatteryDispatch';
+import { compareBatteryScenarios, compareHardwareOptions, BATTERY_CATALOG, RATE_PLANS, EXPORT_REBATE_PROGRAMS, buildIncentive } from './BatteryDispatch';
 
 const money = (v) => (v < 0 ? '-' : '') + '$' + Math.abs(Math.round(v)).toLocaleString();
 const signed = (v) => (v >= 0 ? '+' : '-') + '$' + Math.abs(Math.round(v)).toLocaleString();
@@ -36,8 +36,10 @@ const BatteryDispatchPanel = ({ inputs, calculations, extraUsage = null, rateOve
   const hw = BATTERY_CATALOG[batteryId] || BATTERY_CATALOG.pw3;
   const [rebateId, setRebateId] = useState('none');
   const [customBonus, setCustomBonus] = useState('');
+  // Add-on = adding storage to existing solar (the common audit case) → $250/kWh
+  // upfront. New solar+battery installs get $350/kWh. Affects the upfront rebate.
+  const [installType, setInstallType] = useState('addOn');
   const rebate = EXPORT_REBATE_PROGRAMS[rebateId] || EXPORT_REBATE_PROGRAMS.none;
-  const exportBonus = rebateId === 'custom' ? (parseFloat(customBonus) || 0) : rebate.bonusPerKwh;
 
   const production = Number(calculations?.currentDegradedProduction) || Number(inputs.annualProduction) || 0;
   // Fold in anything modeled in the Load Simulator (planned EV, hot tub, etc.)
@@ -46,6 +48,15 @@ const BatteryDispatchPanel = ({ inputs, calculations, extraUsage = null, rateOve
   const baseUsage = Number(inputs.currentAnnualUsage) || 0;
   const usage = baseUsage + addedKwh;
   const totalCapacity = hw.usableKwh * units;
+
+  const incentive = useMemo(() => {
+    if (rebateId === 'none') return null;
+    return buildIncentive(rebateId, {
+      capacityKwh: totalCapacity,
+      addOn: installType === 'addOn',
+      perKwhOverride: rebateId === 'custom' ? (parseFloat(customBonus) || 0) : null
+    });
+  }, [rebateId, totalCapacity, installType, customBonus]);
 
   const result = useMemo(() => {
     if (!production || !usage) return null;
@@ -60,9 +71,9 @@ const BatteryDispatchPanel = ({ inputs, calculations, extraUsage = null, rateOve
       onCareProgram: !!inputs.onCareProgram,
       currentPlanId: 'SDGE_TOU_DR1',
       rateOverride: overrideOn ? ov : null,
-      exportBonus
+      incentive
     });
-  }, [production, usage, inputs.consumptionProfile, inputs.nemVersion, inputs.onCareProgram, totalCapacity, hw, units, overrideOn, ov, exportBonus]);
+  }, [production, usage, inputs.consumptionProfile, inputs.nemVersion, inputs.onCareProgram, totalCapacity, hw, units, overrideOn, ov, incentive]);
 
   // Hardware ladder — only computed when the comparison is open.
   const hardware = useMemo(() => {
@@ -75,10 +86,10 @@ const BatteryDispatchPanel = ({ inputs, calculations, extraUsage = null, rateOve
       onCareProgram: !!inputs.onCareProgram,
       currentPlanId: 'SDGE_TOU_DR1',
       rateOverride: overrideOn ? ov : null,
-      exportBonus,
+      incentive,
       maxUnits: 3
     });
-  }, [showCompare, production, usage, inputs.consumptionProfile, inputs.nemVersion, inputs.onCareProgram, overrideOn, ov, exportBonus]);
+  }, [showCompare, production, usage, inputs.consumptionProfile, inputs.nemVersion, inputs.onCareProgram, overrideOn, ov, incentive]);
 
   if (!result) {
     return (
@@ -148,7 +159,7 @@ const BatteryDispatchPanel = ({ inputs, calculations, extraUsage = null, rateOve
               value={rebateId}
               onChange={(e) => setRebateId(e.target.value)}
               className="px-2 py-1 rounded-lg bg-slate-900/70 border border-slate-600 text-slate-200"
-              title="Community-program export adder (SDCP, SMUD)"
+              title="Battery dispatch incentive program (SDCP, SMUD)"
             >
               {Object.values(EXPORT_REBATE_PROGRAMS).map((r) => (
                 <option key={r.id} value={r.id}>{r.label}</option>
@@ -157,6 +168,17 @@ const BatteryDispatchPanel = ({ inputs, calculations, extraUsage = null, rateOve
             {rebateId === 'custom' && (
               <input type="number" step="0.01" value={customBonus} onChange={(e) => setCustomBonus(e.target.value)}
                 placeholder="$/kWh" className="w-16 px-1.5 py-1 rounded border border-slate-600 bg-slate-900/70 text-emerald-300" />
+            )}
+            {rebateId !== 'none' && (
+              <select
+                value={installType}
+                onChange={(e) => setInstallType(e.target.value)}
+                className="px-2 py-1 rounded-lg bg-slate-900/70 border border-slate-600 text-slate-200"
+                title="New solar+battery vs. adding a battery to existing solar (sets the upfront rebate rate)"
+              >
+                <option value="addOn">Adding to existing solar</option>
+                <option value="new">New solar + battery</option>
+              </select>
             )}
           </span>
         </div>
@@ -168,10 +190,28 @@ const BatteryDispatchPanel = ({ inputs, calculations, extraUsage = null, rateOve
           Modeling {Math.round(baseUsage).toLocaleString()} + <span className="font-semibold">{Math.round(addedKwh).toLocaleString()} kWh</span> of planned new load from the Load Simulator = {Math.round(usage).toLocaleString()} kWh/yr. The battery is sized against this future usage.
         </div>
       )}
-      {exportBonus > 0 && (
-        <div className="rounded-lg px-3 py-2 border border-emerald-500/30 bg-emerald-900/15 text-[11px] text-emerald-200 flex items-center gap-2">
-          <Gift size={13} className="text-emerald-400" />
-          {rebate.id === 'custom' ? 'Custom' : rebate.label.split(' —')[0]} export adder of <span className="font-semibold">+${exportBonus.toFixed(2)}/kWh</span> applied to every exported kWh — this stacks on top of their NEM credits.
+      {incentive && incentive.perKwh > 0 && (
+        <div className="rounded-lg px-3 py-2 border border-emerald-500/30 bg-emerald-900/15 text-[11px] text-emerald-200 space-y-1">
+          <div className="flex items-center gap-2">
+            <Gift size={13} className="text-emerald-400 shrink-0" />
+            <span>
+              <span className="font-semibold">{rebate.id === 'custom' ? 'Custom program' : rebate.label.split(' (')[0]}:</span> +${incentive.perKwh.toFixed(2)}/kWh
+              on battery energy discharged during <span className="font-semibold">weekday 4–9pm</span> events (to home or grid).
+              {' '}Performance incentive this year: <span className="font-semibold text-emerald-300">
+                +${Math.round(result.withBatteryEvTou.performanceIncentive).toLocaleString()}</span>
+              {' '}on {Math.round(result.withBatteryEvTou.eligibleDischargeKwh).toLocaleString()} eligible kWh.
+            </span>
+          </div>
+          {incentive.upfront > 0 && (
+            <div className="flex items-center gap-2 text-emerald-300/90">
+              <span className="w-[13px] shrink-0" />
+              <span>
+                Plus a one-time upfront rebate of <span className="font-semibold">${Math.round(incentive.upfront).toLocaleString()}</span>
+                {' '}({installType === 'addOn' ? '$250/kWh, adding to existing solar' : '$350/kWh, new install'}
+                {incentive.enrollmentYears ? ` · ${incentive.enrollmentYears}-yr enrollment required` : ''}).
+              </span>
+            </div>
+          )}
         </div>
       )}
 
