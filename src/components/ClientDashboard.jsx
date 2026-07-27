@@ -107,7 +107,7 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
               <div>
                 <h1 className="text-2xl font-bold text-amber-300">Client Monitoring</h1>
                 <p className="text-slate-400 text-sm">
-                  {role === 'admin' ? 'All clients' : role === 'rep' ? 'Your test client (more coming soon)' : 'Your clients'} · {clients.length} total
+                  {role === 'admin' ? 'All clients' : role === 'rep' ? 'Your clients' : 'Your clients'} · {clients.length} total
                 </p>
               </div>
             </div>
@@ -257,8 +257,14 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
           <div className="text-center py-20 text-slate-500">
             {clients.length === 0 ? (
               <>
-                <p className="text-slate-300 mb-1">No clients found in Zoho yet.</p>
-                <p className="text-sm">Once you add Contacts in Zoho, they'll appear here. Use the Sandbox tab to explore the tools meanwhile.</p>
+                <p className="text-slate-300 mb-1">
+                  {role === 'rep' ? "You haven't created any clients yet." : 'No clients found in Zoho yet.'}
+                </p>
+                <p className="text-sm">
+                  {role === 'rep'
+                    ? 'Use “Create Client” to add your first one — it’ll show up here under your name. Try the Sandbox tab to explore the tools meanwhile.'
+                    : "Once you add Contacts in Zoho, they'll appear here. Use the Sandbox tab to explore the tools meanwhile."}
+                </p>
               </>
             ) : trueUpOnly ? (
               'No clients currently owe a true-up.'
