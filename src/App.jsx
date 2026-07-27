@@ -49,6 +49,17 @@ export default function App() {
     setClientError('');
   };
 
+  // A client owns exactly one record — open it directly instead of showing a
+  // one-row list. Guarded so "Back" doesn't immediately re-open it (a client
+  // can still land on their own dashboard row if they navigate back).
+  const [autoOpened, setAutoOpened] = useState(false);
+  const handleDashboardLoaded = useCallback((list, loadedRole) => {
+    if (loadedRole === 'client' && !autoOpened && list && list.length === 1) {
+      setAutoOpened(true);
+      openClient(list[0].id);
+    }
+  }, [autoOpened, openClient]);
+
   const signOut = async () => {
     if (supabase) await supabase.auth.signOut();
     backToDashboard();
@@ -113,15 +124,28 @@ export default function App() {
     }
     if (clientData) {
       const label = clientData.contact?.fullName || clientData.contact?.email || '';
+      const isClientView = role === 'client';
       return (
         <div>
-          <div className="bg-[#0a1628] px-6 pt-4">
-            <button
-              onClick={backToDashboard}
-              className="inline-flex items-center gap-2 text-sm text-amber-300 hover:text-amber-200 print:hidden"
-            >
-              <ArrowLeft size={16} /> Back to all clients
-            </button>
+          <div className="bg-[#0a1628] px-6 pt-4 flex items-center justify-between print:hidden">
+            {isClientView ? (
+              <>
+                <span className="text-amber-300 font-bold text-sm tracking-wide">Your Energy Best</span>
+                <button
+                  onClick={signOut}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800/60 border border-slate-600 text-slate-300 text-sm hover:text-amber-300"
+                >
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={backToDashboard}
+                className="inline-flex items-center gap-2 text-sm text-amber-300 hover:text-amber-200"
+              >
+                <ArrowLeft size={16} /> Back to all clients
+              </button>
+            )}
           </div>
           <SolarCalculator
             prefilledInputs={clientData.auditInputs}
@@ -144,7 +168,7 @@ export default function App() {
   if (view === 'sandbox') {
     return (
       <div>
-        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} />
+        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} />
         <SolarCalculator onOpenClient={openClient} canSaveClient={role === 'admin' || role === 'rep'} />
       </div>
     );
@@ -153,13 +177,14 @@ export default function App() {
   // ---- Authenticated: dashboard ----
   return (
     <div>
-      <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} />
+      <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} />
       <ClientDashboard
         onOpen={openClient}
         userEmail={user.email}
         role={role}
         onSignOut={signOut}
         onRole={setRole}
+        onLoaded={handleDashboardLoaded}
         hideHeader
       />
     </div>
@@ -170,30 +195,37 @@ export default function App() {
  * Top navigation bar: switch between the Clients dashboard and the
  * standalone Sandbox (audit + battery tools with no client data).
  */
-function NavBar({ view, setView, userEmail, onSignOut }) {
+function NavBar({ view, setView, userEmail, onSignOut, role }) {
+  const isStaff = role === 'admin' || role === 'rep';
   return (
     <div className="bg-[#0a1628] border-b border-amber-400/20 px-6 py-3 flex items-center justify-between print:hidden">
       <div className="flex items-center gap-2">
-        <button
-          onClick={() => setView('clients')}
-          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-            view === 'clients'
-              ? 'bg-amber-400 text-[#0a1628]'
-              : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
-          }`}
-        >
-          Clients
-        </button>
-        <button
-          onClick={() => setView('sandbox')}
-          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
-            view === 'sandbox'
-              ? 'bg-amber-400 text-[#0a1628]'
-              : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
-          }`}
-        >
-          <FlaskConical size={15} /> Sandbox
-        </button>
+        {isStaff ? (
+          <>
+            <button
+              onClick={() => setView('clients')}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                view === 'clients'
+                  ? 'bg-amber-400 text-[#0a1628]'
+                  : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
+              }`}
+            >
+              Clients
+            </button>
+            <button
+              onClick={() => setView('sandbox')}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
+                view === 'sandbox'
+                  ? 'bg-amber-400 text-[#0a1628]'
+                  : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
+              }`}
+            >
+              <FlaskConical size={15} /> Sandbox
+            </button>
+          </>
+        ) : (
+          <span className="text-amber-300 font-bold text-sm tracking-wide">Your Energy Best</span>
+        )}
       </div>
       <div className="flex items-center gap-3">
         <span className="text-xs text-slate-400 hidden sm:block">{userEmail}</span>
