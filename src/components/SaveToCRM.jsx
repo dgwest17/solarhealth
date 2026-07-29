@@ -11,6 +11,10 @@ import { apiFetch } from '../lib/supabaseClient';
 const WRITABLE_KEYS = [
   'systemSize', 'annualProduction', 'annualUsageAtInstall', 'currentAnnualUsage',
   'utility', 'nemVersion', 'exportRate', 'onCareProgram', 'hasBattery', 'batteryCapacity',
+  // install/turn-on date
+  'installedYear', 'installedMonth',
+  // equipment
+  'installCompany', 'panelModel', 'batteryManufacturer', 'inverterType', 'numberOfModules',
   // financial product
   'program', 'loanPrincipal', 'loanTerm', 'loanInterestRate', 'escalator', 'cashGrossCost',
   'projectStatus', 'opportunityType', 'financeProvider'
