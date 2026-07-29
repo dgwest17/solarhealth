@@ -21,7 +21,8 @@ const InputSection = ({
   isUpdating,
   ratePlan = 'standard',
   onRatePlanChange = null,
-  gbApplied = false
+  gbApplied = false,
+  systemLocked = false
 }) => {
   // Generate year options (1999 to current year)
   const currentYear = new Date().getFullYear();
@@ -124,6 +125,17 @@ const InputSection = ({
 
   return (
     <div className="bg-slate-800/60 backdrop-blur-md border border-cyan-500/30 rounded-xl shadow-2xl p-5 md:p-6 mb-6">
+      {systemLocked && (
+        <div className="mb-4 rounded-lg px-4 py-2.5 bg-slate-900/60 border border-cyan-500/25 text-[12px] text-cyan-200/90 flex items-center gap-2">
+          <span className="text-cyan-400">🔒</span>
+          <span>
+            These are your system’s details on record. They’re locked here — but the
+            <span className="text-cyan-300 font-semibold"> Load Simulator</span> and
+            <span className="text-cyan-300 font-semibold"> Battery</span> tools below are yours to explore freely.
+            Something look off? Contact your rep and we’ll update it.
+          </span>
+        </div>
+      )}
       <div className="flex justify-between items-start mb-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 mb-1 flex items-center gap-2">
@@ -219,6 +231,8 @@ const InputSection = ({
             <select
               value={inputs.installedYear}
               onChange={(e) => onInputChange('installedYear', numOrBlank(e.target.value))}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
               className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
             >
               {yearOptions.map(year => (
@@ -231,6 +245,8 @@ const InputSection = ({
             <select
               value={inputs.installedMonth}
               onChange={(e) => onInputChange('installedMonth', numOrBlank(e.target.value))}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
               className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
             >
               {monthOptions.map(month => (
@@ -271,6 +287,8 @@ const InputSection = ({
             <select
               value={inputs.utility}
               onChange={(e) => onInputChange('utility', e.target.value)}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
               className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
             >
               <option value="">— not set —</option>
@@ -285,6 +303,8 @@ const InputSection = ({
                 type="checkbox"
                 checked={inputs.onCareProgram}
                 onChange={(e) => onInputChange('onCareProgram', e.target.checked)}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
                 className="w-4 h-4 accent-green-400"
               />
               <span className="text-sm text-cyan-300">CARE Program (30% discount)</span>
@@ -308,6 +328,8 @@ const InputSection = ({
             step="0.1"
             value={inputs.systemSize ?? ''}
             onChange={(e) => onInputChange('systemSize', numOrBlank(e.target.value))}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
             placeholder="—"
             className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
@@ -318,6 +340,8 @@ const InputSection = ({
             type="number"
             value={inputs.annualUsageAtInstall ?? ''}
             onChange={(e) => onInputChange('annualUsageAtInstall', numOrBlank(e.target.value))}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
             placeholder="—"
             className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
@@ -331,6 +355,8 @@ const InputSection = ({
             type="number"
             value={inputs.currentAnnualUsage ?? ''}
             onChange={(e) => onInputChange('currentAnnualUsage', numOrBlank(e.target.value))}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
             placeholder="—"
             className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
@@ -351,6 +377,8 @@ const InputSection = ({
             type="number"
             value={inputs.annualProduction ?? ''}
             onChange={(e) => onInputChange('annualProduction', numOrBlank(e.target.value))}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
             placeholder="—"
             className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
@@ -387,6 +415,8 @@ const InputSection = ({
           <select
             value={inputs.nemVersion}
             onChange={(e) => onInputChange('nemVersion', e.target.value)}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
             className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           >
             <option value="">— not set —</option>
@@ -466,6 +496,8 @@ const InputSection = ({
           <select
             value={inputs.batteryManufacturer || ''}
             onChange={(e) => onInputChange('batteryManufacturer', e.target.value)}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
             className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300"
           >
             <option value="">Select…</option>
@@ -487,6 +519,8 @@ const InputSection = ({
           type="text"
           value={inputs.financeProvider || ''}
           onChange={(e) => onInputChange('financeProvider', e.target.value)}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
           placeholder="— pick or type —"
           className="w-full md:w-1/2 px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
         />
@@ -501,6 +535,8 @@ const InputSection = ({
         <select
           value={inputs.program || ''}
           onChange={(e) => onInputChange('program', e.target.value)}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
           className="w-full md:w-1/2 px-4 py-3 border-2 border-cyan-400/50 rounded-lg bg-slate-900/60 text-cyan-300 text-sm font-medium"
         >
           <option value="">— not set —</option>
@@ -547,6 +583,8 @@ const InputSection = ({
                 step="0.01"
                 value={inputs.ppaInitialRate}
                 onChange={(e) => onInputChange('ppaInitialRate', numOrBlank(e.target.value))}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
                 className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
               />
             </div>
@@ -579,6 +617,8 @@ const InputSection = ({
               <select
                 value={inputs.escalator}
                 onChange={(e) => onInputChange('escalator', numOrBlank(e.target.value))}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
                 className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
               >
                 {PPA_ESCALATOR_OPTIONS.map(opt => (
@@ -659,6 +699,8 @@ const InputSection = ({
                 type="number"
                 value={inputs.loanPrincipal}
                 onChange={(e) => onInputChange('loanPrincipal', numOrBlank(e.target.value))}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
                 className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-sm"
               />
             </div>
@@ -669,6 +711,8 @@ const InputSection = ({
                 step="0.01"
                 value={inputs.loanInterestRate}
                 onChange={(e) => onInputChange('loanInterestRate', numOrBlank(e.target.value))}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
                 className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-sm"
               />
             </div>
@@ -678,6 +722,8 @@ const InputSection = ({
                 type="number"
                 value={inputs.loanTerm}
                 onChange={(e) => onInputChange('loanTerm', numOrBlank(e.target.value))}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
                 className="w-full px-2.5 py-1.5 border border-green-400/30 rounded-lg bg-slate-900/60 text-green-300 text-sm"
               />
             </div>
@@ -823,6 +869,8 @@ const InputSection = ({
             step="0.01"
             value={inputs.exportRate ?? ''}
             onChange={(e) => onInputChange('exportRate', numOrBlank(e.target.value))}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
             placeholder="—"
             className="w-full md:w-64 px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
@@ -837,6 +885,8 @@ const InputSection = ({
             type="checkbox"
             checked={inputs.hasBattery}
             onChange={(e) => onInputChange('hasBattery', e.target.checked)}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
             className="w-4 h-4 accent-cyan-400"
           />
           <span className="text-sm text-cyan-300">🔋 Battery system present?</span>
@@ -872,6 +922,8 @@ const InputSection = ({
                 step="0.1"
                 value={inputs.batteryCapacity ?? ''}
                 onChange={(e) => onInputChange('batteryCapacity', numOrBlank(e.target.value))}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
                 placeholder="—"
                 className="w-full px-2.5 py-1.5 border border-purple-400/30 rounded-lg bg-slate-900/60 text-purple-300 text-sm"
               />
