@@ -11,12 +11,10 @@
  *   - Field whitelist: only the mapped audit fields below can ever be
  *     written. Anything else in the payload is ignored.
  *
- * Deliberately NOT written in v1:
- *   - Install_Date: the audit only knows year+month; writing a reconstructed
- *     day would corrupt the real install date.
- *   - Purchase_Type / Monthly_Payment / contract fields: picklist values not
- *     yet verified against your Zoho; writing unverified picklists can error
- *     or pollute the picklist. Add after confirming values.
+ * Install_Date is written as YYYY-MM-01 (year+month only; day is always 01
+ * so a session reload can't lose the install year). Equipment picklists
+ * (Battery_Manufacturer, Inverter_Type) are matched against Zoho's accepted
+ * values before writing so an unknown value never errors the whole update.
  */
 import { zohoFetch } from './_zoho.js';
 import { requireUser, sendError } from './_auth.js';
@@ -42,6 +40,44 @@ function mapInputsToZoho(inputs) {
     const cap = num(inputs.batteryCapacity);
     if (cap != null) out.Battery_Capacity_kWh = cap;
   }
+
+  // ---- Install/turn-on date (THE revert bug) ----
+  // The audit only knows year + month. Reconstruct a stable YYYY-MM-01 so the
+  // year survives a session reload. Never write a fabricated day-of-month.
+  // We write Install_Date (not PTO_Date) — client.js prefers PTO, falls back to
+  // Install_Date, so this fills the fallback without clobbering a real PTO date.
+  const iy = int(inputs.installedYear);
+  const im = int(inputs.installedMonth);
+  if (iy != null && iy >= 2000 && iy <= 2100) {
+    const mm = (im != null && im >= 1 && im <= 12) ? im : 1;
+    out.Install_Date = `${iy}-${String(mm).padStart(2, '0')}-01`;
+  }
+
+  // ---- Equipment (all verified writable in Zoho 2026-07) ----
+  // Installer + panel model are free text.
+  if (typeof inputs.installCompany === 'string') {
+    const v = inputs.installCompany.trim().slice(0, 255);
+    if (v) out.Install_Company = v;
+  }
+  if (typeof inputs.panelModel === 'string') {
+    const v = inputs.panelModel.trim().slice(0, 255);
+    if (v) out.Panel_Model = v;
+  }
+  // Battery manufacturer + inverter are RESTRICTED picklists — only write a
+  // value Zoho already accepts, or the update errors. Case-normalized to match.
+  const BATTERY_MAKERS = ['Tesla', 'Franklin', 'Enphase', 'Solaredge', 'Generac', 'Other', 'NONE'];
+  const INVERTER_TYPES = ['Enphase', 'Solaredge', 'Tesla', 'Solark', 'Sunpower', 'SMA', 'Other'];
+  const matchPick = (val, list) => {
+    if (typeof val !== 'string' || !val.trim()) return null;
+    const hit = list.find((o) => o.toLowerCase() === val.trim().toLowerCase());
+    return hit || null;
+  };
+  const bm = matchPick(inputs.batteryManufacturer, BATTERY_MAKERS);
+  if (bm) out.Battery_Manufacturer = bm;
+  const iv = matchPick(inputs.inverterType, INVERTER_TYPES);
+  if (iv) out.Inverter_Type = iv;
+  const nm = int(inputs.numberOfModules);
+  if (nm != null && nm > 0) out.Number_of_Modules = nm;
 
   // ---- Financial product (verified writable in Zoho 2026-07) ----
   // Purchase_Type is an unrestricted picklist; only known programs written.
