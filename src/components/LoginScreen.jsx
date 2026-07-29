@@ -15,6 +15,7 @@ const LoginScreen = () => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [unverified, setUnverified] = useState(false);
 
   const handleLogin = async () => {
     setError('');
@@ -30,7 +31,29 @@ const LoginScreen = () => {
     setBusy(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
-    if (error) setError(error.message);
+    if (error) {
+      // Supabase returns this when the account exists but the email link was
+      // never clicked. Surface a resend action instead of a dead-end error.
+      if (/email not confirmed/i.test(error.message)) {
+        setUnverified(true);
+        setError('Please verify your email first. Check your inbox for the confirmation link.');
+      } else {
+        setUnverified(false);
+        setError(error.message);
+      }
+    }
+  };
+
+  const resendConfirmation = async () => {
+    setError(''); setNotice('');
+    if (!email) { setError('Enter your email above first.'); return; }
+    const { error: err } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: window.location.origin }
+    });
+    if (err) setError(err.message);
+    else setNotice(`Confirmation link re-sent to ${email} — check your inbox (and spam).`);
   };
 
   const handleKeyDown = (e) => {
@@ -64,7 +87,18 @@ const LoginScreen = () => {
           {error && (
             <div className="mb-4 bg-red-900/30 border border-red-400/40 rounded-lg p-3 flex items-start gap-2">
               <AlertCircle size={16} className="text-red-400 mt-0.5 shrink-0" />
-              <span className="text-sm text-red-200">{error}</span>
+              <div className="text-sm text-red-200">
+                {error}
+                {unverified && (
+                  <button
+                    type="button"
+                    onClick={resendConfirmation}
+                    className="block mt-2 text-amber-300 hover:text-amber-200 underline underline-offset-2 font-semibold"
+                  >
+                    Resend confirmation email
+                  </button>
+                )}
+              </div>
             </div>
           )}
           {notice && (
