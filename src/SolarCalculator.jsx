@@ -429,6 +429,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
           ratePlan={ratePlan}
           onRatePlanChange={persistRatePlan}
           gbApplied={gbApplied}
+          systemLocked={clientContext && clientContext.viewerRole === 'client'}
         />
 
         {/* Green Button measured data — upload + apply */}
