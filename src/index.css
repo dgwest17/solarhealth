@@ -95,3 +95,13 @@
     margin-bottom: 0.75rem !important;
   }
 }
+
+/* Locked system-of-record fields (client view): visibly greyed + non-interactive */
+[data-locked="true"] {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+  filter: grayscale(0.3);
+}
+[data-locked="true"]:hover {
+  opacity: 0.55;
+}
