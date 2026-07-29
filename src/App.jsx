@@ -154,6 +154,7 @@ export default function App() {
               contactId: clientData.contact.id,
               projectId: clientData.project ? clientData.project.id : null,
               canWrite: role === 'admin' && !!clientData.project,
+              viewerRole: role,
               name: clientData.contact.fullName || clientData.contact.email || '',
               contact: clientData.contact,
               address: [clientData.contact.street, clientData.contact.city, clientData.contact.state, clientData.contact.zip].filter(Boolean).join(', ')
