@@ -1,4 +1,5 @@
 import GridFutureGraphic from './GridFutureGraphic';
+import Accordion from './Accordion';
 import React from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -77,10 +78,6 @@ const BatteryRecovery = ({
 
   return (
     <div className="bg-gradient-to-br from-[#102a1a] to-[#0a1628] border border-green-400/40 rounded-xl shadow-2xl p-6 md:p-8 mb-6">
-      <h2 className="text-2xl font-bold text-green-300 flex items-center gap-2 mb-1">
-        <BatteryCharging size={24} className="text-green-400" />
-        Your Energy, Your Credits
-      </h2>
       <p className="text-slate-300 text-sm mb-6">
         With the utility, your solar energy earns <strong className="text-amber-300">credits — monopoly money</strong> you
         can only spend in their system. You bank credits selling power by <strong className="text-amber-300">day</strong>, then
@@ -258,7 +255,11 @@ const BatteryRecovery = ({
           <TrendingUp size={16} /> Value Recovered Each Year With a Battery
         </div>
         <div className="text-5xl font-extrabold text-green-300 mt-2">{money(totalRecovered)}</div>
-        <div className="text-xs text-slate-400 mt-3 space-y-1">
+      </div>
+
+      {/* Mini-accordion: the breakdown behind that number */}
+      <Accordion title="How this value is recovered" accent="emerald" dense defaultOpen={false}>
+        <div className="text-xs text-slate-400 space-y-1">
           <div>
             <span className="text-green-300 font-semibold">{money(arbRecovered)}</span> recovered by shifting {recovery.shiftedKwh.toLocaleString()} kWh from low export ({rate(recovery.middayRate)}) to peak use ({rate(recovery.peakRate)})
           </div>
@@ -268,12 +269,12 @@ const BatteryRecovery = ({
             </div>
           )}
         </div>
-      </div>
-      <p className="text-xs text-slate-500 text-center mb-6">
-        A battery lets you "sell to yourself" — recovering energy at the peak rate you'd otherwise pay, and cutting the
-        true-up you currently owe. Raw storage figures shown; actual delivery is ~90% of capacity after round-trip
-        efficiency and your set reserve.
-      </p>
+        <p className="text-xs text-slate-500 mt-3">
+          A battery lets you "sell to yourself" — recovering energy at the peak rate you'd otherwise pay, and cutting the
+          true-up you currently owe. Raw storage figures shown; actual delivery is ~90% of capacity after round-trip
+          efficiency and your set reserve.
+        </p>
+      </Accordion>
 
       {/* Backup value */}
       <div className="bg-slate-900/50 rounded-lg p-5 border border-slate-700/50 flex items-start gap-3">
