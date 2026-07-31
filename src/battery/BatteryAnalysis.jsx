@@ -9,6 +9,8 @@ import BatteryExportInefficiencies from './BatteryExportInefficiencies';
 import BatteryRecovery from './BatteryRecovery';
 import BatteryStabilization from './BatteryStabilization';
 import BatteryDispatchPanel from './BatteryDispatchPanel';
+import Accordion from './Accordion';
+import LimitedIncentives from './LimitedIncentives';
 
 /**
  * Battery Analysis tab — four stacked sections:
@@ -150,55 +152,68 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
         </p>
       </div>
 
-      <BatteryConsumptionProduction
-        inputs={inputs}
-        profileKey={profileKey}
-        setProfileKey={setProfileKey}
-        overlay={overlay}
-      />
+      <Accordion title="Consumption vs Production" subtitle="Your energy through a typical day" accent="amber" defaultOpen icon={<Battery size={16} className="text-amber-400" />}>
+        <BatteryConsumptionProduction
+          inputs={inputs}
+          profileKey={profileKey}
+          setProfileKey={setProfileKey}
+          overlay={overlay}
+        />
+      </Accordion>
 
-      <BatteryEnergyLoss />
+      <Accordion title="Where Energy Is Lost" subtitle="Export inefficiency & round-trip losses" accent="amber">
+        <BatteryEnergyLoss />
+      </Accordion>
 
-      <BatteryExportInefficiencies
-        inputs={inputs}
-        overlay={overlay}
-        manualMode={manualMode}
-        setManualMode={setManualMode}
-        exportKwh={exportKwh}
-        setExportKwh={setExportKwh}
-        importKwh={importKwh}
-        setImportKwh={setImportKwh}
-        effExport={effExport}
-        effImport={effImport}
-        annualTrueUp={annualTrueUp}
-        annualCheck={annualCheck}
-        owesUtility={owesUtility}
-        extraUsage={extraUsage}
-      />
+      <Accordion title="Export Inefficiencies" subtitle="What you give up exporting instead of storing" accent="amber">
+        <BatteryExportInefficiencies
+          inputs={inputs}
+          overlay={overlay}
+          manualMode={manualMode}
+          setManualMode={setManualMode}
+          exportKwh={exportKwh}
+          setExportKwh={setExportKwh}
+          importKwh={importKwh}
+          setImportKwh={setImportKwh}
+          effExport={effExport}
+          effImport={effImport}
+          annualTrueUp={annualTrueUp}
+          annualCheck={annualCheck}
+          owesUtility={owesUtility}
+          extraUsage={extraUsage}
+        />
+      </Accordion>
 
-      <BatteryRecovery
-        inputs={inputs}
-        overlay={overlay}
-        effExport={effExport}
-        effImport={effImport}
-        annualTrueUp={annualTrueUp}
-        annualCheck={annualCheck}
-        owesUtility={owesUtility}
-        avoidedTrueUp={avoidedTrueUp}
-        arbitrageRecovered={arbitrageRecovered}
-        totalRecoveredPerYear={totalRecoveredPerYear}
-      />
+      <Accordion title="Your Energy, Your Credits" subtitle="Value recovered with a battery" accent="emerald" defaultOpen>
+        <BatteryRecovery
+          inputs={inputs}
+          overlay={overlay}
+          effExport={effExport}
+          effImport={effImport}
+          annualTrueUp={annualTrueUp}
+          annualCheck={annualCheck}
+          owesUtility={owesUtility}
+          avoidedTrueUp={avoidedTrueUp}
+          arbitrageRecovered={arbitrageRecovered}
+          totalRecoveredPerYear={totalRecoveredPerYear}
+        />
+      </Accordion>
+
+      {/* Limited-time incentives — reserve before the funding runs out */}
+      <LimitedIncentives />
 
       {/* Hour-by-hour dispatch economics — the accurate version */}
-      <div className="mb-6">
+      <Accordion title="Battery Economics" subtitle="Hour-by-hour dispatch, hardware & rate comparison" accent="purple" defaultOpen icon={<Battery size={16} className="text-purple-400" />}>
         <BatteryDispatchPanel inputs={inputs} calculations={calculations} extraUsage={extraUsage} rateOverride={rateOverride} onRateOverrideChange={onRateOverrideChange} />
-      </div>
+      </Accordion>
 
-      <BatteryStabilization
-        recoveredValuePerYear={totalRecoveredPerYear}
-        overlay={overlay}
-        inputs={inputs}
-      />
+      <Accordion title="Battery Stabilization" subtitle="Smoothing your load and your bill" accent="cyan">
+        <BatteryStabilization
+          recoveredValuePerYear={totalRecoveredPerYear}
+          overlay={overlay}
+          inputs={inputs}
+        />
+      </Accordion>
     </div>
   );
 };
