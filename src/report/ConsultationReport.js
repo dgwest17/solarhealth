@@ -195,7 +195,11 @@ export function buildConsultationReportHtml({ clientName, clientAddress, repName
     </svg>`;
   })();
 
-  const nemExpires = inputs.nemVersion === 'NEM3' ? null : inputs.installedYear + 20;
+  // Prefer the accurate PTO-anchored expiry; fall back to install year + 20.
+  const nemExpires = inputs.nemVersion === 'NEM3'
+    ? null
+    : (calculations.nemExpiry ? calculations.nemExpiry.endYear : (inputs.installedYear ? inputs.installedYear + 20 : null));
+  const nemYearsLeft = calculations.nemExpiry ? calculations.nemExpiry.yearsLeft : (nemExpires ? nemExpires - nowYear : null);
   const postNemTrueUp = Math.max(0, impKwh * touRates.peak - expKwh * NEM3_EXPORT_RATE);
 
   const lastCum = (calculations.yearlyData && calculations.yearlyData.length)
@@ -369,7 +373,7 @@ ${nemExpires ? `
 <h2>${S()} · NEM Expiration Outlook</h2>
 <table>
 ${row('Current agreement', esc(nemLabel) + ' (20-year lock-in)')}
-${row('Expected expiration', String(nemExpires) + (nemExpires - nowYear > 0 ? ` (${nemExpires - nowYear} years away)` : ' (expired)'))}
+${row('Expected expiration', String(nemExpires) + (nemYearsLeft > 0 ? ` (${nemYearsLeft} years away)` : ' (expired)'))}
 ${row('Export credit after expiration', '~$' + NEM3_EXPORT_RATE.toFixed(3) + '/kWh')}
 ${row('Estimated annual true-up after expiration', '\u2212' + money(postNemTrueUp) + '/yr if nothing changes')}
 </table>
