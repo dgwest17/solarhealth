@@ -428,6 +428,67 @@ export const calculateSystemScore = (
 /**
  * Main comprehensive savings calculation with ALL FIXES
  */
+/**
+ * NEM grandfathering countdown.
+ *
+ * California NEM 1.0 and NEM 2.0 are grandfathered for a 20-YEAR term measured
+ * from the Permission-to-Operate (PTO) date — NOT the install or contract date
+ * (CPUC). NEM 3.0 has no expiration (it is already the successor tariff), so we
+ * return null for it. When the term ends, the account moves to the net billing
+ * tariff: exports drop from near-retail to avoided-cost (~75% lower on average),
+ * while evening purchases stay at full retail. Production is unchanged; only the
+ * compensation changes. Adding a battery does NOT shorten the term.
+ *
+ * @param nemVersion  'NEM1' | 'NEM2' | 'NEM3'
+ * @param ptoDate     ISO date string (preferred) or null
+ * @param installedYear / installedMonth  fallback when PTO date is unknown
+ */
+export const GRANDFATHER_TERM_YEARS = 20;
+
+export const calculateNEMExpiry = (nemVersion, ptoDate, installedYear, installedMonth) => {
+  // NEM 3.0 is the current tariff — nothing to count down to.
+  if (nemVersion === 'NEM3') return null;
+  if (nemVersion !== 'NEM1' && nemVersion !== 'NEM2') return null;
+
+  // Anchor on PTO date if we have it; otherwise fall back to install year/month.
+  let start = null;
+  let anchor = 'pto';
+  if (ptoDate) {
+    const d = new Date(ptoDate);
+    if (!Number.isNaN(d.getTime())) start = d;
+  }
+  if (!start && installedYear) {
+    const m = (installedMonth && installedMonth >= 1 && installedMonth <= 12) ? installedMonth : 1;
+    start = new Date(installedYear, m - 1, 1);
+    anchor = 'install';
+  }
+  if (!start) return null;
+
+  const end = new Date(start.getFullYear() + GRANDFATHER_TERM_YEARS, start.getMonth(), start.getDate());
+  const now = new Date();
+  const msLeft = end.getTime() - now.getTime();
+  const msPerYear = 365.25 * 24 * 3600 * 1000;
+  const yearsLeftExact = msLeft / msPerYear;
+  const expired = msLeft <= 0;
+
+  const yearsLeft = Math.max(0, Math.floor(yearsLeftExact));
+  const monthsLeftTotal = Math.max(0, Math.round(yearsLeftExact * 12));
+  const monthsRemainder = monthsLeftTotal % 12;
+
+  return {
+    nemVersion,
+    startDate: start.toISOString().slice(0, 10),
+    endYear: end.getFullYear(),
+    endDate: end.toISOString().slice(0, 10),
+    anchor,                    // 'pto' or 'install' (install is an estimate)
+    yearsLeft,                 // whole years, floored
+    monthsRemainder,           // extra months beyond whole years
+    yearsLeftExact: Math.max(0, yearsLeftExact),
+    expired,
+    termYears: GRANDFATHER_TERM_YEARS
+  };
+};
+
 export const calculateComprehensiveSavings = (inputs) => {
   const monthsSinceInstall = getMonthsSinceInstall(
     inputs.installedYear, 
@@ -756,6 +817,7 @@ export const calculateComprehensiveSavings = (inputs) => {
     systemHealth, // Backward compatibility
     totalInvestment: totalInvestment.toFixed(2),
     currentNEMImpact,
+    nemExpiry: calculateNEMExpiry(inputs.nemVersion, inputs.ptoDate, inputs.installedYear, inputs.installedMonth),
     loanPaymentStructure: backwardCompatibleLoanStructure, // FIXED: Backward compatible
     ppaBuyoutCost: ppaBuyoutCost.toFixed(2),
     calculatedTaxCredit: calculatedTaxCredit.toFixed(2),
