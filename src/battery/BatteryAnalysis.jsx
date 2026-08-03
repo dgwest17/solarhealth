@@ -1,3 +1,8 @@
+/**
+ * FILE: src/battery/BatteryAnalysis.jsx
+ *
+ * Battery tab shell — owns shared math, stacks every battery section in accordions.
+ */
 import React, { useState, useEffect } from 'react';
 import { Battery } from 'lucide-react';
 import { buildDailyOverlay, calculateCreditsRecovered } from './BatteryModel';
@@ -11,6 +16,7 @@ import BatteryStabilization from './BatteryStabilization';
 import BatteryDispatchPanel from './BatteryDispatchPanel';
 import Accordion from './Accordion';
 import LimitedIncentives from './LimitedIncentives';
+import NemCountdown from './NemCountdown';
 
 /**
  * Battery Analysis tab — four stacked sections:
@@ -198,6 +204,9 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
           totalRecoveredPerYear={totalRecoveredPerYear}
         />
       </Accordion>
+
+      {/* How long their favorable export rate has left — motivates the battery case */}
+      <NemCountdown nemExpiry={calculations && calculations.nemExpiry} nemVersion={inputs.nemVersion} />
 
       {/* Limited-time incentives — reserve before the funding runs out */}
       <LimitedIncentives />
