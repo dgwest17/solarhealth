@@ -462,6 +462,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         <NEMStatusCard
           currentNEMImpact={calculations.currentNEMImpact}
           nemVersion={inputs.nemVersion}
+          nemExpiry={calculations.nemExpiry}
           cumulativeNEMCredits={calculations.cumulativeNEMCredits}
           cumulativeTrueUpCharges={calculations.cumulativeTrueUpCharges}
         />
