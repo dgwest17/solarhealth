@@ -1,3 +1,8 @@
+/**
+ * FILE: src/battery/BatteryRecovery.jsx
+ *
+ * "Your Energy, Your Credits" — credit story + Value Recovered.
+ */
 import GridFutureGraphic from './GridFutureGraphic';
 import Accordion from './Accordion';
 import React from 'react';
@@ -249,16 +254,21 @@ const BatteryRecovery = ({
         </div>
       </div>
 
-      {/* 4. VALUE RECOVERED — arbitrage spread + avoided true-up */}
-      <div className="bg-green-400/10 border border-green-400/40 rounded-lg p-6 text-center mb-3">
-        <div className="text-sm text-green-200 uppercase tracking-wider flex items-center justify-center gap-2">
-          <TrendingUp size={16} /> Value Recovered Each Year With a Battery
+      {/* 4. VALUE RECOVERED — collapsed by default so the rep controls the reveal.
+          The headline number AND its breakdown both live inside this accordion. */}
+      <Accordion
+        title="Value Recovered Each Year With a Battery"
+        subtitle="Tap to reveal"
+        accent="emerald"
+        defaultOpen={false}
+        icon={<TrendingUp size={16} className="text-emerald-400" />}
+      >
+        <div className="bg-green-400/10 border border-green-400/40 rounded-lg p-6 text-center mb-4">
+          <div className="text-5xl font-extrabold text-green-300">{money(totalRecovered)}</div>
+          <div className="text-xs text-green-200/70 uppercase tracking-wider mt-1">per year</div>
         </div>
-        <div className="text-5xl font-extrabold text-green-300 mt-2">{money(totalRecovered)}</div>
-      </div>
 
-      {/* Mini-accordion: the breakdown behind that number */}
-      <Accordion title="How this value is recovered" accent="emerald" dense defaultOpen={false}>
+        <div className="text-sm font-semibold text-slate-200 mb-1.5">How this value is recovered</div>
         <div className="text-xs text-slate-400 space-y-1">
           <div>
             <span className="text-green-300 font-semibold">{money(arbRecovered)}</span> recovered by shifting {recovery.shiftedKwh.toLocaleString()} kWh from low export ({rate(recovery.middayRate)}) to peak use ({rate(recovery.peakRate)})
