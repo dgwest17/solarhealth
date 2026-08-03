@@ -124,6 +124,7 @@ export default async function handler(req, res) {
       batteryManufacturer: primary.Battery_Manufacturer && primary.Battery_Manufacturer !== 'NONE' ? primary.Battery_Manufacturer : '',
       inverterType: primary.Inverter_Type || '',
       numberOfModules: orNull(primary.Number_of_Modules),
+      ptoDate: primary.PTO_Date || null,
       installedYear: install.year || null,
       installedMonth: install.month || null,
       installDateSource: dateSource,
