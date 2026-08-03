@@ -1,7 +1,7 @@
 import React from 'react';
-import { DollarSign, AlertCircle } from 'lucide-react';
+import { DollarSign, AlertCircle, Clock } from 'lucide-react';
 
-const NEMStatusCard = ({ currentNEMImpact, nemVersion, cumulativeNEMCredits, cumulativeTrueUpCharges }) => {
+const NEMStatusCard = ({ currentNEMImpact, nemVersion, nemExpiry = null, cumulativeNEMCredits, cumulativeTrueUpCharges }) => {
   if (!currentNEMImpact) return null;
 
   const isCredit = currentNEMImpact.type === 'credit';
@@ -78,6 +78,44 @@ const NEMStatusCard = ({ currentNEMImpact, nemVersion, cumulativeNEMCredits, cum
         )}
       </div>
       
+      {nemExpiry && !nemExpiry.expired && (
+        <div className="mt-4 rounded-lg bg-white/70 border border-gray-300 p-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+            <Clock size={16} className="text-blue-600" />
+            When your {nemVersion === 'NEM1' ? 'NEM 1.0' : 'NEM 2.0'} protection ends
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-4xl font-extrabold text-blue-700">{nemExpiry.yearsLeft}</span>
+            <span className="text-gray-700 font-medium">
+              year{nemExpiry.yearsLeft === 1 ? '' : 's'}
+              {nemExpiry.monthsRemainder > 0 && `, ${nemExpiry.monthsRemainder} month${nemExpiry.monthsRemainder === 1 ? '' : 's'}`} left
+            </span>
+          </div>
+          <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+            Your rate is locked in through <span className="font-semibold">{nemExpiry.endYear}</span> — a 20-year term
+            {nemExpiry.anchor === 'pto' ? ' from your Permission-to-Operate date' : ' estimated from your install date (confirm the exact PTO date for precision)'}.
+            When it ends, your account moves to the current billing plan: exported power earns roughly 75% less,
+            while evening purchases stay at full retail. Your panels don’t change — only what the utility pays you does.
+          </p>
+          <p className="text-[11px] text-gray-500 mt-1.5">
+            Good to know: adding a battery does <span className="font-semibold">not</span> shorten this term — so storage keeps its full value for all {nemExpiry.yearsLeft} remaining years.
+          </p>
+        </div>
+      )}
+      {nemExpiry && nemExpiry.expired && (
+        <div className="mt-4 rounded-lg bg-orange-50 border border-orange-300 p-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-orange-800">
+            <Clock size={16} className="text-orange-600" />
+            Your {nemVersion === 'NEM1' ? 'NEM 1.0' : 'NEM 2.0'} protection has ended
+          </div>
+          <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+            The 20-year grandfathering term (ending {nemExpiry.endYear}) has passed, so this account has moved
+            to the successor net billing tariff — exports now earn avoided-cost rates. A battery is especially
+            valuable here, since self-consumption avoids buying back power at full retail.
+          </p>
+        </div>
+      )}
+
       <div className="mt-3 text-xs text-gray-500">
         Cumulative NEM Credits: ${parseFloat(cumulativeNEMCredits).toLocaleString()} | 
         Cumulative True-Up Charges: ${parseFloat(cumulativeTrueUpCharges).toLocaleString()}
