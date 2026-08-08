@@ -15,7 +15,7 @@ const WRITABLE_KEYS = [
   'installedYear', 'installedMonth', 'batteryInstallDate',
   'potentialExtraUsageKwh', 'potentialExtraUsageNote',
   // equipment
-  'installCompany', 'panelModel', 'batteryManufacturer', 'inverterType', 'numberOfModules',
+  'installer', 'panelManufacturer', 'batteryManufacturer', 'inverterManufacturer', 'numberOfModules',
   // financial product
   'program', 'loanPrincipal', 'loanTerm', 'loanInterestRate', 'escalator', 'cashGrossCost',
   'projectStatus', 'opportunityType', 'financeProvider', 'connectionFeeMonthly'
