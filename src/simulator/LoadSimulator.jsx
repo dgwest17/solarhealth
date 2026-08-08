@@ -9,7 +9,7 @@ import {
   LOAD_TYPES, totalAddedKwh, getLoadType, blendedDaytimePct, calcExtraUsageCost,
   EV_MODELS, evAnnualKwh, HOTTUB_SIZES, hottubAnnualKwh,
   GAS_CARS, GAS_PRICE_DEFAULT, gasAnnualCost, evChargeAnnualCost
-, calcExtraUsageCostEvTou
+, calcExtraUsageCostEvTou, calcEvSuperOffPeakCost
 } from './LoadModel';
 
 /**
@@ -82,7 +82,25 @@ const LoadSimulator = ({
   const extra = calcExtraUsageCost(activeLoads, baseUsage, production, touRates);
   const isEvTou = utility === 'SDGE' && ratePlan === 'SDGE_EVTOU5';
   const evTou = isEvTou ? calcExtraUsageCostEvTou(extra.billableKwh, 'SDGE_EVTOU5') : null;
-  const effCost = evTou ? evTou.cost : extra.cost;
+
+  // Per-EV super-off-peak override: price the EV's billable share at the SOP
+  // rate while everything else prices normally. Independent of the account plan,
+  // so a customer can put just the car on the cheap window.
+  const evSopOn = !!(activeLoads.ev && activeLoads.ev.superOffPeakCharging);
+  const evKwh = evSopOn ? (Number(activeLoads.ev.kwh) || 0) : 0;
+  // The EV's share of what's actually billable (surplus absorbs the rest).
+  const evBillable = evSopOn && extra.billableKwh > 0 && added > 0
+    ? Math.min(evKwh, extra.billableKwh * (evKwh / added))
+    : 0;
+  const evSop = evSopOn ? calcEvSuperOffPeakCost(evBillable, 'SDGE_EVTOU5') : null;
+  // Non-EV billable priced at the normal blended rate.
+  const nonEvCost = evSopOn && extra.billableKwh > 0
+    ? extra.cost * Math.max(0, (extra.billableKwh - evBillable) / extra.billableKwh)
+    : null;
+
+  const effCost = evSopOn
+    ? Math.round((nonEvCost || 0) + (evSop ? evSop.cost : 0))
+    : (evTou ? evTou.cost : extra.cost);
 
   const offsetBase = baseUsage > 0 ? Math.round((production / baseUsage) * 100) : 0;
   const projectedUsage = baseUsage + added;
@@ -96,8 +114,15 @@ const LoadSimulator = ({
         billableKwh: extra.billableKwh,
         cost: effCost,
         standardCost: extra.cost,
-        ratePlan: isEvTou ? 'SDGE_EVTOU5' : 'standard',
-        evTouFallbackCost: evTou ? evTou.fallbackCost : null,
+        ratePlan: evSopOn ? 'EV_SUPER_OFF_PEAK' : (isEvTou ? 'SDGE_EVTOU5' : 'standard'),
+        evTouFallbackCost: evTou ? evTou.fallbackCost : (evSop ? evSop.fallbackCost : null),
+        evSuperOffPeak: evSopOn ? {
+          kwh: Math.round(evKwh),
+          billableKwh: Math.round(evBillable),
+          rate: evSop ? evSop.rate : 0,
+          cost: evSop ? evSop.cost : 0,
+          fallbackCost: evSop ? evSop.fallbackCost : 0
+        } : null,
         daytimePct: dayPct,
         freeKwh: extra.freeKwh,
         surplusUsedKwh: surplusUsed,
@@ -399,13 +424,37 @@ const LoadSimulator = ({
                           className="w-full accent-cyan-400" />
                       )}
 
-                      <div className="flex items-center justify-between text-[11px] mt-1 mb-0.5">
+                      {/* EV-only: charging entirely inside the utility's EV
+                          super-off-peak window. When on, the day/night split is
+                          irrelevant — 100% of the charge is priced at the SOP
+                          rate (SDG&E EV-TOU-5 = $0.12/kWh). */}
+                      {id === 'ev' && (
+                        <label className="flex items-start gap-2 mt-2 mb-1 cursor-pointer rounded-lg border border-emerald-400/30 bg-emerald-900/12 px-2.5 py-2">
+                          <input
+                            type="checkbox"
+                            checked={!!l.superOffPeakCharging}
+                            onChange={(e) => patchEv({ superOffPeakCharging: e.target.checked })}
+                            className="w-3.5 h-3.5 accent-emerald-400 mt-0.5"
+                          />
+                          <span className="text-[11px] leading-snug">
+                            <span className="text-emerald-200 font-semibold">Charges on EV super off-peak</span>
+                            <span className="block text-slate-400">
+                              100% of charging priced at the EV plan's super-off-peak rate. Overrides the day/night split below.
+                            </span>
+                          </span>
+                        </label>
+                      )}
+
+                      <div className={`flex items-center justify-between text-[11px] mt-1 mb-0.5 ${
+                        id === 'ev' && l.superOffPeakCharging ? 'opacity-40' : ''
+                      }`}>
                         <span className="flex items-center gap-1 text-amber-200"><Sun size={11} /> Day {l.daytimePct}%</span>
                         <span className="flex items-center gap-1 text-red-200">Night {100 - l.daytimePct}% <Moon size={11} /></span>
                       </div>
                       <input type="range" min={0} max={100} step={5}
                         value={l.daytimePct} onChange={(e) => setDay(id, Number(e.target.value))}
-                        className="w-full accent-amber-400" />
+                        disabled={id === 'ev' && !!l.superOffPeakCharging}
+                        className="w-full accent-amber-400 disabled:opacity-40" />
                     </div>
                   );
                 })}
