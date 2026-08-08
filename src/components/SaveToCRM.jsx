@@ -12,7 +12,8 @@ const WRITABLE_KEYS = [
   'systemSize', 'annualProduction', 'annualUsageAtInstall', 'currentAnnualUsage',
   'utility', 'nemVersion', 'exportRate', 'onCareProgram', 'hasBattery', 'batteryCapacity',
   // install/turn-on date
-  'installedYear', 'installedMonth',
+  'installedYear', 'installedMonth', 'batteryInstallDate',
+  'potentialExtraUsageKwh', 'potentialExtraUsageNote',
   // equipment
   'installCompany', 'panelModel', 'batteryManufacturer', 'inverterType', 'numberOfModules',
   // financial product
