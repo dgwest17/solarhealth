@@ -3,8 +3,10 @@
  * Each key matches a <Tip k="..."/> in InputSection.
  */
 export const TOOLTIPS = {
-  installYear: 'Closest guess to when the system was turned ON (not sold or installed on the roof). The true-up statement anniversary is usually the turn-on month — if they know when their true-up bill arrives, that\u2019s the month, and we can estimate the year.',
+  installYear: 'Closest guess to when the system was turned ON (not sold or installed on the roof). The true-up statement anniversary is usually the turn-on month — if they know when their true-up bill arrives, thats the month, and we can estimate the year.',
   installMonth: 'The month the system received Permission to Operate. Tip: the annual true-up statement lands on this month every year.',
+  batteryInstallDate: 'When the battery was commissioned — not the solar install date. On a retrofit these can be years apart, and the warranty clock starts here.',
+  connectionFee: 'The fixed monthly minimum/connection charge on the bill, before any energy. Under NEM 1.0 export credits can offset it; under NEM 2.0 and 3.0 it is non-bypassable. Leave blank to use the California default.',
   utility: 'The utility on their electric bill (SDG&E, SCE, PG&E, SMUD). Determines rates, TOU windows, and incentives.',
   careProgram: 'CARE is the low-income discount program (~30% off). It says CARE/FERA right on the bill if they\u2019re enrolled.',
   systemSize: 'Total DC size in kilowatts — panel count × panel watts ÷ 1000. Found on the contract, permit, or monitoring app. Can also take kW-AC rating on bill and divide by .9 for approximate',
