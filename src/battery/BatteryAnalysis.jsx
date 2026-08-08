@@ -167,11 +167,11 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
         />
       </Accordion>
 
-      <Accordion title="Where Energy Is Lost" subtitle="Export inefficiency & round-trip losses" accent="amber">
+      <Accordion title="Where Energy Is Lost" subtitle="How NEM credits your exports" accent="amber">
         <BatteryEnergyLoss />
       </Accordion>
 
-      <Accordion title="Export Inefficiencies" subtitle="What you give up exporting instead of storing" accent="amber">
+      <Accordion title="Time of Use is Changing (Not for the better)" subtitle="What you give up exporting instead of storing" accent="amber">
         <BatteryExportInefficiencies
           inputs={inputs}
           overlay={overlay}
@@ -190,7 +190,11 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
         />
       </Accordion>
 
-      <Accordion title="Your Energy, Your Credits" subtitle="Value recovered with a battery" accent="emerald" defaultOpen>
+      {/* Grandfathering clock — sits between the TOU change and the grid problem:
+          "your rates are getting worse" -> "and your protection has an end date" */}
+      <NemCountdown nemExpiry={calculations && calculations.nemExpiry} nemVersion={inputs.nemVersion} />
+
+      <Accordion title="The Looming Grid Problem" subtitle="Why the grid squeeze costs you more every year" accent="emerald" defaultOpen>
         <BatteryRecovery
           inputs={inputs}
           overlay={overlay}
@@ -205,18 +209,15 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
         />
       </Accordion>
 
-      {/* How long their favorable export rate has left — motivates the battery case */}
-      <NemCountdown nemExpiry={calculations && calculations.nemExpiry} nemVersion={inputs.nemVersion} />
-
       {/* Limited-time incentives — reserve before the funding runs out */}
       <LimitedIncentives />
 
       {/* Hour-by-hour dispatch economics — the accurate version */}
-      <Accordion title="Battery Economics" subtitle="Hour-by-hour dispatch, hardware & rate comparison" accent="purple" defaultOpen icon={<Battery size={16} className="text-purple-400" />}>
+      <Accordion title="How Does a Battery Recover Credits?" subtitle="Hour-by-hour dispatch, hardware & rate comparison" accent="purple" defaultOpen icon={<Battery size={16} className="text-purple-400" />}>
         <BatteryDispatchPanel inputs={inputs} calculations={calculations} extraUsage={extraUsage} rateOverride={rateOverride} onRateOverrideChange={onRateOverrideChange} />
       </Accordion>
 
-      <Accordion title="Battery Stabilization" subtitle="Smoothing your load and your bill" accent="cyan">
+      <Accordion title="Stabilize Your Bill With Storage" subtitle="Smoothing your load and your bill" accent="cyan">
         <BatteryStabilization
           recoveredValuePerYear={totalRecoveredPerYear}
           overlay={overlay}
