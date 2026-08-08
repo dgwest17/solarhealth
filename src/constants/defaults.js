@@ -90,7 +90,7 @@ export const ANNUAL_DEGRADATION_RATE = 0.0055; // 0.55% per year
 /**
  * NEM 2.0 connection fee (monthly)
  */
-export const NEM2_CONNECTION_FEE = 12; // $12/month
+export const NEM2_CONNECTION_FEE = 24; // $24/month
 
 /**
  * PPA buyout discount (percentage of remaining payments)
