@@ -23,7 +23,7 @@ const WRITABLE_KEYS = [
 
 const snapshot = (inputs) => JSON.stringify(WRITABLE_KEYS.map((k) => inputs[k]));
 
-const SaveToCRM = ({ inputs, clientContext, clientLabel, onSendAudit }) => {
+const SaveToCRM = ({ inputs, clientContext, clientLabel, onSendAudit, plannedLoad = null }) => {
   const [newsletter, setNewsletter] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendStatus, setSendStatus] = useState(null);
@@ -83,6 +83,17 @@ const SaveToCRM = ({ inputs, clientContext, clientLabel, onSendAudit }) => {
     try {
       const payload = {};
       for (const k of WRITABLE_KEYS) payload[k] = inputs[k];
+      // Load Simulator rollup — written ONLY here, on an explicit save, so the
+      // Zoho audit trail isn't flooded by every slider move.
+      if (plannedLoad && plannedLoad.addedKwh > 0) {
+        payload.potentialExtraUsageKwh = Math.round(plannedLoad.addedKwh);
+        if (!payload.potentialExtraUsageNote) {
+          const when = new Date().toISOString().slice(0, 10);
+          payload.potentialExtraUsageNote =
+            `${Math.round(plannedLoad.addedKwh).toLocaleString()} kWh modelled ${when}` +
+            (plannedLoad.billableKwh > 0 ? ` · ${Math.round(plannedLoad.billableKwh).toLocaleString()} kWh billable` : ' · absorbed by surplus');
+        }
+      }
       const result = await apiFetch('/api/save-project', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
