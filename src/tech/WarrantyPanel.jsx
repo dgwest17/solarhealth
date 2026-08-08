@@ -20,7 +20,7 @@
  * Rendered by: src/SolarCalculator.jsx (Audit tab)
  */
 import React from 'react';
-import { ShieldCheck, ShieldAlert, ShieldOff, Clock } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, ShieldOff, Clock, FileText, ArrowRightLeft } from 'lucide-react';
 import { getSystemWarrantyStatus } from './warrantyData';
 
 const STATUS_STYLE = {
@@ -86,7 +86,9 @@ const WarrantyPanel = ({ inputs }) => {
     batteryInstallDate: inputs.batteryInstallDate || null,
     panelManufacturer: inputs.panelManufacturer || null,
     inverterManufacturer: inputs.inverterManufacturer || null,
-    batteryManufacturer: inputs.hasBattery ? (inputs.batteryManufacturer || null) : null
+    batteryManufacturer: inputs.hasBattery ? (inputs.batteryManufacturer || null) : null,
+    program: inputs.program || null,
+    extendedWarranty: !!inputs.extendedWarranty
   });
 
   if (!sys.summary.componentsTracked) {
@@ -114,6 +116,31 @@ const WarrantyPanel = ({ inputs }) => {
         {inputs.batteryInstallDate ? '; the battery dates from its own install' : ''}.
       </p>
 
+      {sys.ppa && !sys.ppa.expired && (
+        <div className="rounded-lg border border-blue-400/40 bg-blue-900/15 p-3 mb-3">
+          <div className="flex items-start gap-2">
+            <FileText size={15} className="text-blue-300 mt-0.5 shrink-0" />
+            <div>
+              <div className="text-[12px] font-semibold text-blue-200">
+                Third-party owned — covered by your agreement for {sys.ppa.yearsRemaining} more
+                year{sys.ppa.yearsRemaining === 1 ? '' : 's'} (through {sys.ppa.endYear})
+              </div>
+              <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                Your provider carries maintenance and repair for the full term, whatever the component
+                warranties below say. Equipment can still fail — the difference is who pays for it, and
+                how quickly they respond.
+              </p>
+              {sys.ppa.underlyingExpiredComponents.length > 0 && (
+                <p className="text-[11px] text-amber-300 mt-1.5 leading-relaxed">
+                  ⚠ On buyout or at end of term you inherit the hardware with the manufacturer warranty
+                  already expired on: {sys.ppa.underlyingExpiredComponents.join(', ')}.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Row title="Panels" w={sys.panel} />
         <Row title="Inverter" w={sys.inverter} />
@@ -127,7 +154,12 @@ const WarrantyPanel = ({ inputs }) => {
         </p>
       )}
 
-      <p className="text-[10px] text-slate-600 mt-3 leading-relaxed">
+      <div className="flex items-center gap-1.5 mt-3 text-[10.5px] text-slate-400">
+        <ArrowRightLeft size={12} className="text-slate-500" />
+        Warranties follow the system, not the owner — coverage transfers if the home is sold.
+      </div>
+
+      <p className="text-[10px] text-slate-600 mt-2 leading-relaxed">
         Terms are typical published US residential figures. Actual coverage varies with installer
         certification, product registration, and any extended warranty purchased at install — verify
         against the certificate before quoting.
