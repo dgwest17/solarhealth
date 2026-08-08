@@ -75,6 +75,11 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         if (data.settings && data.settings.ratePlan) setRatePlan(data.settings.ratePlan);
         if (data.settings && data.settings.simLoads) setSimLoads(data.settings.simLoads);
         if (data.settings && data.settings.batteryRateOverride) setBatteryRateOverride(data.settings.batteryRateOverride);
+        // Extended warranty is a per-system fact with no Zoho column yet, so it
+        // persists here. Move it to a CRM field if it ever needs to be reportable.
+        if (data.settings && typeof data.settings.extendedWarranty === 'boolean') {
+          setInputs((prev) => ({ ...prev, extendedWarranty: data.settings.extendedWarranty }));
+        }
         if (data.settings && data.settings.consumptionProfile) {
           setInputs((prev) => ({ ...prev, consumptionProfile: data.settings.consumptionProfile }));
         }
@@ -205,7 +210,17 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
     [inputs, extraUsage]
   );
 
+  const persistExtendedWarranty = (val) => {
+    if (clientContext && clientContext.contactId) {
+      apiFetch('/api/gb-profile', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId: clientContext.contactId, settings: { extendedWarranty: !!val } })
+      }).catch(() => {});
+    }
+  };
+
   const handleInputChange = (field, value) => {
+    if (field === 'extendedWarranty') persistExtendedWarranty(value);
     setInputs(prev => ({ ...prev, [field]: value }));
     // Audit data changed — any existing narrative is now stale
     setNarrative(null);
