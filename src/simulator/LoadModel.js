@@ -246,6 +246,29 @@ export function calcExtraUsageCostEvTou(billableKwh, planId) {
 }
 
 
+/**
+ * Price extra usage when the EV is scheduled ENTIRELY inside the utility's EV
+ * super-off-peak window, independent of the household's overall rate plan.
+ *
+ * This is the per-EV override: a customer can put just the car on the cheap
+ * window without moving their whole account to EV-TOU-5. The EV's billable kWh
+ * price at the SOP rate; every other appliance prices normally.
+ *
+ * Returns the EV portion only — the caller adds it to the non-EV cost.
+ */
+export function calcEvSuperOffPeakCost(evBillableKwh, planId = 'SDGE_EVTOU5') {
+  const plan = getEvTouPlan(planId);
+  if (!plan || evBillableKwh <= 0) return { cost: 0, fallbackCost: 0, rate: 0, plan: null };
+  return {
+    cost: Math.round(evBillableKwh * plan.superOffPeak),
+    // If the utility narrows/removes super off-peak, this is the exposure.
+    fallbackCost: Math.round(evBillableKwh * plan.offPeak),
+    rate: plan.superOffPeak,
+    plan
+  };
+}
+
+
 // ---- EV vs GAS comparison ----
 // Popular gas cars with EPA-combined MPG for the "what would gas cost" story.
 export const GAS_CARS = [
