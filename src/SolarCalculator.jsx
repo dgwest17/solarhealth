@@ -4,6 +4,7 @@ import { DEFAULT_INPUTS, DEFAULT_API_STATUS } from './constants/defaults';
 import InputSection from './components/InputSection';
 import ResultsDashboard from './components/ResultsDashboard';
 import NEMStatusCard from './components/NEMStatusCard';
+import WarrantyPanel from './tech/WarrantyPanel';
 import SystemHealthAlert from './components/SystemHealthAlert';
 import ChartsSection from './components/ChartsSection';
 import SummaryTables from './components/SummaryTables';
@@ -466,6 +467,9 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
           cumulativeNEMCredits={calculations.cumulativeNEMCredits}
           cumulativeTrueUpCharges={calculations.cumulativeTrueUpCharges}
         />
+
+        {/* Equipment warranty / EOL — uses battery's own install date when present */}
+        <WarrantyPanel inputs={inputs} />
 
         {/* Extra Usage True-Up — from the Load Simulator, shown SEPARATELY so it
             never alters the real current true-up/credit above. */}
