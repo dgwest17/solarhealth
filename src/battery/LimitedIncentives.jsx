@@ -49,7 +49,7 @@ const LimitedIncentives = () => {
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400" />
           </span>
           <span className="min-w-0">
-            <span className="block font-bold text-sm text-emerald-200">⏳ Limited Incentives — reserve before they run out</span>
+            <span className="block font-bold text-sm text-emerald-200">⏳ Funds Available Now — reserve before they run out</span>
             <span className="block text-[11px] text-emerald-300/70 truncate">Capped funding · you have to qualify · first-come, first-served</span>
           </span>
         </span>
