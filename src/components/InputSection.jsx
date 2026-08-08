@@ -914,7 +914,7 @@ const InputSection = ({
             placeholder="—"
             className="w-full md:w-64 px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
-          <p className="text-xs text-gray-400 mt-1">Typical range: $0.06 - $0.08/kWh | Connection fee: $12/month</p>
+          <p className="text-xs text-gray-400 mt-1">Typical range: $0.06 - $0.08/kWh | Connection fee: $24/month</p>
         </div>
       )}
 
