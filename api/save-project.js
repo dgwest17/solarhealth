@@ -71,26 +71,42 @@ function mapInputsToZoho(inputs) {
 
   // ---- Equipment (all verified writable in Zoho 2026-07) ----
   // Installer + panel model are free text.
-  if (typeof inputs.installCompany === 'string') {
-    const v = inputs.installCompany.trim().slice(0, 255);
+  if (typeof inputs.installer === 'string') {
+    const v = inputs.installer.trim().slice(0, 255);
     if (v) out.Install_Company = v;
   }
-  if (typeof inputs.panelModel === 'string') {
-    const v = inputs.panelModel.trim().slice(0, 255);
+  if (typeof inputs.panelManufacturer === 'string') {
+    const v = inputs.panelManufacturer.trim().slice(0, 255);
     if (v) out.Panel_Model = v;
   }
   // Battery manufacturer + inverter are RESTRICTED picklists — only write a
   // value Zoho already accepts, or the update errors. Case-normalized to match.
   const BATTERY_MAKERS = ['Tesla', 'Franklin', 'Enphase', 'Solaredge', 'Generac', 'Other', 'NONE'];
   const INVERTER_TYPES = ['Enphase', 'Solaredge', 'Tesla', 'Solark', 'Sunpower', 'SMA', 'Other'];
+  // The UI stores slugs ('tesla_inv', 'other_battery'); Zoho picklists want exact
+  // labels ('Tesla', 'Other'). Without this map those writes are silently dropped
+  // and the field appears to "revert" on the next session.
+  const SLUG_TO_ZOHO = {
+    enphase: 'Enphase', solaredge: 'Solaredge', sma: 'SMA',
+    tesla_inv: 'Tesla', generac_inv: 'Other', fronius: 'Other',
+    apsystems: 'Other', delta: 'Other', other_inverter: 'Other',
+    solark: 'Solark', sunpower: 'Sunpower',
+    tesla_pw: 'Tesla', enphase_bat: 'Enphase', franklinwh: 'Franklin',
+    generac_pwr: 'Generac', sonnen: 'Other', lg_ess: 'Other',
+    panasonic_ev: 'Other', other_battery: 'Other'
+  };
+
   const matchPick = (val, list) => {
     if (typeof val !== 'string' || !val.trim()) return null;
-    const hit = list.find((o) => o.toLowerCase() === val.trim().toLowerCase());
+    const raw = val.trim();
+    const mapped = SLUG_TO_ZOHO[raw.toLowerCase()];
+    if (mapped && list.includes(mapped)) return mapped;
+    const hit = list.find((o) => o.toLowerCase() === raw.toLowerCase());
     return hit || null;
   };
   const bm = matchPick(inputs.batteryManufacturer, BATTERY_MAKERS);
   if (bm) out.Battery_Manufacturer = bm;
-  const iv = matchPick(inputs.inverterType, INVERTER_TYPES);
+  const iv = matchPick(inputs.inverterManufacturer, INVERTER_TYPES);
   if (iv) out.Inverter_Type = iv;
   const nm = int(inputs.numberOfModules);
   if (nm != null && nm > 0) out.Number_of_Modules = nm;
