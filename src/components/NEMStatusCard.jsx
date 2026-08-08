@@ -57,6 +57,37 @@ const NEMStatusCard = ({ currentNEMImpact, nemVersion, nemExpiry = null, cumulat
           }`}>
             ${currentNEMImpact.amount.toLocaleString()}
           </div>
+          {/* Split the bill into its two very different halves. Energy cost
+              responds to usage and storage; connection charges generally do
+              not — and whether credits can offset them depends on NEM version
+              and utility. Lumping them hides which lever actually moves. */}
+          {!isCredit && currentNEMImpact.connectionFeesAnnual > 0 && (
+            <div className="mt-1.5 text-[11px] text-gray-600 space-y-0.5">
+              <div className="flex justify-between gap-3">
+                <span>Energy cost from usage</span>
+                <span className="font-semibold">${(currentNEMImpact.energyCostAnnual || 0).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span>
+                  Connection / minimum charges
+                  {currentNEMImpact.connectionFeeIsOverride && (
+                    <span className="text-blue-600 ml-1" title="Manually entered for this utility">·  manual</span>
+                  )}
+                </span>
+                <span className="font-semibold">${currentNEMImpact.connectionFeesAnnual.toLocaleString()}</span>
+              </div>
+              <div className="text-[10px] text-gray-500 pt-0.5">
+                {nemVersion === 'NEM1'
+                  ? 'Under NEM 1.0 export credits can offset these charges — they only apply when you end the year owing.'
+                  : 'These are non-bypassable under NEM ' + (nemVersion === 'NEM3' ? '3.0' : '2.0') + ' — credits cannot erase them.'}
+              </div>
+            </div>
+          )}
+          {isCredit && currentNEMImpact.connectionFeesAnnual === 0 && nemVersion === 'NEM1' && (
+            <div className="mt-1.5 text-[10px] text-green-700">
+              Your credits fully cover connection charges this year — a NEM 1.0 advantage.
+            </div>
+          )}
         </div>
       </div>
       
