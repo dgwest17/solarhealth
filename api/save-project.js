@@ -53,6 +53,22 @@ function mapInputsToZoho(inputs) {
     out.Install_Date = `${iy}-${String(mm).padStart(2, '0')}-01`;
   }
 
+  // ---- Battery install date (separate from solar Install_Date) ----
+  // Retrofits land years after the array; NEM 3.0 installs are usually same-day.
+  // Tracking them apart is what makes warranty/EOL and retrofit campaigns work.
+  if (typeof inputs.batteryInstallDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(inputs.batteryInstallDate)) {
+    out.Battery_Install_Date = inputs.batteryInstallDate;
+  }
+
+  // ---- Potential extra usage (Load Simulator rollup) ----
+  // Written on explicit Save only, so the CRM audit trail stays readable.
+  const peu = num(inputs.potentialExtraUsageKwh);
+  if (peu != null && peu >= 0) out.Potential_Extra_Usage_kWh = Math.round(peu);
+  if (typeof inputs.potentialExtraUsageNote === 'string') {
+    const n = inputs.potentialExtraUsageNote.trim().slice(0, 255);
+    if (n) out.Potential_Extra_Usage_Note = n;
+  }
+
   // ---- Equipment (all verified writable in Zoho 2026-07) ----
   // Installer + panel model are free text.
   if (typeof inputs.installCompany === 'string') {
