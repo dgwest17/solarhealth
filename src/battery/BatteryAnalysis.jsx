@@ -17,6 +17,7 @@ import BatteryDispatchPanel from './BatteryDispatchPanel';
 import Accordion from './Accordion';
 import LimitedIncentives from './LimitedIncentives';
 import NemCountdown from './NemCountdown';
+import Nem3ValuePanel from './Nem3ValuePanel';
 
 /**
  * Battery Analysis tab — four stacked sections:
@@ -190,9 +191,11 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
         />
       </Accordion>
 
-      {/* Grandfathering clock — sits between the TOU change and the grid problem:
-          "your rates are getting worse" -> "and your protection has an end date" */}
+      {/* NEM 1.0/2.0 get the grandfathering countdown here. NEM 3.0 clients have
+          nothing to count down — they're already on the successor tariff — so they
+          get the forward-looking value story instead. */}
       <NemCountdown nemExpiry={calculations && calculations.nemExpiry} nemVersion={inputs.nemVersion} />
+      <Nem3ValuePanel inputs={inputs} calculations={calculations} />
 
       <Accordion title="The Looming Grid Problem" subtitle="Why the grid squeeze costs you more every year" accent="emerald" defaultOpen>
         <BatteryRecovery
