@@ -167,7 +167,7 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
         />
       </Accordion>
 
-      <Accordion title="Where Energy Is Lost" subtitle="How NEM credits your exports" accent="amber">
+      <Accordion title="Where Energy Is Lost (Net Energy Metering)" subtitle="How NEM credits your exports" accent="amber">
         <BatteryEnergyLoss />
       </Accordion>
 
