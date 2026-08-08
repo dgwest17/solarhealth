@@ -165,9 +165,12 @@ export const EV_TOU_PLANS = {
     id: 'SDGE_EVTOU5',
     utility: 'SDGE',
     label: 'SDG&E EV-TOU-5',
-    peak: 0.71,          // 4–9 PM
+    // Aligned with RATE_PLANS in src/battery/BatteryDispatch.js — these two
+    // tables MUST agree or the simulator and the dispatch engine will quote
+    // different prices for the same kWh. Figures confirmed with the rep.
+    peak: 0.79,          // 4–9 PM (summer)
     offPeak: 0.45,
-    superOffPeak: 0.14,  // 12am–6am daily + weekdays 10am–2pm
+    superOffPeak: 0.12,  // 12am–6am daily + weekdays 10am–2pm
     monthlyFee: 16,
     windows: { peak: [16, 21], superOffPeak: [0, 6], sopWeekdayMidday: [10, 14] },
     approx: true // representative — verify current tariff
