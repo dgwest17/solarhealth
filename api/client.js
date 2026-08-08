@@ -87,6 +87,7 @@ export default async function handler(req, res) {
       `NEM_Version, Export_Rate, On_CARE_Program, Battery_Capacity_kWh, ` +
       `Monthly_Payment, Term, Escalator_or_Interest, Purchase_Type, ` +
       `Contract_Value, Install_Date, PTO_Date, Project_Status, Opportunity_Type, Finance_Provider, Install_Company, ` +
+      `Battery_Install_Date, Potential_Extra_Usage_kWh, Potential_Extra_Usage_Note, ` +
       `Battery_Manufacturer, Inverter_Type, Number_of_Modules, Panel_Model ` +
       `from Solar_Projects where Contact = ${contactId}`;
 
@@ -125,6 +126,9 @@ export default async function handler(req, res) {
       inverterType: primary.Inverter_Type || '',
       numberOfModules: orNull(primary.Number_of_Modules),
       ptoDate: primary.PTO_Date || null,
+      batteryInstallDate: primary.Battery_Install_Date || null,
+      potentialExtraUsageKwh: orNull(primary.Potential_Extra_Usage_kWh),
+      potentialExtraUsageNote: primary.Potential_Extra_Usage_Note || '',
       installedYear: install.year || null,
       installedMonth: install.month || null,
       installDateSource: dateSource,
@@ -137,7 +141,9 @@ export default async function handler(req, res) {
       nemVersion: NEM_MAP[primary.NEM_Version] || '',
       exportRate: orNull(primary.Export_Rate),
       onCareProgram: !!primary.On_CARE_Program,
-      hasBattery: (orNull(primary.Battery_Capacity_kWh) || 0) > 0,
+      // Battery presence is DERIVED, never a separate stored flag — a third
+      // boolean would create a state where the three fields disagree.
+      hasBattery: (orNull(primary.Battery_Capacity_kWh) || 0) > 0 || !!primary.Battery_Install_Date,
       batteryCapacity: orNull(primary.Battery_Capacity_kWh),
       monthlyPayment: orNull(primary.Monthly_Payment),
       loanInitialPayment: orNull(primary.Monthly_Payment),
@@ -182,6 +188,9 @@ export default async function handler(req, res) {
         name: primary.Name || '',
         status: primary.Project_Status || '',
         ptoDate: primary.PTO_Date || null,
+      batteryInstallDate: primary.Battery_Install_Date || null,
+      potentialExtraUsageKwh: orNull(primary.Potential_Extra_Usage_kWh),
+      potentialExtraUsageNote: primary.Potential_Extra_Usage_Note || '',
         installDate: primary.Install_Date || null,
         batteryManufacturer: primary.Battery_Manufacturer || '',
         inverterType: primary.Inverter_Type || '',
