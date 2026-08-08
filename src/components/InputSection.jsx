@@ -506,6 +506,22 @@ const InputSection = ({
             ))}
           </select>
         </div>
+        <div>
+          <label className="block text-sm text-cyan-300 mb-1">
+            Battery Install Date<Tip k="batteryInstallDate" />
+          </label>
+          <input
+            type="date"
+            value={inputs.batteryInstallDate || ''}
+            onChange={(e) => onInputChange('batteryInstallDate', e.target.value)}
+            disabled={systemLocked}
+            data-locked={systemLocked ? 'true' : undefined}
+            className="w-full px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
+          />
+          <p className="text-[10px] text-slate-500 mt-1">
+            Often later than the solar install on a retrofit. Drives warranty &amp; end-of-life tracking.
+          </p>
+        </div>
       </div>
       </>))}
 
