@@ -24,7 +24,7 @@ const NemCountdown = ({ nemExpiry, nemVersion }) => {
       <div className="mb-3 rounded-xl border border-orange-400/40 bg-orange-900/15 p-4">
         <div className="flex items-center gap-2 text-sm font-bold text-orange-200">
           <AlertTriangle size={16} className="text-orange-400" />
-          Your {label} protection ended in {nemExpiry.endYear}
+          Your Grandfather Expiration — {label} ended in {nemExpiry.endYear}
         </div>
         <p className="text-[11.5px] text-slate-300 mt-1.5 leading-relaxed">
           Exports now earn avoided-cost rates instead of near-retail credit, while evening power still
@@ -44,7 +44,7 @@ const NemCountdown = ({ nemExpiry, nemVersion }) => {
       : 'border-cyan-400/35 bg-cyan-900/12'}`}>
       <div className={`flex items-center gap-2 text-sm font-bold ${urgent ? 'text-amber-200' : 'text-cyan-200'}`}>
         <Clock size={16} className={urgent ? 'text-amber-400' : 'text-cyan-400'} />
-        Your {label} rate is locked in for
+        Your Grandfather Expiration
       </div>
 
       <div className="flex items-baseline gap-2 mt-1.5">
@@ -57,6 +57,7 @@ const NemCountdown = ({ nemExpiry, nemVersion }) => {
         </span>
         <span className="text-[11px] text-slate-400 ml-1">through {nemExpiry.endYear}</span>
       </div>
+      <div className="text-[11px] text-slate-400 mt-0.5">Your {label} rate is protected until then.</div>
 
       <p className="text-[11.5px] text-slate-300 mt-2 leading-relaxed">
         {nemExpiry.anchor === 'pto'
