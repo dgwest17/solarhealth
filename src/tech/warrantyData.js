@@ -106,7 +106,7 @@ export const INVERTER_WARRANTIES = [
     note: 'Earliest generation; many are past term and failing. Prime replacement candidates.' },
 
   { make: 'solaredge', product: 'HD-Wave / Home Hub', from: 2016, to: null, productYears: 12, confidence: HIGH,
-    note: 'Standard 12yr, commonly extended to 20 or 25yr at purchase. Power optimizers are 25yr.' },
+    note: '12yr standard. Extensions to 20/25yr exist but are uncommon in practice — assume 12 unless the paperwork says otherwise. Power optimizers are 25yr.' },
   { make: 'solaredge', product: 'Original SE string', from: 2010, to: 2016, productYears: 12, confidence: MED,
     note: 'Optimizers 25yr; the inverter is the part that ages out first.' },
 
@@ -264,18 +264,98 @@ export const getWarrantyStatus = (category, make, installDate, asOf = new Date()
  * date; the battery runs off its OWN install date, which is often years later
  * on a retrofit — that difference is the whole point of tracking them apart.
  */
+/**
+ * PPA / LEASE COVERAGE
+ *
+ * On a third-party-owned system the provider carries full O&M for the term of
+ * the agreement — typically 25 years — regardless of what the component
+ * manufacturer's own warranty says. So a 2015 PPA client whose panels shipped
+ * with a 12-year product warranty is still covered, because the PPA company is
+ * contractually on the hook to keep the system running.
+ *
+ * Two things this does NOT mean, and both matter in a conversation:
+ *
+ *   1. Equipment still fails. Coverage is a promise to repair, not immunity.
+ *      An inverter at year 14 will still go out; the difference is who pays.
+ *      Response time depends entirely on the provider still being solvent and
+ *      responsive.
+ *   2. Coverage ends when the agreement does. At buyout or end of term the
+ *      client owns the hardware outright — and reverts to whatever is left of
+ *      the MANUFACTURER warranty, which is often nothing. That's the moment a
+ *      20-year-old array becomes the homeowner's problem.
+ *
+ * We therefore report BOTH: the contract coverage they have now, and the
+ * underlying manufacturer position they'd inherit on buyout.
+ */
+export const PPA_TERM_YEARS = 25;
+
+const isThirdPartyOwned = (program) =>
+  program === 'PPA' || program === 'Lease' || program === 'PPA/Lease';
+
 export const getSystemWarrantyStatus = ({
   solarInstallDate,
   batteryInstallDate,
   panelManufacturer,
   inverterManufacturer,
-  batteryManufacturer
+  batteryManufacturer,
+  program = null,              // 'PPA' | 'Lease' | 'Loan' | 'Cash' | 'Other'
+  extendedWarranty = false     // rep-confirmed extended coverage purchased
 }, asOf = new Date()) => {
   const out = {
     panel: panelManufacturer ? getWarrantyStatus('panel', panelManufacturer, solarInstallDate, asOf) : null,
     inverter: inverterManufacturer ? getWarrantyStatus('inverter', inverterManufacturer, solarInstallDate, asOf) : null,
     battery: batteryManufacturer ? getWarrantyStatus('battery', batteryManufacturer, batteryInstallDate || solarInstallDate, asOf) : null
   };
+
+  // ---- Extended warranty (uncommon — only when the rep has confirmed it) ----
+  // Applies to the inverter, which is where extensions are actually sold.
+  if (extendedWarranty && out.inverter) {
+    const extendedTerm = 25;
+    if (extendedTerm > out.inverter.termYears) {
+      const restated = getWarrantyStatus('inverter', inverterManufacturer, solarInstallDate, asOf);
+      if (restated) {
+        const start = new Date(restated.installYear, 0, 1);
+        const end = new Date(start.getFullYear() + extendedTerm, start.getMonth(), start.getDate());
+        const yrsExact = (end.getTime() - asOf.getTime()) / (365.25 * 24 * 3600 * 1000);
+        out.inverter = {
+          ...out.inverter,
+          termYears: extendedTerm,
+          endYear: end.getFullYear(),
+          endDate: end.toISOString().slice(0, 10),
+          yearsRemaining: Math.max(0, Math.floor(yrsExact)),
+          monthsRemainder: Math.max(0, Math.round(yrsExact * 12) % 12),
+          yearsRemainingExact: Math.max(0, yrsExact),
+          expired: yrsExact <= 0,
+          status: yrsExact <= 0 ? 'expired' : (yrsExact <= 2 ? 'expiring' : 'covered'),
+          extended: true,
+          note: 'Extended warranty on file — term raised from the standard 12yr.'
+        };
+      }
+    }
+  }
+
+  // ---- Third-party-owned: provider covers O&M for the agreement term ----
+  const tpo = isThirdPartyOwned(program);
+  let ppa = null;
+  if (tpo && solarInstallDate) {
+    const start = new Date(typeof solarInstallDate === 'number'
+      ? new Date(solarInstallDate, 0, 1) : solarInstallDate);
+    if (!Number.isNaN(start.getTime())) {
+      const end = new Date(start.getFullYear() + PPA_TERM_YEARS, start.getMonth(), start.getDate());
+      const yrsExact = (end.getTime() - asOf.getTime()) / (365.25 * 24 * 3600 * 1000);
+      ppa = {
+        termYears: PPA_TERM_YEARS,
+        endYear: end.getFullYear(),
+        yearsRemaining: Math.max(0, Math.floor(yrsExact)),
+        monthsRemainder: Math.max(0, Math.round(yrsExact * 12) % 12),
+        expired: yrsExact <= 0,
+        // What they'd inherit if they bought the system out today.
+        underlyingExpiredComponents: [out.panel, out.inverter, out.battery]
+          .filter((c) => c && c.expired)
+          .map((c) => c.category)
+      };
+    }
+  }
 
   const parts = [out.panel, out.inverter, out.battery].filter(Boolean);
   const anyExpired = parts.some((p) => p.expired);
@@ -284,13 +364,19 @@ export const getSystemWarrantyStatus = ({
 
   return {
     ...out,
+    ppa,
+    thirdPartyOwned: tpo,
+    // Warranty follows the system, not the owner — it transfers on sale.
+    transfersOnSale: true,
     summary: {
       componentsTracked: parts.length,
       anyExpired,
       anyExpiring,
       anyAtRisk,
       // The single line a rep should lead with.
-      headline: anyExpired
+      headline: (ppa && !ppa.expired)
+        ? `Covered by your agreement for ${ppa.yearsRemaining} more year${ppa.yearsRemaining === 1 ? '' : 's'}`
+        : anyExpired
         ? 'One or more components are out of warranty'
         : anyAtRisk
           ? 'Warranty is on paper but the manufacturer is gone'
