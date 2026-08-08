@@ -133,11 +133,21 @@ export const calculateNEMPosition = (inputs, buyRateFallback) => {
 
   let energyNet, sellRate, feesAnnual;
 
+  // Monthly connection/minimum charge. Defaults to the CA figure; a rep can
+  // override per client via `connectionFeeMonthly` for utilities we haven't
+  // encoded yet (manual entry until an automated rate pull exists).
+  // 0 is a legitimate override, so check for null/'' rather than falsiness.
+  const feeOverride = inputs.connectionFeeMonthly;
+  const monthlyFee = (feeOverride === null || feeOverride === undefined || feeOverride === ''
+    || !Number.isFinite(Number(feeOverride)))
+    ? NEM2_CONNECTION_FEE
+    : Number(feeOverride);
+
   if (inputs.nemVersion === 'NEM3') {
     // NEM 3.0: exports genuinely decoupled — sold ~$0.035, imports at retail.
     sellRate = 0.035;
     energyNet = exportKwh * sellRate - importKwh * buyRate;
-    feesAnnual = NEM2_CONNECTION_FEE * 12;
+    feesAnnual = monthlyFee * 12;
   } else {
     // NEM 1.0 / 2.0: exports offset imports kWh-for-kWh over the year —
     // only the ANNUAL NET position is settled at true-up.
@@ -147,9 +157,9 @@ export const calculateNEMPosition = (inputs, buyRateFallback) => {
     sellRate = inputs.nemVersion === 'NEM1' ? buyRate : (Number(inputs.exportRate) || 0.07);
     energyNet = gridNetKwh >= 0 ? gridNetKwh * sellRate : gridNetKwh * buyRate;
     if (inputs.nemVersion === 'NEM1') {
-      feesAnnual = energyNet >= 0 ? 0 : NEM2_CONNECTION_FEE * 12; // overproducers: none
+      feesAnnual = energyNet >= 0 ? 0 : monthlyFee * 12; // NEM 1.0 credits can offset fees
     } else {
-      feesAnnual = NEM2_CONNECTION_FEE * 12; // NEM 2.0: always
+      feesAnnual = monthlyFee * 12; // NEM 2.0/3.0: non-bypassable
     }
   }
 
@@ -157,6 +167,11 @@ export const calculateNEMPosition = (inputs, buyRateFallback) => {
   const base = {
     importKwh: Math.round(importKwh), exportKwh: Math.round(exportKwh),
     buyRate, sellRate, feesAnnual, energyNet: Math.round(energyNet),
+    // Split for the UI: connection/minimum charges vs energy cost from usage.
+    connectionFeesAnnual: Math.round(feesAnnual),
+    connectionFeeMonthly: monthlyFee,
+    connectionFeeIsOverride: monthlyFee !== NEM2_CONNECTION_FEE,
+    energyCostAnnual: Math.round(Math.max(0, -energyNet)),
     measured, netProduction: Math.round(production - usage), shortage: Math.max(0, Math.round(usage - production))
   };
   return total >= 0
