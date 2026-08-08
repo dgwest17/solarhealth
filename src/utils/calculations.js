@@ -106,7 +106,11 @@ export const calculateBatteryArbitrage = (hasBattery, useTOU, utility, batteryCa
  */
 export const calculateNEMPosition = (inputs, buyRateFallback) => {
   const production = Number(inputs.annualProduction) || 0;
-  const usage = Number(inputs.currentAnnualUsage) || 0;
+  // Planned load from the Load Simulator (EV, heat pump, etc.) is REAL usage for
+  // modelling purposes — it must move the whole position, not sit beside it as a
+  // decorative line. Passing 0 reproduces today's behaviour exactly.
+  const plannedAddedKwh = Math.max(0, Number(inputs.plannedAddedKwh) || 0);
+  const usage = (Number(inputs.currentAnnualUsage) || 0) + plannedAddedKwh;
 
   // Grid flows: measured (Green Button) when present, else profile estimate.
   const SELF_USE_SHARE = { evening_heavy: 0.40, balanced: 0.50, daytime_heavy: 0.62 };
@@ -172,7 +176,16 @@ export const calculateNEMPosition = (inputs, buyRateFallback) => {
     connectionFeeMonthly: monthlyFee,
     connectionFeeIsOverride: monthlyFee !== NEM2_CONNECTION_FEE,
     energyCostAnnual: Math.round(Math.max(0, -energyNet)),
-    measured, netProduction: Math.round(production - usage), shortage: Math.max(0, Math.round(usage - production))
+    measured,
+    netProduction: Math.round(production - usage),
+    // Shortage is the running net of the CURRENT situation including any
+    // planned load. It is never clamped to zero by the simulator — an
+    // overproducer absorbing new load should watch their surplus shrink.
+    shortage: Math.max(0, Math.round(usage - production)),
+    surplus: Math.max(0, Math.round(production - usage)),
+    plannedAddedKwh: Math.round(plannedAddedKwh),
+    usageModelled: Math.round(usage),
+    usageBase: Math.round((Number(inputs.currentAnnualUsage) || 0))
   };
   return total >= 0
     ? { ...base, type: 'credit', amount: Math.round(total), rate: sellRate }
@@ -761,10 +774,39 @@ export const calculateComprehensiveSavings = (inputs) => {
   const offsetPercentage = (currentProduction / inputs.currentAnnualUsage) * 100;
   const roi = ((cumulativeSavings / totalInvestment) * 100);
   
+  // Two positions, always. `currentNEMImpact` INCLUDES any planned load from
+  // the Load Simulator so every downstream consumer (audit, battery, report)
+  // sees one consistent number. `baseNEMImpact` is the same client with no
+  // planned load, so the UI can show the delta as its own line rather than
+  // silently rewriting the headline.
+  const plannedAddedKwh = Math.max(0, Number(inputs.plannedAddedKwh) || 0);
+
+  const baseNEMImpact = calculateNEMPosition(
+    { ...inputs, annualProduction: currentProduction, plannedAddedKwh: 0 },
+    currentRate
+  );
   const currentNEMImpact = calculateNEMPosition(
     { ...inputs, annualProduction: currentProduction },
     currentRate
   );
+
+  // What the planned load actually costs, net of any surplus it absorbs first.
+  // The position object reports {type:'credit'|'trueup', amount: positive}.
+  // Convert to a signed figure so the two scenarios can be differenced.
+  const signedPosition = (p) => (!p ? 0 : (p.type === 'credit' ? p.amount : -p.amount));
+
+  const plannedLoadImpact = plannedAddedKwh > 0 ? {
+    addedKwh: Math.round(plannedAddedKwh),
+    // kWh the existing surplus absorbs for free before anything is billable
+    absorbedBySurplusKwh: Math.max(0, Math.min(plannedAddedKwh, baseNEMImpact.surplus || 0)),
+    billableKwh: Math.max(0, plannedAddedKwh - (baseNEMImpact.surplus || 0)),
+    // annual dollar swing between the two positions — the honest cost
+    annualCostDelta: Math.round(signedPosition(baseNEMImpact) - signedPosition(currentNEMImpact)),
+    baseTotal: Math.round(signedPosition(baseNEMImpact)),
+    withLoadTotal: Math.round(signedPosition(currentNEMImpact)),
+    // did this push an overproducer into owing?
+    flipsToTrueUp: signedPosition(baseNEMImpact) >= 0 && signedPosition(currentNEMImpact) < 0
+  } : null;
   
   // Calculate System Score
   const systemScore = calculateSystemScore(
@@ -832,6 +874,8 @@ export const calculateComprehensiveSavings = (inputs) => {
     systemHealth, // Backward compatibility
     totalInvestment: totalInvestment.toFixed(2),
     currentNEMImpact,
+    baseNEMImpact,
+    plannedLoadImpact,
     nemExpiry: calculateNEMExpiry(inputs.nemVersion, inputs.ptoDate, inputs.installedYear, inputs.installedMonth),
     loanPaymentStructure: backwardCompatibleLoanStructure, // FIXED: Backward compatible
     ppaBuyoutCost: ppaBuyoutCost.toFixed(2),
