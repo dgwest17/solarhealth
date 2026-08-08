@@ -18,7 +18,7 @@ const WRITABLE_KEYS = [
   'installCompany', 'panelModel', 'batteryManufacturer', 'inverterType', 'numberOfModules',
   // financial product
   'program', 'loanPrincipal', 'loanTerm', 'loanInterestRate', 'escalator', 'cashGrossCost',
-  'projectStatus', 'opportunityType', 'financeProvider'
+  'projectStatus', 'opportunityType', 'financeProvider', 'connectionFeeMonthly'
 ];
 
 const snapshot = (inputs) => JSON.stringify(WRITABLE_KEYS.map((k) => inputs[k]));
