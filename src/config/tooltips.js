@@ -31,6 +31,7 @@ export const TOOLTIPS = {
   inverterManufacturer: 'Enphase/APsystems = micro (small boxes under each panel). SolarEdge/SMA/Fronius = one wall box. Check the wall by the meter.',
   batteryManufacturer: 'Brand of the battery system. Drives warranty and replacement planning on the report.',
   financeProvider: 'Who holds the loan/PPA paper — GoodLeap, Mosaic, Sunnova, Sunrun, etc. On the client\u2019s monthly statement or the original contract. Type any name if it\u2019s not in the list.',
+  batteryInstallDate: 'When the battery was commissioned — not the solar install date. On a retrofit these can be years apart, and the warranty clock starts here.',
   greenButton: 'Free 15-minute usage data from the utility website (Green Button Download). Makes this audit measured instead of estimated.'
 };
 
