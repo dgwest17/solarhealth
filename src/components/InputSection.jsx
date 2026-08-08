@@ -522,6 +522,24 @@ const InputSection = ({
             Often later than the solar install on a retrofit. Drives warranty &amp; end-of-life tracking.
           </p>
         </div>
+        <div className="flex items-end">
+          <label className="flex items-start gap-2 cursor-pointer pb-1.5">
+            <input
+              type="checkbox"
+              checked={!!inputs.extendedWarranty}
+              onChange={(e) => onInputChange('extendedWarranty', e.target.checked)}
+              disabled={systemLocked}
+              data-locked={systemLocked ? 'true' : undefined}
+              className="w-3.5 h-3.5 accent-cyan-400 mt-0.5"
+            />
+            <span className="text-[11px] leading-snug">
+              <span className="text-cyan-300 font-semibold">Extended warranty purchased</span>
+              <span className="block text-slate-500">
+                Uncommon — only tick if the paperwork confirms it. Raises the inverter term to 25 yrs.
+              </span>
+            </span>
+          </label>
+        </div>
       </div>
       </>))}
 
@@ -914,7 +932,7 @@ const InputSection = ({
             placeholder="—"
             className="w-full md:w-64 px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
           />
-          <p className="text-xs text-gray-400 mt-1">Typical range: $0.06 - $0.08/kWh | Connection fee: $24/month</p>
+          <p className="text-xs text-gray-400 mt-1">Typical range: $0.06 - $0.08/kWh | Connection fee: $12/month</p>
         </div>
       )}
 
