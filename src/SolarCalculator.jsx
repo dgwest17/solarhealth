@@ -197,9 +197,12 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
     }));
   }, []);
 
+  // Planned load from the Load Simulator is a first-class engine input, so the
+  // audit, the battery tab and the report all price the same future rather than
+  // each estimating it separately.
   const calculations = useMemo(
-    () => calculateComprehensiveSavings(inputs),
-    [inputs]
+    () => calculateComprehensiveSavings({ ...inputs, plannedAddedKwh: extraUsage?.addedKwh || 0 }),
+    [inputs, extraUsage]
   );
 
   const handleInputChange = (field, value) => {
@@ -391,7 +394,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
           />
         )}
 
-        <SaveToCRM inputs={inputs} clientContext={clientContext} clientLabel={clientLabel} onSendAudit={sendAuditReport} />
+        <SaveToCRM inputs={inputs} clientContext={clientContext} clientLabel={clientLabel} onSendAudit={sendAuditReport} plannedLoad={calculations.plannedLoadImpact} />
 
         {!clientContext && canSaveClient && (
           <div className="print:hidden mb-4 flex justify-end">
@@ -471,23 +474,45 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         {/* Equipment warranty / EOL — uses battery's own install date when present */}
         <WarrantyPanel inputs={inputs} />
 
-        {/* Extra Usage True-Up — from the Load Simulator, shown SEPARATELY so it
-            never alters the real current true-up/credit above. */}
-        {extraUsage && extraUsage.cost > 0 && (
-          <div className="bg-red-500/10 border-2 border-red-400/40 rounded-xl p-5 mb-6 flex items-center justify-between print:hidden">
+        {/* Planned-load impact — computed by the engine, not estimated here.
+            Shows the running net: how much existing surplus absorbs the new
+            load before any of it becomes billable. */}
+        {calculations.plannedLoadImpact && (
+          <div className={`rounded-xl p-5 mb-6 flex items-center justify-between print:hidden border-2 ${
+            calculations.plannedLoadImpact.annualCostDelta > 0
+              ? 'bg-red-500/10 border-red-400/40'
+              : 'bg-emerald-500/10 border-emerald-400/40'
+          }`}>
             <div>
-              <div className="text-xs uppercase tracking-wider text-red-300 flex items-center gap-1.5 mb-1">
-                ⚡ Extra Usage True-Up (from Load Simulator)
+              <div className="text-xs uppercase tracking-wider text-slate-300 flex items-center gap-1.5 mb-1">
+                ⚡ Planned Added Load (from Load Simulator)
               </div>
               <p className="text-sm text-slate-300">
-                {extraUsage.addedKwh.toLocaleString()} kWh of added load · {extraUsage.billableKwh.toLocaleString()} kWh billed at time-of-use
+                {calculations.plannedLoadImpact.addedKwh.toLocaleString()} kWh added
+                {calculations.plannedLoadImpact.absorbedBySurplusKwh > 0 && (
+                  <> · <span className="text-emerald-300">{calculations.plannedLoadImpact.absorbedBySurplusKwh.toLocaleString()} kWh absorbed by your surplus</span></>
+                )}
+                {calculations.plannedLoadImpact.billableKwh > 0 && (
+                  <> · <span className="text-red-300">{calculations.plannedLoadImpact.billableKwh.toLocaleString()} kWh billable</span></>
+                )}
               </p>
+              {calculations.plannedLoadImpact.flipsToTrueUp && (
+                <p className="text-[11.5px] text-amber-300 mt-1">
+                  ⚠ This pushes you from a credit into a true-up.
+                </p>
+              )}
             </div>
             <div className="text-right">
-              <div className="text-3xl font-extrabold text-red-400">
-                −${Math.round(extraUsage.cost).toLocaleString()}<span className="text-sm font-normal text-slate-400">/yr</span>
+              <div className={`text-3xl font-extrabold ${
+                calculations.plannedLoadImpact.annualCostDelta > 0 ? 'text-red-400' : 'text-emerald-400'
+              }`}>
+                {calculations.plannedLoadImpact.annualCostDelta > 0 ? '−' : '+'}$
+                {Math.abs(calculations.plannedLoadImpact.annualCostDelta).toLocaleString()}
+                <span className="text-sm font-normal text-slate-400">/yr</span>
               </div>
-              <div className="text-[11px] text-slate-500">on top of your current position</div>
+              <div className="text-[11px] text-slate-500">
+                position {calculations.plannedLoadImpact.baseTotal >= 0 ? '+' : '−'}${Math.abs(calculations.plannedLoadImpact.baseTotal).toLocaleString()} → {calculations.plannedLoadImpact.withLoadTotal >= 0 ? '+' : '−'}${Math.abs(calculations.plannedLoadImpact.withLoadTotal).toLocaleString()}
+              </div>
             </div>
           </div>
         )}
