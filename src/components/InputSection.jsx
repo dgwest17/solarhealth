@@ -545,6 +545,30 @@ const InputSection = ({
         </datalist>
       </div>
 
+      {/* Connection / minimum charge — manual entry until an automated
+          multi-utility rate pull exists. Blank uses the California default;
+          0 is valid (some municipals have none). */}
+      <div className="mb-4">
+        <label className="block text-sm text-cyan-300 mb-1">
+          Connection Fee ($/month)<Tip k="connectionFee" />
+        </label>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          value={inputs.connectionFeeMonthly ?? ''}
+          onChange={(e) => onInputChange('connectionFeeMonthly', numOrBlank(e.target.value))}
+          disabled={systemLocked}
+          data-locked={systemLocked ? 'true' : undefined}
+          placeholder="12.00 (CA default)"
+          className="w-full md:w-1/3 px-2.5 py-1.5 border border-cyan-400/30 rounded-lg bg-slate-900/60 text-cyan-300 text-sm"
+        />
+        <p className="text-[10px] text-slate-500 mt-1">
+          Leave blank for the California default. Enter the client&rsquo;s actual minimum/connection charge
+          for other utilities.
+        </p>
+      </div>
+
       {/* Solar Program Selection */}
       <div className="mb-6">
         <label className="block text-sm text-cyan-300 mb-2">Solar Program<Tip k="program" /></label>
