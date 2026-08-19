@@ -5,7 +5,6 @@ import InputSection from './components/InputSection';
 import ResultsDashboard from './components/ResultsDashboard';
 import NEMStatusCard from './components/NEMStatusCard';
 import WarrantyPanel from './tech/WarrantyPanel';
-import NetPositionPanel from './components/NetPositionPanel';
 import SystemHealthAlert from './components/SystemHealthAlert';
 import ChartsSection from './components/ChartsSection';
 import SummaryTables from './components/SummaryTables';
@@ -569,11 +568,6 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
 
         {/* PDF page 2: Financial Summary + System Metrics */}
         <SummaryTables calculations={calculations} inputs={inputs} />
-
-        {/* Bottom of the audit: the closing argument. Everything above explains
-            the system; this answers "am I actually ahead?" and is the last thing
-            on screen before the footer. */}
-        <NetPositionPanel calculations={calculations} inputs={inputs} />
 
         {/* PDF page 3: System Specifications (print-only, has its own page break) */}
         <SystemSpecsSheet inputs={inputs} />
