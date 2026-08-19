@@ -1,4 +1,4 @@
-import { UTILITY_RATES, TOU_RATES } from './rateData';
+import { getConnectionFeeForYear, UTILITY_RATES, TOU_RATES } from './rateData';
 import { 
   calculateMonthlyPayment, 
   calculateRemainingPrincipal, 
@@ -575,7 +575,12 @@ export const calculateComprehensiveSavings = (inputs) => {
   let cumulativeArbitrageSavings = 0;
   let cumulativeNEMCredits = 0;
   let cumulativeTrueUpCharges = 0;
-  let cumulativeConnectionFees = 0;  // NEW: Track NEM2 connection fees
+  let cumulativeConnectionFees = 0;  // fixed charges actually paid, year-aware
+  // THE COUNTERFACTUAL: what this household would have handed the utility over
+  // the same period with no solar at all. Priced on their real usage curve
+  // against that year's real retail rate — the honest comparison baseline.
+  let cumulativeUtilityWouldHavePaid = 0;
+  let cumulativeTrueUpPaid = 0;
   let yearlyData = [];
   
   const initialRate = getUtilityRate(inputs.installedYear, inputs.utility, inputs.onCareProgram);
@@ -649,7 +654,15 @@ export const calculateComprehensiveSavings = (inputs) => {
     ) / 12;
     
     // NEM 2.0 connection fee
-    const connectionFee = inputs.nemVersion === 'NEM2' ? NEM2_CONNECTION_FEE : 0;
+    // Connection/minimum charge as it stood IN THAT YEAR — these rose from $0
+    // to $12 to $24 (end of 2025). Using today's figure for 2015 would invent
+    // costs the client never paid. NEM 1.0 clients whose credits covered the
+    // charge are handled by the netting rules, not here.
+    const connectionFee = inputs.nemVersion === 'NEM3'
+      ? getConnectionFeeForYear(currentYear, inputs.connectionFeeMonthly)
+      : inputs.nemVersion === 'NEM2'
+        ? getConnectionFeeForYear(currentYear, inputs.connectionFeeMonthly)
+        : 0; // NEM 1.0: credits offset the fixed charge
     
     const monthlyNEMImpact = nemImpact.amount / 12;
     
@@ -677,6 +690,8 @@ export const calculateComprehensiveSavings = (inputs) => {
       cumulativeBatteryCost += batteryCost;
       cumulativeArbitrageSavings += arbitrageSavings;
       cumulativeConnectionFees += connectionFee;
+      cumulativeUtilityWouldHavePaid += utilityWouldPay;
+      if (nemImpact.type === 'trueup') cumulativeTrueUpPaid += monthlyNEMImpact;
       
       if (nemImpact.type === 'credit') {
         cumulativeNEMCredits += monthlyNEMImpact;
@@ -842,6 +857,66 @@ export const calculateComprehensiveSavings = (inputs) => {
     paymentAfter18Months: 0
   };
 
+  // ============================================================
+  // THE HEADLINE COMPARISON
+  //
+  // Two totals, both over the same window (install -> today):
+  //   1. What the utility would have taken with no solar at all.
+  //   2. What solar has actually cost, itemised.
+  //
+  // Net = (1) - (2). This is the figure that matters to someone still making
+  // payments, because their monthly outlay hasn't stopped — the question is
+  // whether it's smaller than the bill it replaced.
+  //
+  // Deliberate choices worth knowing:
+  //   - The counterfactual prices their ACTUAL usage growth against each
+  //     year's real retail rate. It is not today's rate projected backwards.
+  //   - Connection charges use the year-by-year schedule, not today's $24.
+  //   - Cash systems show the up-front cost as the investment; financed
+  //     systems show payments made to date, not the full contract value —
+  //     you can't count money not yet spent.
+  // ============================================================
+  const solarPaidToDate = cumulativeCost;
+  const batteryPaidToDate = cumulativeBatteryCost;
+  const upFrontPaid = inputs.program === 'Cash'
+    ? (Number(inputs.cashGrossCost) || Number(inputs.cashNetCost) || 0)
+    : (Number(inputs.downPayment) || 0);
+
+  const totalSolarOutlay =
+    upFrontPaid + solarPaidToDate + batteryPaidToDate +
+    cumulativeConnectionFees + cumulativeTrueUpPaid;
+
+  const netPosition = cumulativeUtilityWouldHavePaid - totalSolarOutlay;
+
+  const costBreakdown = {
+    // --- what they'd have paid with no solar ---
+    utilityWouldHavePaid: Math.round(cumulativeUtilityWouldHavePaid),
+    yearsCovered: Number(yearsSinceInstall.toFixed(1)),
+
+    // --- what solar has actually cost, itemised ---
+    upFrontPaid: Math.round(upFrontPaid),
+    solarPaymentsToDate: Math.round(solarPaidToDate),
+    batteryPaymentsToDate: Math.round(batteryPaidToDate),
+    connectionFeesPaid: Math.round(cumulativeConnectionFees),
+    trueUpPaid: Math.round(cumulativeTrueUpPaid),
+    creditsReceived: Math.round(cumulativeNEMCredits),
+    totalSolarOutlay: Math.round(totalSolarOutlay),
+
+    // --- the answer ---
+    netSavings: Math.round(netPosition),
+    aheadOrBehind: netPosition >= 0 ? 'ahead' : 'behind',
+    // Effective monthly: what solar costs per month all-in vs the bill it replaced.
+    avgMonthlySolarOutlay: monthsSinceInstall > 0 ? Math.round(totalSolarOutlay / monthsSinceInstall) : 0,
+    avgMonthlyUtilityAvoided: monthsSinceInstall > 0 ? Math.round(cumulativeUtilityWouldHavePaid / monthsSinceInstall) : 0,
+    // Still paying? Then the comparison is ongoing, not settled.
+    stillPaying: (inputs.program === 'Loan' || inputs.program === 'PPA') &&
+                 !(inputs.loanPaidOff || inputs.ppaPaidOff),
+    // Share of the avoided bill that solar consumed. Under 100% = winning.
+    outlayAsPctOfUtility: cumulativeUtilityWouldHavePaid > 0
+      ? Math.round((totalSolarOutlay / cumulativeUtilityWouldHavePaid) * 100)
+      : null
+  };
+
   return {
     cumulativeSavings: cumulativeSavings.toFixed(2),
     cumulativeCost: cumulativeCost.toFixed(2),
@@ -850,6 +925,8 @@ export const calculateComprehensiveSavings = (inputs) => {
     cumulativeNEMCredits: cumulativeNEMCredits.toFixed(2),
     cumulativeTrueUpCharges: cumulativeTrueUpCharges.toFixed(2),
     cumulativeConnectionFees: cumulativeConnectionFees.toFixed(2),
+    cumulativeUtilityWouldHavePaid: cumulativeUtilityWouldHavePaid.toFixed(2),
+    costBreakdown,
     monthsSinceInstall,
     yearsSinceInstall: yearsSinceInstall.toFixed(1),
     // Avg monthly savings, per program:
