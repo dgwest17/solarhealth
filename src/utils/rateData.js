@@ -1,232 +1,257 @@
-// Historical average residential utility rates ($/kWh), 2010 → 2026.
-//
-// 2010-2013 back-history lets NEM 1.0 clients (2010-2016 installs) get a full
-// savings picture instead of a truncated one. SDG&E 2010 = $0.136 is a known
-// figure; the other 2010-2013 values are estimates consistent with the 2014
-// anchors and CPUC/EIA-reported averages — adjust if you have better data.
-//
-// Installs older than 2010 clamp to the 2010 rate (conservative: understates
-// early savings rather than inventing them).
-export const UTILITY_RATES = {
-  PGE: {
-    2010: 0.152, 2011: 0.157, 2012: 0.163, 2013: 0.176,
-    2014: 0.189, 2015: 0.191, 2016: 0.199, 2017: 0.216, 2018: 0.229,
-    2019: 0.245, 2020: 0.263, 2021: 0.285, 2022: 0.329, 2023: 0.375,
-    2024: 0.420, 2025: 0.480, 2026: 0.495
-  },
-  SCE: {
-    2010: 0.145, 2011: 0.148, 2012: 0.155, 2013: 0.165,
-    2014: 0.172, 2015: 0.171, 2016: 0.177, 2017: 0.188, 2018: 0.198,
-    2019: 0.213, 2020: 0.226, 2021: 0.248, 2022: 0.284, 2023: 0.303,
-    2024: 0.316, 2025: 0.314, 2026: 0.341
-  },
-  SDGE: {
-    2010: 0.136, 2011: 0.150, 2012: 0.180, 2013: 0.190,
-    2014: 0.212, 2015: 0.225, 2016: 0.24, 2017: 0.25, 2018: 0.255,
-    2019: 0.255, 2020: 0.265, 2021: 0.340, 2022: 0.420, 2023: 0.440,
-    2024: 0.450, 2025: 0.490, 2026: 0.51
-  },
-  SMUD: {
-    2010: 0.099, 2011: 0.103, 2012: 0.107, 2013: 0.112,
-    2014: 0.118, 2015: 0.121, 2016: 0.124, 2017: 0.128, 2018: 0.133,
-    2019: 0.139, 2020: 0.146, 2021: 0.158, 2022: 0.178, 2023: 0.205,
-    2024: 0.228, 2025: 0.245, 2026: 0.253
-  }
+import React from 'react';
+
+const SummaryTables = ({ calculations, inputs }) => {
+  // Safety check - provide defaults if calculations is undefined
+  const safeCalc = calculations || {
+    yearsSinceInstall: '0',
+    totalInvestment: '0',
+    cumulativeCost: '0',
+    cumulativeBatteryCost: '0',
+    cumulativeNEMCredits: '0',
+    cumulativeTrueUpCharges: '0',
+    paybackYears: '0',
+    roi: '0',
+    cumulativeSavings: '0',
+    initialUtilityRate: '0',
+    currentUtilityRate: '0',
+    rateIncrease: '0',
+    usageGrowthRate: '0',
+    offsetPercentage: '0',
+    utilityBillAtInstall: '0',
+    utilityBillNow: '0'
+  };
+
+  const safeInputs = inputs || {
+    installedYear: 2020,
+    nowYear: 2025,
+    annualUsageAtInstall: 0,
+    currentAnnualUsage: 0,
+    hasBattery: false
+  };
+
+  const b = calculations && calculations.costBreakdown ? calculations.costBreakdown : null;
+  const UTIL_LABEL = { SDGE: 'SDG&E', PGE: 'PG&E', SCE: 'SCE', SMUD: 'SMUD' };
+  const utilLabel = UTIL_LABEL[safeInputs.utility] || 'your utility';
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      {/* Financial Summary — absorbs the old NetPositionPanel: the utility
+          counterfactual, an itemised list of what solar has actually cost, and
+          the net. Structured as a bill: what you avoided, what you paid,
+          what's left over. */}
+      <div className="bg-white rounded-xl shadow-lg p-6">
+        <h3 className="text-lg font-semibold mb-1">Financial Summary</h3>
+        {b && b.yearsCovered > 0 && (
+          <p className="text-xs text-gray-500 mb-4">
+            Over {b.yearsCovered} years since installation — your real usage priced at each year&rsquo;s real rate.
+          </p>
+        )}
+
+        <div className="space-y-3">
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">System Age</span>
+            <span className="font-semibold">{safeCalc.yearsSinceInstall} years</span>
+          </div>
+
+          {/* ---- The counterfactual ---- */}
+          {b && b.utilityWouldHavePaid > 0 && (
+            <div className="flex justify-between border-b pb-2 bg-red-50 -mx-2 px-2 rounded">
+              <span className="text-gray-700 font-medium">
+                What {utilLabel} would have taken
+                <span className="block text-[11px] text-gray-500 font-normal">
+                  with no solar · ~${b.avgMonthlyUtilityAvoided.toLocaleString()}/mo
+                </span>
+              </span>
+              <span className="font-bold text-red-600">
+                ${b.utilityWouldHavePaid.toLocaleString()}
+              </span>
+            </div>
+          )}
+
+          {/* ---- What solar actually cost, itemised ---- */}
+          <div className="pt-1">
+            <div className="text-[11px] uppercase tracking-wider text-gray-400 font-semibold mb-1">
+              What solar has run you
+            </div>
+          </div>
+
+          {b && b.upFrontPaid > 0 && (
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-600">Paid up front</span>
+              <span className="font-semibold">${b.upFrontPaid.toLocaleString()}</span>
+            </div>
+          )}
+
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">
+              Solar payments to date
+              {b && b.stillPaying && (
+                <span className="block text-[11px] text-gray-500">payments still ongoing</span>
+              )}
+            </span>
+            <span className="font-semibold">
+              ${parseFloat(safeCalc.cumulativeCost || 0).toLocaleString()}
+            </span>
+          </div>
+
+          {safeInputs.hasBattery && parseFloat(safeCalc.cumulativeBatteryCost || 0) > 0 && (
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-600">Battery payments to date</span>
+              <span className="font-semibold">
+                ${parseFloat(safeCalc.cumulativeBatteryCost || 0).toLocaleString()}
+              </span>
+            </div>
+          )}
+
+          {safeCalc.cumulativeConnectionFees && parseFloat(safeCalc.cumulativeConnectionFees) > 0 && (
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-600">
+                Connection &amp; minimum charges
+                <span className="block text-[11px] text-gray-500">at the rate in force each year</span>
+              </span>
+              <span className="font-semibold text-blue-600">
+                ${parseFloat(safeCalc.cumulativeConnectionFees).toLocaleString()}
+              </span>
+            </div>
+          )}
+
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">True-Up charges</span>
+            <span className="font-semibold text-orange-600">
+              ${parseFloat(safeCalc.cumulativeTrueUpCharges || 0).toLocaleString()}
+            </span>
+          </div>
+
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">NEM credits received</span>
+            <span className="font-semibold text-green-600">
+              −${parseFloat(safeCalc.cumulativeNEMCredits || 0).toLocaleString()}
+            </span>
+          </div>
+
+          {b && b.totalSolarOutlay > 0 && (
+            <div className="flex justify-between border-b-2 border-gray-300 pb-2">
+              <span className="text-gray-700 font-medium">
+                Total solar outlay
+                <span className="block text-[11px] text-gray-500 font-normal">
+                  ~${b.avgMonthlySolarOutlay.toLocaleString()}/mo
+                </span>
+              </span>
+              <span className="font-bold text-gray-800">${b.totalSolarOutlay.toLocaleString()}</span>
+            </div>
+          )}
+
+          {/* ---- Performance ---- */}
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">Payback Period</span>
+            <span className="font-semibold">{safeCalc.paybackYears || '0'} years</span>
+          </div>
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">ROI</span>
+            <span className="font-semibold text-green-600">{safeCalc.roi || '0'}%</span>
+          </div>
+
+          {/* ---- The answer ---- */}
+          {b && b.utilityWouldHavePaid > 0 ? (
+            <div className={`flex justify-between items-center pt-3 mt-1 rounded-lg px-3 py-3 ${
+              b.netSavings >= 0 ? 'bg-green-50' : 'bg-amber-50'
+            }`}>
+              <span className="text-gray-700 font-semibold">
+                {b.netSavings >= 0 ? 'Net Savings' : 'Currently Behind By'}
+                <span className="block text-[11px] text-gray-500 font-normal">
+                  ${b.utilityWouldHavePaid.toLocaleString()} avoided − ${b.totalSolarOutlay.toLocaleString()} spent
+                </span>
+              </span>
+              <span className={`font-bold text-2xl ${b.netSavings >= 0 ? 'text-green-600' : 'text-amber-600'}`}>
+                {b.netSavings >= 0 ? '' : '−'}${Math.abs(b.netSavings).toLocaleString()}
+              </span>
+            </div>
+          ) : (
+            <div className="flex justify-between pt-2">
+              <span className="text-gray-600">Net Benefit</span>
+              <span className="font-bold text-green-600 text-xl">
+                ${parseFloat(safeCalc.cumulativeSavings || 0).toLocaleString()}
+              </span>
+            </div>
+          )}
+
+          {b && b.outlayAsPctOfUtility != null && (
+            <p className="text-[11px] text-gray-500 leading-relaxed pt-1">
+              Solar has cost <span className="font-semibold">{b.outlayAsPctOfUtility}%</span> of the utility
+              bill it replaced
+              {b.stillPaying
+                ? ' — and payments are still running, so this gap widens every time rates rise.'
+                : (parseFloat(safeCalc.cumulativeCost || 0) > 0
+                    ? ' — with the system paid off, everything from here is upside.'
+                    : '.')}
+              {' '}Counts money actually spent, not the remaining balance of a loan or lease.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* System Metrics */}
+      <div className="bg-white rounded-xl shadow-lg p-6">
+        <h3 className="text-lg font-semibold mb-4">System Metrics</h3>
+        <div className="space-y-3">
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">Initial Rate ({safeInputs.installedYear})</span>
+            <span className="font-semibold">${safeCalc.initialUtilityRate || '0'}/kWh</span>
+          </div>
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">Current Rate ({safeInputs.nowYear})</span>
+            <span className="font-semibold">${safeCalc.currentUtilityRate || '0'}/kWh</span>
+          </div>
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">Rate Increase</span>
+            <span className="font-semibold text-red-600">+{safeCalc.rateIncrease || '0'}%</span>
+          </div>
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">Usage at Install</span>
+            <span className="font-semibold">
+              {(safeInputs.annualUsageAtInstall || 0).toLocaleString()} kWh/yr
+            </span>
+          </div>
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">Current Usage</span>
+            <span className="font-semibold">
+              {(safeInputs.currentAnnualUsage || 0).toLocaleString()} kWh/yr
+            </span>
+          </div>
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">Usage Growth</span>
+            <span className="font-semibold text-orange-600">
+              +{safeCalc.usageGrowthRate || '0'}%/yr
+            </span>
+          </div>
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">Current Offset</span>
+            <span className="font-semibold text-green-600">
+              {safeCalc.offsetPercentage || '0'}%
+            </span>
+          </div>
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">Utility Bill at Install</span>
+            <span className="font-semibold">
+              ${safeCalc.utilityBillAtInstall || '0'}/mo
+            </span>
+          </div>
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">Utility Bill if You Didn't Have Solar</span>
+            <span className="font-semibold text-red-600">
+              ${safeCalc.utilityBillNow || '0'}/mo
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-600">Bill Increase</span>
+            <span className="font-semibold text-red-600">
+              +{safeCalc.utilityBillIncrease || '0'}%
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
-// Time-of-Use Rate Structures
-export const TOU_RATES = {
-  SCE: { 
-    peak: 0.65,          // 4-9 PM
-    offPeak: 0.35,       // All other times
-    superOffPeak: 0.25   // 8 AM - 4 PM weekdays
-  },
-  PGE: { 
-    peak: 0.58, 
-    offPeak: 0.30, 
-    superOffPeak: 0.26 
-  },
-  SDGE: { 
-    peak: 0.79, 
-    offPeak: 0.48, 
-    superOffPeak: 0.12 
-  },
-  SMUD: {
-    peak: 0.3765,        // Summer peak: weekdays 5-8 PM
-    offPeak: 0.1550,     // Summer off-peak: midnight-noon, weekends/holidays
-    superOffPeak: 0.2139 // Summer mid-peak: noon-5 PM & 8 PM-midnight
-  }
-};
-
-// Utility provider options
-export const UTILITY_OPTIONS = [
-  { value: 'SCE', label: 'Southern California Edison (SCE)' },
-  { value: 'PGE', label: 'Pacific Gas & Electric (PG&E)' },
-  { value: 'SDGE', label: 'San Diego Gas & Electric (SDG&E)' },
-  { value: 'SMUD', label: 'Sacramento Municipal Utility District (SMUD)' }
-];
-
-// NEM version options
-export const NEM_OPTIONS = [
-  { value: 'NEM1', label: 'NEM 1.0', description: 'Retail rate compensation' },
-  { value: 'NEM2', label: 'NEM 2.0', description: 'Wholesale rate compensation' },
-  { value: 'NEM3', label: 'NEM 3.0', description: 'Significantly reduced export rate' }
-];
-
-// Program type options
-export const PROGRAM_OPTIONS = [
-  { value: 'PPA', label: 'Power Purchase Agreement (PPA)/Lease' },
-  { value: 'Cash', label: 'Cash' },
-  { value: 'Loan', label: 'Loan' },
-  { value: 'Other', label: 'Other' }
-];
-
-// PPA Escalator options (as percentages)
-export const PPA_ESCALATOR_OPTIONS = [
-  { value: 0, label: '0%' },
-  { value: 0.9, label: '0.9%' },
-  { value: 1.9, label: '1.9%' },
-  { value: 2.9, label: '2.9%' },
-  { value: 3.5, label: '3.5%' },
-  { value: 3.9, label: '3.9%' }
-];
-
-// API provider options
-export const API_PROVIDERS = [
-  { value: 'enphase', label: 'Enphase (Enlighten)' },
-  { value: 'solaredge', label: 'SolarEdge' },
-  { value: 'tesla', label: 'Tesla (Powerwall)' },
-  { value: 'manual', label: 'Manual Override' }
-];
-
-// Installer options — Southern California.
-// Grouped: active installers, national financiers/installers, and
-// recently-defunct companies (warranty-orphaned customers — prime audit targets).
-// "defunct" flag lets the UI/audit highlight orphaned-warranty systems.
-export const INSTALLER_OPTIONS = [
-  // ---- Active regional / SoCal installers ----
-  { value: 'Baker Electric Home Energy', label: 'Baker Electric Home Energy', defunct: false },
-  { value: 'Stellar Solar', label: 'Stellar Solar', defunct: false },
-  { value: 'Semper Solaris', label: 'Semper Solaris', defunct: false },
-  { value: 'Sullivan Solar Power', label: 'Sullivan Solar Power', defunct: true },
-  { value: 'Sunline Energy', label: 'Sunline Energy', defunct: false },
-  { value: 'SolarTech', label: 'SolarTech', defunct: false },
-  { value: 'NRG Clean Power', label: 'NRG Clean Power', defunct: false },
-  { value: 'GC Electric Solar', label: 'GC Electric Solar', defunct: false },
-  { value: 'Ameco Solar', label: 'Ameco Solar', defunct: false },
-  { value: 'Sunlux', label: 'Sunlux', defunct: false },
-  { value: 'Action Solar', label: 'Action Solar', defunct: false },
-  { value: 'HES Solar', label: 'HES Solar', defunct: false },
-  { value: 'Sun Pacific Solar', label: 'Sun Pacific Solar', defunct: false },
-  { value: 'Solar Optimum', label: 'Solar Optimum', defunct: false },
-  { value: 'LA Solar Group', label: 'LA Solar Group', defunct: false },
-  { value: 'Forme Solar', label: 'Forme Solar', defunct: false },
-  { value: 'SunPower by (dealer)', label: 'SunPower (dealer install)', defunct: false },
-
-  { value: 'Tesla Energy', label: 'Tesla Energy', defunct: false },
-  { value: 'Sunrun', label: 'Sunrun', defunct: false },
-  { value: 'Aptos Solar', label: 'Aptos Solar', defunct: false },
-  { value: 'Barnes Solar', label: 'Barnes Solar', defunct: false },
-  { value: 'Renova Energy', label: 'Renova Energy', defunct: false },
-
-  // ---- Recently defunct / bankrupt (warranty-orphaned) ----
-  { value: 'SunPower (legacy corp.)', label: 'SunPower — legacy corp. (Ch.11 2024)', defunct: true },
-    { value: 'Freedom Forever', label: 'Freedom Forever (Ch. 11 2026(', defunct: true },
-  { value: 'Sunnova', label: 'Sunnova (Ch.11 2025)', defunct: true },
-  { value: 'Titan Solar Power', label: 'Titan Solar Power (closed 2024)', defunct: true },
-  { value: 'Solcius', label: 'Solcius (closed 2024)', defunct: true },
-  { value: 'KOTA', label: 'KOTA (closed 2024)', defunct: true },
-  { value: 'ADT Solar', label: 'ADT Solar (exited 2024)', defunct: true },
-  { value: 'Sunpro Solar', label: 'Sunpro Solar (closed 2023)', defunct: true },
-  { value: 'Sunworks', label: 'Sunworks (Ch.7 2024)', defunct: true },
-  { value: 'Vivint Solar', label: 'Vivint Solar (absorbed by Sunrun)', defunct: true },
-  { value: 'Kuubix', label: 'Kuubix (closed)', defunct: true },
-  { value: 'Sungevity', label: 'Sungevity (defunct)', defunct: true },
-  { value: 'Petersen Dean', label: 'PetersenDean / PD Solar (closed)', defunct: true },
-
-  { value: 'Other', label: 'Other / Unknown', defunct: false },
-];
-
-// Hour-of-day TOU windows ([start,end) 24h) — shared by the battery TOU
-// chart, the report, and Green Button bucketing. Hours not in peak or
-// superOffPeak are off-peak.
-export const TOU_WINDOWS = {
-  SDGE: { peak: [16, 21], superOffPeak: [0, 6] },
-  SCE: { peak: [16, 21], superOffPeak: [8, 16] },
-  PGE: { peak: [16, 21], superOffPeak: [0, 7] },
-  SMUD: { peak: [17, 20], superOffPeak: [0, 6] }
-};
-
-// EV rate plans. VERIFY current rates before quoting — SDG&E revises these.
-// EV-TOU-5: super off-peak 12am–6am daily PLUS weekdays 10am–2pm; very low
-// SOP pricing in exchange for a monthly basic service fee.
-export const EV_TOU_PLANS = {
-  SDGE_EVTOU5: {
-    id: 'SDGE_EVTOU5',
-    utility: 'SDGE',
-    label: 'SDG&E EV-TOU-5',
-    // Aligned with RATE_PLANS in src/battery/BatteryDispatch.js — these two
-    // tables MUST agree or the simulator and the dispatch engine will quote
-    // different prices for the same kWh. Figures confirmed with the rep.
-    peak: 0.79,          // 4–9 PM (summer)
-    offPeak: 0.45,
-    superOffPeak: 0.12,  // 12am–6am daily + weekdays 10am–2pm
-    monthlyFee: 16,
-    windows: { peak: [16, 21], superOffPeak: [0, 6], sopWeekdayMidday: [10, 14] },
-    approx: true // representative — verify current tariff
-  }
-};
-
-export function getEvTouPlan(planId) {
-  return EV_TOU_PLANS[planId] || null;
-}
-
-
-// Common CA solar finance providers (Zoho field is free text — type anything).
-export const FINANCE_PROVIDERS = [
-  'GoodLeap', 'Mosaic', 'Sunlight Financial', 'Dividend Finance', 'Sunnova',
-  'Sunrun', 'LightReach', 'EverBright', 'Service Finance', 'Solar Mosaic',
-  'Enfin', 'Aurora/SolarAPP', 'Cash — no financing', 'Other'
-];
-
-
-/**
- * ---------------------------------------------------------------------------
- * CONNECTION / MINIMUM-CHARGE HISTORY
- * ---------------------------------------------------------------------------
- * The fixed monthly charge a solar customer pays regardless of energy use has
- * NOT been constant. Applying today's figure to every past year overstates
- * what a 2014 client actually paid — sometimes by hundreds of dollars across a
- * ten-year history.
- *
- * Schedule below is the CA (SDG&E-anchored) progression:
- *   early years  $0/mo   — no meaningful fixed charge
- *   mid years    $12/mo
- *   2026 onward  $24/mo  — roughly doubled at the end of 2025
- *
- * `from` is inclusive. The 0 -> 12 transition year is the least certain figure
- * here; adjust once confirmed against a client's older bills.
- *
- * NOTE ON NEM VERSION: under NEM 1.0 export credits can offset these charges,
- * so an overproducing NEM 1.0 client may effectively pay none. That rule lives
- * in calculateNEMPosition — this table is the gross schedule only.
- */
-export const CONNECTION_FEE_SCHEDULE = [
-  { from: 2026, monthly: 24 },
-  { from: 2017, monthly: 12 },
-  { from: 2000, monthly: 0 }
-];
-
-/**
- * Monthly connection/minimum charge in force for a given calendar year.
- * A manual override (for non-CA utilities) wins outright — 0 is valid.
- */
-export function getConnectionFeeForYear(year, override = null) {
-  if (override !== null && override !== undefined && override !== '' && Number.isFinite(Number(override))) {
-    return Number(override);
-  }
-  const y = Number(year);
-  if (!Number.isFinite(y)) return 0;
-  const band = CONNECTION_FEE_SCHEDULE.find((b) => y >= b.from);
-  return band ? band.monthly : 0;
-}
+export default SummaryTables;
