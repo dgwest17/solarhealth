@@ -29,72 +29,164 @@ const SummaryTables = ({ calculations, inputs }) => {
     hasBattery: false
   };
 
+  const b = calculations && calculations.costBreakdown ? calculations.costBreakdown : null;
+  const UTIL_LABEL = { SDGE: 'SDG&E', PGE: 'PG&E', SCE: 'SCE', SMUD: 'SMUD' };
+  const utilLabel = UTIL_LABEL[safeInputs.utility] || 'your utility';
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-      {/* Financial Summary */}
+      {/* Financial Summary — absorbs the old NetPositionPanel: the utility
+          counterfactual, an itemised list of what solar has actually cost, and
+          the net. Structured as a bill: what you avoided, what you paid,
+          what's left over. */}
       <div className="bg-white rounded-xl shadow-lg p-6">
-        <h3 className="text-lg font-semibold mb-4">Financial Summary</h3>
+        <h3 className="text-lg font-semibold mb-1">Financial Summary</h3>
+        {b && b.yearsCovered > 0 && (
+          <p className="text-xs text-gray-500 mb-4">
+            Over {b.yearsCovered} years since installation — your real usage priced at each year&rsquo;s real rate.
+          </p>
+        )}
+
         <div className="space-y-3">
           <div className="flex justify-between border-b pb-2">
             <span className="text-gray-600">System Age</span>
             <span className="font-semibold">{safeCalc.yearsSinceInstall} years</span>
           </div>
-          <div className="flex justify-between border-b pb-2">
-            <span className="text-gray-600">Total Investment</span>
-            <span className="font-semibold">
-              ${parseFloat(safeCalc.totalInvestment || 0).toLocaleString()}
-            </span>
+
+          {/* ---- The counterfactual ---- */}
+          {b && b.utilityWouldHavePaid > 0 && (
+            <div className="flex justify-between border-b pb-2 bg-red-50 -mx-2 px-2 rounded">
+              <span className="text-gray-700 font-medium">
+                What {utilLabel} would have taken
+                <span className="block text-[11px] text-gray-500 font-normal">
+                  with no solar · ~${b.avgMonthlyUtilityAvoided.toLocaleString()}/mo
+                </span>
+              </span>
+              <span className="font-bold text-red-600">
+                ${b.utilityWouldHavePaid.toLocaleString()}
+              </span>
+            </div>
+          )}
+
+          {/* ---- What solar actually cost, itemised ---- */}
+          <div className="pt-1">
+            <div className="text-[11px] uppercase tracking-wider text-gray-400 font-semibold mb-1">
+              What solar has run you
+            </div>
           </div>
+
+          {b && b.upFrontPaid > 0 && (
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-600">Paid up front</span>
+              <span className="font-semibold">${b.upFrontPaid.toLocaleString()}</span>
+            </div>
+          )}
+
           <div className="flex justify-between border-b pb-2">
-            <span className="text-gray-600">Solar Cost Paid</span>
+            <span className="text-gray-600">
+              Solar payments to date
+              {b && b.stillPaying && (
+                <span className="block text-[11px] text-gray-500">payments still ongoing</span>
+              )}
+            </span>
             <span className="font-semibold">
               ${parseFloat(safeCalc.cumulativeCost || 0).toLocaleString()}
             </span>
           </div>
-          {safeInputs.hasBattery && (
+
+          {safeInputs.hasBattery && parseFloat(safeCalc.cumulativeBatteryCost || 0) > 0 && (
             <div className="flex justify-between border-b pb-2">
-              <span className="text-gray-600">Battery Cost Paid</span>
+              <span className="text-gray-600">Battery payments to date</span>
               <span className="font-semibold">
                 ${parseFloat(safeCalc.cumulativeBatteryCost || 0).toLocaleString()}
               </span>
             </div>
           )}
-          <div className="flex justify-between border-b pb-2">
-            <span className="text-gray-600">NEM Credits Received</span>
-            <span className="font-semibold text-green-600">
-              ${parseFloat(safeCalc.cumulativeNEMCredits || 0).toLocaleString()}
-            </span>
-          </div>
-          <div className="flex justify-between border-b pb-2">
-            <span className="text-gray-600">True-Up Charges</span>
-            <span className="font-semibold text-orange-600">
-              ${parseFloat(safeCalc.cumulativeTrueUpCharges || 0).toLocaleString()}
-            </span>
-          </div>
+
           {safeCalc.cumulativeConnectionFees && parseFloat(safeCalc.cumulativeConnectionFees) > 0 && (
             <div className="flex justify-between border-b pb-2">
-              <span className="text-gray-600">NEM 2.0 Connection Fees</span>
+              <span className="text-gray-600">
+                Connection &amp; minimum charges
+                <span className="block text-[11px] text-gray-500">at the rate in force each year</span>
+              </span>
               <span className="font-semibold text-blue-600">
                 ${parseFloat(safeCalc.cumulativeConnectionFees).toLocaleString()}
               </span>
             </div>
           )}
+
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">True-Up charges</span>
+            <span className="font-semibold text-orange-600">
+              ${parseFloat(safeCalc.cumulativeTrueUpCharges || 0).toLocaleString()}
+            </span>
+          </div>
+
+          <div className="flex justify-between border-b pb-2">
+            <span className="text-gray-600">NEM credits received</span>
+            <span className="font-semibold text-green-600">
+              −${parseFloat(safeCalc.cumulativeNEMCredits || 0).toLocaleString()}
+            </span>
+          </div>
+
+          {b && b.totalSolarOutlay > 0 && (
+            <div className="flex justify-between border-b-2 border-gray-300 pb-2">
+              <span className="text-gray-700 font-medium">
+                Total solar outlay
+                <span className="block text-[11px] text-gray-500 font-normal">
+                  ~${b.avgMonthlySolarOutlay.toLocaleString()}/mo
+                </span>
+              </span>
+              <span className="font-bold text-gray-800">${b.totalSolarOutlay.toLocaleString()}</span>
+            </div>
+          )}
+
+          {/* ---- Performance ---- */}
           <div className="flex justify-between border-b pb-2">
             <span className="text-gray-600">Payback Period</span>
-            <span className="font-semibold">
-              {safeCalc.paybackYears || '0'} years
-            </span>
+            <span className="font-semibold">{safeCalc.paybackYears || '0'} years</span>
           </div>
           <div className="flex justify-between border-b pb-2">
             <span className="text-gray-600">ROI</span>
             <span className="font-semibold text-green-600">{safeCalc.roi || '0'}%</span>
           </div>
-          <div className="flex justify-between pt-2">
-            <span className="text-gray-600">Net Benefit</span>
-            <span className="font-bold text-green-600 text-xl">
-              ${parseFloat(safeCalc.cumulativeSavings || 0).toLocaleString()}
-            </span>
-          </div>
+
+          {/* ---- The answer ---- */}
+          {b && b.utilityWouldHavePaid > 0 ? (
+            <div className={`flex justify-between items-center pt-3 mt-1 rounded-lg px-3 py-3 ${
+              b.netSavings >= 0 ? 'bg-green-50' : 'bg-amber-50'
+            }`}>
+              <span className="text-gray-700 font-semibold">
+                {b.netSavings >= 0 ? 'Net Savings' : 'Currently Behind By'}
+                <span className="block text-[11px] text-gray-500 font-normal">
+                  ${b.utilityWouldHavePaid.toLocaleString()} avoided − ${b.totalSolarOutlay.toLocaleString()} spent
+                </span>
+              </span>
+              <span className={`font-bold text-2xl ${b.netSavings >= 0 ? 'text-green-600' : 'text-amber-600'}`}>
+                {b.netSavings >= 0 ? '' : '−'}${Math.abs(b.netSavings).toLocaleString()}
+              </span>
+            </div>
+          ) : (
+            <div className="flex justify-between pt-2">
+              <span className="text-gray-600">Net Benefit</span>
+              <span className="font-bold text-green-600 text-xl">
+                ${parseFloat(safeCalc.cumulativeSavings || 0).toLocaleString()}
+              </span>
+            </div>
+          )}
+
+          {b && b.outlayAsPctOfUtility != null && (
+            <p className="text-[11px] text-gray-500 leading-relaxed pt-1">
+              Solar has cost <span className="font-semibold">{b.outlayAsPctOfUtility}%</span> of the utility
+              bill it replaced
+              {b.stillPaying
+                ? ' — and payments are still running, so this gap widens every time rates rise.'
+                : (parseFloat(safeCalc.cumulativeCost || 0) > 0
+                    ? ' — with the system paid off, everything from here is upside.'
+                    : '.')}
+              {' '}Counts money actually spent, not the remaining balance of a loan or lease.
+            </p>
+          )}
         </div>
       </div>
 
