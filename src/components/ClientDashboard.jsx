@@ -3,6 +3,7 @@ import {
   Search, MapPin, Mail, ChevronRight, Users, RefreshCw, AlertCircle,
   ArrowUp, ArrowDown, Calendar, DollarSign, Zap, MoreVertical
 } from 'lucide-react';
+import { checkReportEligibility } from '../tech/reportEligibility';
 import { apiFetch } from '../lib/supabaseClient';
 import ContactFormModal from './ContactFormModal';
 
@@ -23,6 +24,7 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
   const [sortBy, setSortBy] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
   const [trueUpOnly, setTrueUpOnly] = useState(false);
+  const [notReportReady, setNotReportReady] = useState(false);
   const [editing, setEditing] = useState(null);   // client for the edit modal
 
   const load = async () => {
@@ -48,10 +50,31 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
     [clients]
   );
 
+  // Report readiness — same gate the automated send uses, so what a rep sees
+  // here is exactly who would (and wouldn't) receive mail.
+  const readiness = useMemo(() => {
+    const m = new Map();
+    for (const c of clients) {
+      m.set(c.id, checkReportEligibility({
+        name: c.fullName, email: c.email,
+        annualProduction: c.annualProduction, currentAnnualUsage: c.currentAnnualUsage,
+        nemVersion: c.nemVersion, installDate: c.installDate, ptoDate: c.ptoDate,
+        systemSize: c.systemSizeKw
+      }));
+    }
+    return m;
+  }, [clients]);
+
+  const notReadyCount = useMemo(
+    () => clients.filter((c) => readiness.get(c.id) && !readiness.get(c.id).eligible).length,
+    [clients, readiness]
+  );
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     const list = clients.filter((c) => {
       if (trueUpOnly && c.nemType !== 'trueup') return false;
+      if (notReportReady) { const r = readiness.get(c.id); if (!r || r.eligible) return false; }
       if (bucket === 'notsigned' && (c.lifecycleStage || '') !== 'Prospect') return false;
       if (bucket === 'signed' && (c.projectStatus || '') !== 'Pre-PTO') return false;
       if (statusFilter !== 'all' && (c.lifecycleStage || '').toLowerCase() !== statusFilter) return false;
@@ -95,7 +118,7 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
       if (av > bv) return 1 * dir;
       return 0;
     });
-  }, [clients, search, statusFilter, projStatusFilter, oppFilter, batteryOnly, bucket, sortBy, sortDir, trueUpOnly]);
+  }, [clients, search, statusFilter, projStatusFilter, oppFilter, batteryOnly, bucket, sortBy, sortDir, trueUpOnly, notReportReady, readiness]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a1628] via-[#0f1e36] to-[#0a1628] p-6">
@@ -232,9 +255,26 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
             <Zap size={15} className={trueUpOnly ? 'text-red-300' : 'text-amber-400'} />
             {trueUpOnly ? 'Showing true-up clients' : 'Battery targets (true-up only)'}
           </button>
+          <button
+            onClick={() => setNotReportReady((v) => !v)}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all border ${
+              notReportReady
+                ? 'bg-amber-500/20 border-amber-400/60 text-amber-200'
+                : 'bg-slate-800/60 border-slate-600 text-slate-300 hover:text-amber-200 hover:border-amber-400/40'
+            }`}
+            title="Clients whose CRM record is too incomplete to send an automated report"
+          >
+            <AlertCircle size={15} className={notReportReady ? 'text-amber-300' : 'text-slate-400'} />
+            {notReportReady ? 'Showing not report-ready' : 'Not report-ready'}
+          </button>
           <span className="text-xs text-slate-500">
             {trueUpCount} of {clients.length} owe a true-up
           </span>
+          {notReadyCount > 0 && (
+            <span className="text-xs text-amber-400/80">
+              · {notReadyCount} can’t be sent a report yet
+            </span>
+          )}
         </div>
 
         {error && (
