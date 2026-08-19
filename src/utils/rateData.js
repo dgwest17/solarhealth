@@ -188,3 +188,45 @@ export const FINANCE_PROVIDERS = [
   'Sunrun', 'LightReach', 'EverBright', 'Service Finance', 'Solar Mosaic',
   'Enfin', 'Aurora/SolarAPP', 'Cash — no financing', 'Other'
 ];
+
+
+/**
+ * ---------------------------------------------------------------------------
+ * CONNECTION / MINIMUM-CHARGE HISTORY
+ * ---------------------------------------------------------------------------
+ * The fixed monthly charge a solar customer pays regardless of energy use has
+ * NOT been constant. Applying today's figure to every past year overstates
+ * what a 2014 client actually paid — sometimes by hundreds of dollars across a
+ * ten-year history.
+ *
+ * Schedule below is the CA (SDG&E-anchored) progression:
+ *   early years  $0/mo   — no meaningful fixed charge
+ *   mid years    $12/mo
+ *   2026 onward  $24/mo  — roughly doubled at the end of 2025
+ *
+ * `from` is inclusive. The 0 -> 12 transition year is the least certain figure
+ * here; adjust once confirmed against a client's older bills.
+ *
+ * NOTE ON NEM VERSION: under NEM 1.0 export credits can offset these charges,
+ * so an overproducing NEM 1.0 client may effectively pay none. That rule lives
+ * in calculateNEMPosition — this table is the gross schedule only.
+ */
+export const CONNECTION_FEE_SCHEDULE = [
+  { from: 2026, monthly: 24 },
+  { from: 2017, monthly: 12 },
+  { from: 2000, monthly: 0 }
+];
+
+/**
+ * Monthly connection/minimum charge in force for a given calendar year.
+ * A manual override (for non-CA utilities) wins outright — 0 is valid.
+ */
+export function getConnectionFeeForYear(year, override = null) {
+  if (override !== null && override !== undefined && override !== '' && Number.isFinite(Number(override))) {
+    return Number(override);
+  }
+  const y = Number(year);
+  if (!Number.isFinite(y)) return 0;
+  const band = CONNECTION_FEE_SCHEDULE.find((b) => y >= b.from);
+  return band ? band.monthly : 0;
+}
