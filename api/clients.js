@@ -170,7 +170,12 @@ export default async function handler(req, res) {
         opportunityType: p ? (p.Opportunity_Type || '') : '',
         annualSavings: savings != null ? Math.round(savings) : null,
         nemType: nem ? nem.type : null,
-        nemAmount: nem ? Math.round(nem.amount) : null
+        nemAmount: nem ? Math.round(nem.amount) : null,
+        // Raw fields the report-eligibility gate needs. Returned unmapped and
+        // un-defaulted so the dashboard can tell "blank in Zoho" from "zero".
+        annualProduction: p ? num(p.Annual_System_Production) : null,
+        currentAnnualUsage: p ? num(p.Current_Annual_Usage_kWh) : null,
+        nemVersion: p ? (p.NEM_Version || '') : ''
       };
     });
 
