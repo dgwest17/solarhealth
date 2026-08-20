@@ -139,8 +139,24 @@ function mapInputsToZoho(inputs) {
       const gross = num(inputs.cashGrossCost);
       if (gross != null && gross > 0) out.Contract_Value = gross;
     } else if (inputs.program === 'PPA') {
+      // 0% is a real escalator value, so accept >= 0 rather than truthy.
       if (esc != null && esc >= 0) out.Escalator_or_Interest = esc;
+      if (term != null && term > 0) out.Term = term;
     }
+
+    // Monthly payment — the figure the client actually recognises off their
+    // statement. Nothing was writing this, so it came back null on every
+    // reload no matter how many times a rep entered it.
+    const pay = num(
+      inputs.program === 'PPA'
+        ? (inputs.ppaCurrentPayment != null && inputs.ppaCurrentPayment !== ''
+            ? inputs.ppaCurrentPayment
+            : inputs.monthlyPayment)
+        : (inputs.loanInitialPayment != null && inputs.loanInitialPayment !== ''
+            ? inputs.loanInitialPayment
+            : inputs.monthlyPayment)
+    );
+    if (pay != null && pay >= 0) out.Monthly_Payment = pay;
   }
   return out;
 }
