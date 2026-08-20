@@ -18,6 +18,8 @@ const WRITABLE_KEYS = [
   'installer', 'panelManufacturer', 'batteryManufacturer', 'inverterManufacturer', 'numberOfModules',
   // financial product
   'program', 'loanPrincipal', 'loanTerm', 'loanInterestRate', 'escalator', 'cashGrossCost',
+  // monthly payment — the figure a client reads off their statement
+  'ppaCurrentPayment', 'loanInitialPayment', 'monthlyPayment', 'ppaInitialRate', 'ppaDownpayment',
   'projectStatus', 'opportunityType', 'financeProvider', 'connectionFeeMonthly'
 ];
 
