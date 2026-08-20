@@ -35,11 +35,17 @@ function num(v, fallback = 0) {
 }
 
 function parseYearMonth(dateStr) {
-  // Zoho dates are YYYY-MM-DD
-  if (!dateStr) return { year: null, month: null };
+  // Zoho dates are YYYY-MM-DD.
+  // Returns NULL (not an empty object) when there's nothing to parse — an
+  // object is always truthy, so returning {year:null} made every `a || b`
+  // fallback stop at the first call and silently skip Install_Date.
+  if (!dateStr) return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
-  if (!m) return { year: null, month: null };
-  return { year: parseInt(m[1], 10), month: parseInt(m[2], 10) };
+  if (!m) return null;
+  const year = parseInt(m[1], 10);
+  const month = parseInt(m[2], 10);
+  if (!Number.isFinite(year) || year < 1900) return null;
+  return { year, month };
 }
 
 export default async function handler(req, res) {
@@ -147,7 +153,18 @@ export default async function handler(req, res) {
       batteryCapacity: orNull(primary.Battery_Capacity_kWh),
       monthlyPayment: orNull(primary.Monthly_Payment),
       loanInitialPayment: orNull(primary.Monthly_Payment),
-      contractValue: orNull(primary.Contract_Value)
+      contractValue: orNull(primary.Contract_Value),
+      // Escalator (PPA) / interest rate (Loan) share one Zoho column.
+      escalator: primary.Purchase_Type === 'PPA' ? orNull(primary.Escalator_or_Interest) : null,
+      loanInterestRate: primary.Purchase_Type === 'Loan' ? orNull(primary.Escalator_or_Interest) : null,
+      loanTerm: orNull(primary.Term),
+      ppaCurrentPayment: primary.Purchase_Type === 'PPA' ? orNull(primary.Monthly_Payment) : null,
+      // Financing detail. Monthly_Payment is the one financing figure Zoho
+      // currently stores; escalator/term/rate have no columns yet (see
+      // save-project.js note) so they persist locally until fields exist.
+      monthlyPayment: orNull(primary.Monthly_Payment),
+      ppaMonthlyPayment: orNull(primary.Monthly_Payment),
+      loanInitialPayment: orNull(primary.Monthly_Payment)
     };
 
     // ---- Financial product round-trip (Zoho -> audit inputs) ----
