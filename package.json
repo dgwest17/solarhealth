@@ -1,7 +1,7 @@
 {
   "name": "solar-audit-platform",
   "version": "1.0.0",
-  "description": "California Solar System Financial Audit Tool - Comprehensive NEM Analysis",
+  "description": "California Solar System Financial Audit Tool - Comprehensive Solar Analysis",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -38,7 +38,7 @@
     "SDGE",
     "financial-audit"
   ],
-  "author": "Your Name",
+  "author": "David West",
   "license": "MIT",
   "repository": {
     "type": "git",
