@@ -834,8 +834,13 @@ export const calculateComprehensiveSavings = (inputs) => {
   );
   
   // Provide backward compatibility for old components
+  const expectedAnnual = (Number(inputs.systemSize) || 0) * 1400;
   const systemHealth = {
-    performanceRatio: 95,
+    // Only meaningful when production was actually measured. An estimate
+    // divided by an estimate is 100% by construction and tells nobody anything.
+    performanceRatio: (Number.isFinite(override) && override > 0 && expectedAnnual > 0)
+      ? Math.round((override / expectedAnnual) * 100)
+      : null,
     status: systemScore.status,
     message: systemScore.message,
     expectedProduction: inputs.systemSize * 1400
@@ -878,13 +883,23 @@ export const calculateComprehensiveSavings = (inputs) => {
   // ============================================================
   const solarPaidToDate = cumulativeCost;
   const batteryPaidToDate = cumulativeBatteryCost;
+  // What they actually parted with, not the sticker price. A cash buyer who
+  // received the tax credit is out the NET figure — booking gross would show
+  // them permanently behind and contradict paybackYears, which already uses net.
+  // Financed: whatever they put down. Field names must match the rest of the
+  // file (loanDownpayment / ppaDownpayment) or this silently reads 0.
   const upFrontPaid = inputs.program === 'Cash'
-    ? (Number(inputs.cashGrossCost) || Number(inputs.cashNetCost) || 0)
-    : (Number(inputs.downPayment) || 0);
+    ? (Number(inputs.cashNetCost) ||
+       Math.max(0, (Number(inputs.cashGrossCost) || 0) - (Number(calculatedTaxCredit) || 0)))
+    : inputs.program === 'PPA'
+      ? (Number(inputs.ppaDownpayment) || 0)
+      : (Number(inputs.loanDownpayment) || 0);
 
-  const totalSolarOutlay =
+  // Credits received are money back and belong on this side of the ledger.
+  // Clamped at zero so a large credit balance can't read as negative outlay.
+  const totalSolarOutlay = Math.max(0,
     upFrontPaid + solarPaidToDate + batteryPaidToDate +
-    cumulativeConnectionFees + cumulativeTrueUpPaid;
+    cumulativeConnectionFees + cumulativeTrueUpPaid - cumulativeNEMCredits);
 
   const netPosition = cumulativeUtilityWouldHavePaid - totalSolarOutlay;
 
@@ -964,4 +979,116 @@ export const calculateComprehensiveSavings = (inputs) => {
     currentDegradedProduction: currentProduction.toFixed(0),
     productionIsOverridden: Number.isFinite(override) && override > 0
   };
+};
+
+
+/**
+ * PROJECT NET SAVINGS FORWARD
+ *
+ * Continues the two cumulative lines — what the utility would take, and what
+ * solar costs — from today out to `years`. Same rules as the historical loop:
+ * production degrades, connection fees continue, financing runs until its term
+ * or payoff, and PPA rates escalate.
+ *
+ * Rate escalation comes from the utility's own curve via getUtilityRate(), which
+ * already extrapolates past the last known year using its recent trend. Pass
+ * `escalationOverride` (e.g. 0.06) to force a flat rate instead — useful when you
+ * want a deliberately conservative figure on a customer-facing screen.
+ *
+ * Usage growth is DELIBERATELY NOT the historical rate. A household that doubled
+ * usage in three years is not going to double again every three years — that curve
+ * compounds into nonsense. Capped at 1.5%/yr unless overridden.
+ *
+ * @returns Array of { year, yearsOut, utilityWouldHavePaid, totalSolarOutlay,
+ *                     netSavings, aheadOrBehind, crossesThisYear }
+ */
+export const projectNetSavings = (inputs, current, years = 25, opts = {}) => {
+  const {
+    escalationOverride = null,
+    usageGrowthForward = 0.015,
+    maxUsageGrowth = 0.03
+  } = opts;
+
+  const cb = current && current.costBreakdown;
+  if (!cb) return [];
+
+  const startYear = Number(inputs.nowYear);
+  const yearsSinceInstall = Number(current.yearsSinceInstall) || 0;
+
+  // Forward usage growth: their own trend, capped hard. Never negative.
+  const historical = (Number(current.usageGrowthRate) || 0) / 100;
+  const growth = Math.min(maxUsageGrowth, Math.max(0, Math.min(historical, usageGrowthForward)));
+
+  let usage = Number(inputs.currentAnnualUsage) || 0;
+  let utilityCum = cb.utilityWouldHavePaid;
+  let outlayCum = cb.totalSolarOutlay;
+  let rate = getUtilityRate(startYear, inputs.utility, inputs.onCareProgram);
+
+  const out = [{
+    year: startYear, yearsOut: 0,
+    utilityWouldHavePaid: Math.round(utilityCum),
+    totalSolarOutlay: Math.round(outlayCum),
+    netSavings: Math.round(utilityCum - outlayCum),
+    aheadOrBehind: utilityCum >= outlayCum ? 'ahead' : 'behind',
+    crossesThisYear: false
+  }];
+
+  for (let y = 1; y <= years; y++) {
+    const calYear = startYear + y;
+    const ageYears = yearsSinceInstall + y;
+
+    rate = escalationOverride !== null
+      ? rate * (1 + escalationOverride)
+      : getUtilityRate(calYear, inputs.utility, inputs.onCareProgram);
+
+    usage = usage * (1 + growth);
+    const utilityThisYear = usage * rate;
+
+    // What solar costs in this year.
+    let solarThisYear = 0;
+    if (inputs.program === 'Loan') {
+      const paidOff = inputs.loanPaidOff && calYear >= inputs.loanPaidOffYear;
+      const termDone = ageYears >= (Number(inputs.loanTerm) || 0);
+      if (!paidOff && !termDone && current.loanPaymentStructure) {
+        const pmt = ageYears >= 1.5
+          ? current.loanPaymentStructure.paymentAfter18Months
+          : current.loanPaymentStructure.initialPayment;
+        solarThisYear = pmt * 12;
+      }
+    } else if (inputs.program === 'PPA') {
+      const boughtOut = inputs.ppaPaidOff && calYear >= inputs.ppaPaidOffYear;
+      const termDone = ageYears >= 25;
+      if (!boughtOut && !termDone) {
+        // PPA payments escalate too — the whole point of modelling it here
+        // rather than holding outlay flat in the UI.
+        const prod = getDegradedProduction(Number(inputs.annualProduction) || 0, ageYears);
+        const ppaRate = (Number(inputs.ppaInitialRate) || 0) *
+          Math.pow(1 + (Number(inputs.escalator) || 0) / 100, ageYears);
+        solarThisYear = prod * ppaRate;
+      }
+    }
+
+    const batteryThisYear = inputs.hasBattery
+      ? (Number(inputs.batteryMonthlyPayment) || 0) * 12 : 0;
+
+    const feesThisYear = inputs.nemVersion === 'NEM1'
+      ? 0
+      : getConnectionFeeForYear(calYear, inputs.connectionFeeMonthly) * 12;
+
+    const before = utilityCum - outlayCum;
+    utilityCum += utilityThisYear;
+    outlayCum += solarThisYear + batteryThisYear + feesThisYear;
+    const after = utilityCum - outlayCum;
+
+    out.push({
+      year: calYear, yearsOut: y,
+      utilityWouldHavePaid: Math.round(utilityCum),
+      totalSolarOutlay: Math.round(outlayCum),
+      netSavings: Math.round(after),
+      aheadOrBehind: after >= 0 ? 'ahead' : 'behind',
+      crossesThisYear: before < 0 && after >= 0   // the break-even moment
+    });
+  }
+
+  return out;
 };
