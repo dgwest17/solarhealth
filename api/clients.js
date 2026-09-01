@@ -16,7 +16,7 @@ const CONTACT_FIELDS = [
 const PROJECT_FIELDS = [
   'id', 'Contact', 'Install_Date', 'PTO_Date', 'System_Size_kW',
   'Annual_System_Production', 'Current_Annual_Usage_kWh', 'Utility_Provider',
-  'NEM_Version', 'Export_Rate', 'On_CARE_Program', 'Project_Status'
+  'NEM_Version', 'Export_Rate', 'On_CARE_Program', 'Project_Status', 'Modified_Time'
 , 'Finance_Provider', 'Opportunity_Type'];
 
 const UTILITY_RATE_2026 = { PGE: 0.495, SCE: 0.341, SDGE: 0.540, SMUD: 0.253 };
@@ -162,6 +162,9 @@ export default async function handler(req, res) {
         leftReview: !!c.Left_Review,
         createdBy: c.Created_By_Rep || '',
         lastReportSent: c.Last_Report_Sent || null,
+        // When the project record was last touched — powers the default
+        // "most recently worked on first" ordering.
+        lastModified: p ? (p.Modified_Time || null) : null,
         installDate: p ? (p.Install_Date || null) : null,
         ptoDate: p ? (p.PTO_Date || null) : null,
         systemSizeKw: p ? num(p.System_Size_kW) : null,
