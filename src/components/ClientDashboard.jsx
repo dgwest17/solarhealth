@@ -21,10 +21,16 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
   const [oppFilter, setOppFilter] = useState('all');
   const [batteryOnly, setBatteryOnly] = useState(false);
   const [bucket, setBucket] = useState('all'); // all | notsigned | signed
-  const [sortBy, setSortBy] = useState('name');
-  const [sortDir, setSortDir] = useState('asc');
+  // Default view: whatever you touched most recently, first. A rep's working
+  // set is almost always "what I was just in", not an alphabetical list.
+  const [sortBy, setSortBy] = useState('lastModified');
+  const [sortDir, setSortDir] = useState('desc');
   const [trueUpOnly, setTrueUpOnly] = useState(false);
   const [notReportReady, setNotReportReady] = useState(false);
+  // Columns off by default to keep the table scannable. Everything is still
+  // sortable and searchable — this only controls what's rendered.
+  const [showCols, setShowCols] = useState({ savings: false, finance: false, kw: false });
+  const [colMenuOpen, setColMenuOpen] = useState(false);
   const [editing, setEditing] = useState(null);   // client for the edit modal
 
   const load = async () => {
@@ -97,6 +103,8 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
       switch (sortBy) {
         case 'installDate': return c.ptoDate || c.installDate || '';
         case 'lastReportSent': return c.lastReportSent || '';
+        case 'lastModified': return c.lastModified || '';
+        case 'projectStatus': return (c.projectStatus || '').toLowerCase();
         case 'annualSavings': return c.annualSavings;
         case 'zip': return c.zip || '';
         case 'systemSizeKw': return c.systemSizeKw;
@@ -171,15 +179,72 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
             </button>
           ))}
         </div>
-          <div className="relative flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+        {/* Search gets its own full-width row so long queries stay readable;
+            sort + column controls sit to its right. */}
+        <div className="flex flex-col md:flex-row gap-3 mb-3">
+          <div className="relative flex-1 min-w-0">
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name, email, or city…"
-              className="w-full pl-10 pr-3 py-2.5 border border-slate-600 rounded-lg bg-slate-900/70 text-slate-100 focus:border-amber-400/60 focus:outline-none"
+              className="w-full pl-11 pr-3 py-3 text-[15px] border border-slate-600 rounded-lg bg-slate-900/70 text-slate-100 focus:border-amber-400/60 focus:outline-none"
             />
           </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="px-3 py-3 text-sm border border-slate-600 rounded-lg bg-slate-900/70 text-slate-100"
+              title="Sort by"
+            >
+              <option value="lastModified">Sort: Last Edited</option>
+              <option value="name">Sort: Name</option>
+              <option value="zip">Sort: Zip</option>
+              <option value="installDate">Sort: PTO Date</option>
+              <option value="annualSavings">Sort: Annual Savings</option>
+              <option value="creditOwe">Sort: Est. True-Up</option>
+              <option value="lastReportSent">Sort: Last Report Sent</option>
+              <option value="projectStatus">Sort: Status</option>
+            </select>
+            <button
+              onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+              className="px-3 py-3 border border-slate-600 rounded-lg bg-slate-900/70 text-slate-300 hover:text-amber-300"
+              title={sortDir === 'asc' ? 'Ascending' : 'Descending'}
+            >
+              {sortDir === 'asc' ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
+            </button>
+            <div className="relative">
+              <button
+                onClick={() => setColMenuOpen((v) => !v)}
+                className="px-3 py-3 border border-slate-600 rounded-lg bg-slate-900/70 text-slate-300 hover:text-amber-300 text-sm whitespace-nowrap"
+                title="Show or hide optional columns"
+              >
+                Columns
+              </button>
+              {colMenuOpen && (
+                <div className="absolute right-0 mt-1 z-20 w-52 rounded-lg border border-slate-600 bg-[#0d1b2f] shadow-xl p-2">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-500 px-1 pb-1">Optional columns</div>
+                  {[['savings', 'Savings / yr'], ['finance', 'Finance provider'], ['kw', 'System size (kW)']].map(([k, label]) => (
+                    <label key={k} className="flex items-center gap-2 px-1 py-1.5 text-sm text-slate-200 cursor-pointer hover:text-amber-300">
+                      <input
+                        type="checkbox"
+                        checked={showCols[k]}
+                        onChange={(e) => setShowCols((p) => ({ ...p, [k]: e.target.checked }))}
+                        className="w-3.5 h-3.5 accent-amber-400"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                  <p className="text-[10px] text-slate-500 px-1 pt-1.5 leading-snug">
+                    Hidden columns are still sortable and searchable.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -216,25 +281,6 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
             <input type="checkbox" checked={batteryOnly} onChange={(e) => setBatteryOnly(e.target.checked)} className="w-3.5 h-3.5 accent-purple-400" />
             🔋 Battery targets
           </label>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="px-3 py-2.5 border border-slate-600 rounded-lg bg-slate-900/70 text-slate-100"
-            title="Sort by"
-          >
-            <option value="name">Sort: Name</option>
-            <option value="installDate">Sort: Install Date</option>
-            <option value="lastReportSent">Sort: Last Report Sent</option>
-            <option value="annualSavings">Sort: Annual Savings</option>
-            <option value="creditOwe">Sort: Annual Credit / Owe</option>
-          </select>
-          <button
-            onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
-            className="px-3 py-2.5 border border-slate-600 rounded-lg bg-slate-900/70 text-slate-300 hover:text-amber-300 flex items-center gap-1"
-            title={sortDir === 'asc' ? 'Ascending' : 'Descending'}
-          >
-            {sortDir === 'asc' ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
-          </button>
         </div>
 
         {/* True-up upsell-target filter */}
@@ -331,12 +377,12 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
                     ['installDate', 'PTO Date'],
                     ['creditOwe', 'Est. True-Up'],
                     [null, 'Battery Target'],
-                    [null, 'Status'],
+                    ['projectStatus', 'Status'],
                     [null, 'Opportunity'],
                     [null, '⭐'],
-                    ['annualSavings', 'Savings/yr'],
-                    [null, 'Finance'],
-                    ['systemSizeKw', 'kW'],
+                    ...(showCols.savings ? [['annualSavings', 'Savings/yr']] : []),
+                    ...(showCols.finance ? [[null, 'Finance']] : []),
+                    ...(showCols.kw ? [['systemSizeKw', 'kW']] : []),
                     ['lastReportSent', 'Last Contacted'],
                     [null, 'Created By'],
                     [null, '']
@@ -382,11 +428,17 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
                       <td className="px-3 py-1.5 whitespace-nowrap text-slate-300">{c.projectStatus || '—'}</td>
                       <td className="px-3 py-1.5 whitespace-nowrap text-slate-400 max-w-[150px] truncate">{(c.opportunityType || 'Audit / Review').replace('Solar Owner – ', '')}</td>
                       <td className="px-3 py-1.5 whitespace-nowrap text-center">{c.leftReview ? <span title="Left a 5-star review">⭐</span> : <span className="text-slate-600" title="No review yet — ask!">☆</span>}</td>
-                      <td className="px-3 py-1.5 whitespace-nowrap text-green-300/90">
-                        {c.annualSavings != null ? `$${c.annualSavings.toLocaleString()}` : '—'}
-                      </td>
-                      <td className="px-3 py-1.5 whitespace-nowrap text-slate-400 max-w-[130px] truncate">{c.financeProvider || '—'}</td>
-                      <td className="px-3 py-1.5 whitespace-nowrap text-slate-400">{c.systemSizeKw != null ? c.systemSizeKw : '—'}</td>
+                      {showCols.savings && (
+                        <td className="px-3 py-1.5 whitespace-nowrap text-green-300/90">
+                          {c.annualSavings != null ? `$${c.annualSavings.toLocaleString()}` : '—'}
+                        </td>
+                      )}
+                      {showCols.finance && (
+                        <td className="px-3 py-1.5 whitespace-nowrap text-slate-400 max-w-[130px] truncate">{c.financeProvider || '—'}</td>
+                      )}
+                      {showCols.kw && (
+                        <td className="px-3 py-1.5 whitespace-nowrap text-slate-400">{c.systemSizeKw != null ? c.systemSizeKw : '—'}</td>
+                      )}
                       <td className={`px-3 py-1.5 whitespace-nowrap ${c.lastReportSent ? 'text-slate-300' : 'text-amber-500/80'}`}>
                         {c.lastReportSent || 'never'}
                       </td>
