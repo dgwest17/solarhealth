@@ -15,7 +15,12 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
     const user = await requireUser(req);
-    if (user.role !== 'admin') return res.status(403).json({ error: 'Saving new clients is limited to admins for now.' });
+    // Creates a new Contact + Project, so there's no existing owner to check —
+    // reps and admins may both create. The new record is stamped with the
+    // creator so ownership works from the moment it exists.
+    if (user.role !== 'admin' && user.role !== 'rep') {
+      return res.status(403).json({ error: 'Saving new clients requires a rep or admin login.' });
+    }
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     const { contact = {}, inputs = {} } = body;
@@ -33,7 +38,8 @@ export default async function handler(req, res) {
       Mailing_City: (contact.city || '').trim() || null,
       Mailing_State: (contact.state || '').trim() || null,
       Mailing_Zip: (contact.zip || '').trim() || null,
-      Send_Annual_Report: !!contact.sendAnnualReport
+      Send_Annual_Report: !!contact.sendAnnualReport,
+      Created_By_Rep: (user.email || '').toLowerCase()
     };
     const cRes = await zohoFetch('/crm/v2/Contacts', {
       method: 'POST',
