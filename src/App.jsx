@@ -153,7 +153,11 @@ export default function App() {
             clientContext={clientData.contact ? {
               contactId: clientData.contact.id,
               projectId: clientData.project ? clientData.project.id : null,
-              canWrite: role === 'admin' && !!clientData.project,
+              // Reps can write to clients they own; the server re-checks
+              // ownership on every write, so this only controls what's shown.
+              // The dashboard already scopes a rep's list to their own clients,
+              // so anything they can open here is theirs to edit.
+              canWrite: (role === 'admin' || role === 'rep') && !!clientData.project,
               viewerRole: role,
               name: clientData.contact.fullName || clientData.contact.email || '',
               contact: clientData.contact,
