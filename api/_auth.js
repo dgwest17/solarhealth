@@ -102,3 +102,60 @@ export function sendError(res, e) {
   const status = e.status || 500;
   res.status(status).json({ error: e.message || 'Server error' });
 }
+
+/**
+ * WRITE AUTHORISATION — may this user modify this contact (and its project)?
+ *
+ * One helper, used by every write endpoint, so the rules can't drift apart the
+ * way read access did (api/client.js only ever allowed a single hardcoded test
+ * client while the dashboard listed everything a rep owned — reps got Forbidden
+ * on their own leads).
+ *
+ * Rules:
+ *   admin  - anything
+ *   rep    - the designated test client, OR any contact where Created_By_Rep
+ *            matches their login. Ownership is read from Zoho at call time, so
+ *            a client reassigned to another rep loses access immediately.
+ *   client - never. Clients explore in the tool; their tinkering persists to
+ *            Supabase, never to the CRM.
+ *
+ * Throws a 403/404 error — callers pass it to sendError().
+ *
+ * @param zohoFetch  injected to avoid a circular import with _zoho.js
+ */
+export async function assertCanWriteContact(user, contactId, zohoFetch) {
+  if (!contactId) {
+    throw Object.assign(new Error('contactId is required.'), { status: 400 });
+  }
+  if (user.role === 'admin') return { contact: null, ownedByRep: false };
+
+  if (user.role !== 'rep') {
+    throw Object.assign(
+      new Error('Saving to the CRM requires a rep or admin login.'),
+      { status: 403 }
+    );
+  }
+
+  const r = await zohoFetch(
+    `/crm/v2/Contacts/${encodeURIComponent(contactId)}?fields=Email,Created_By_Rep`
+  );
+  const c = (r.data && r.data[0]) || null;
+  if (!c) throw Object.assign(new Error('Client not found'), { status: 404 });
+
+  const me = (user.email || '').toLowerCase();
+  const createdBy = (c.Created_By_Rep || '').toLowerCase();
+  const contactEmail = (c.Email || '').toLowerCase();
+  const testEmail = (process.env.REP_TEST_CLIENT_EMAIL || '').toLowerCase();
+
+  // Non-empty checks on both sides: two blanks must never match.
+  const owns = !!createdBy && !!me && createdBy === me;
+  const isTest = !!testEmail && contactEmail === testEmail;
+
+  if (!owns && !isTest) {
+    throw Object.assign(
+      new Error('This client belongs to another rep.'),
+      { status: 403 }
+    );
+  }
+  return { contact: c, ownedByRep: owns };
+}
