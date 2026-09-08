@@ -68,17 +68,22 @@ export default async function handler(req, res) {
     }
 
     // SECURITY: enforce per-role access.
-    //  - admin: any contact
-    //  - rep:   only the designated test client (REP_TEST_CLIENT_EMAIL)
+    //  - admin:  any contact
+    //  - rep:    the designated test client, OR any contact they created
+    //            (Created_By_Rep). This MUST match the scoping in
+    //            api/clients.js — if the dashboard lists a client, opening it
+    //            has to work, or the rep gets a Forbidden on their own lead.
     //  - client: only the contact whose email matches their login
     if (user.role !== 'admin') {
       const contactEmail = (contact.Email || '').toLowerCase();
+      const me = (user.email || '').toLowerCase();
       let allowed = false;
       if (user.role === 'rep') {
         const testEmail = (process.env.REP_TEST_CLIENT_EMAIL || '').toLowerCase();
-        allowed = testEmail && contactEmail === testEmail;
+        const createdBy = (contact.Created_By_Rep || '').toLowerCase();
+        allowed = (!!testEmail && contactEmail === testEmail) || (!!createdBy && createdBy === me);
       } else {
-        allowed = contactEmail === user.email;
+        allowed = contactEmail === me;
       }
       if (!allowed) {
         const err = new Error('Forbidden');
