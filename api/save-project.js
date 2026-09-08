@@ -17,7 +17,7 @@
  * values before writing so an unknown value never errors the whole update.
  */
 import { zohoFetch } from './_zoho.js';
-import { requireUser, sendError } from './_auth.js';
+import { requireUser, sendError, assertCanWriteContact } from './_auth.js';
 
 const UTILITY_TO_ZOHO = { SDGE: 'SDG&E', PGE: 'PG&E', SCE: 'SCE', SMUD: 'SMUD' };
 const NEM_TO_ZOHO = { NEM1: 'NEM 1.0', NEM2: 'NEM 2.0', NEM3: 'NEM 3.0' };
@@ -169,16 +169,15 @@ export default async function handler(req, res) {
   try {
     const user = await requireUser(req);
 
-    // v1: admin only. Reps get write access with ownership in a later phase.
-    if (user.role !== 'admin') {
-      return res.status(403).json({ error: 'Saving to the CRM is limited to admins for now.' });
-    }
-
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     const { contactId, projectId, inputs } = body;
     if (!contactId || !projectId || !inputs) {
       return res.status(400).json({ error: 'contactId, projectId, and inputs are required.' });
     }
+
+    // Admins write anything; reps write only clients they own. Verified against
+    // Zoho at call time, so reassigning a client revokes access immediately.
+    await assertCanWriteContact(user, contactId, zohoFetch);
 
     // Ownership check: the project must belong to this contact.
     const projRes = await zohoFetch(`/crm/v2/Solar_Projects/${encodeURIComponent(projectId)}`);
