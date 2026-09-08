@@ -17,7 +17,7 @@
  * Save as PDF); the email body is a clean, email-safe summary. Admin only.
  */
 import { zohoFetch } from './_zoho.js';
-import { requireUser, sendError } from './_auth.js';
+import { requireUser, sendError, assertCanWriteContact } from './_auth.js';
 
 const esc = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const money = (v) => '$' + Math.round(Math.abs(Number(v) || 0)).toLocaleString();
@@ -94,11 +94,14 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
     const user = await requireUser(req);
-    if (user.role !== 'admin') return res.status(403).json({ error: 'Sending audits is limited to admins for now.' });
+    // Ownership enforced below once contactId is parsed.
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     const { contactId, reportHtml, summary, newsletter } = body;
     if (!contactId || !reportHtml) return res.status(400).json({ error: 'contactId and reportHtml are required.' });
+
+    // A rep can email a report to their own client, but not to someone else's.
+    await assertCanWriteContact(user, contactId, zohoFetch);
 
     const zeptoToken = process.env.ZEPTOMAIL_TOKEN;
     const resendKey = process.env.RESEND_API_KEY;
