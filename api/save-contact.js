@@ -3,7 +3,7 @@
  * Admin only. Whitelisted fields only (name / contact info / address / newsletter).
  */
 import { zohoFetch } from './_zoho.js';
-import { requireUser, sendError } from './_auth.js';
+import { requireUser, sendError, assertCanWriteContact } from './_auth.js';
 
 function mapContact(c) {
   const out = {};
@@ -26,11 +26,14 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
     const user = await requireUser(req);
-    if (user.role !== 'admin') return res.status(403).json({ error: 'Editing contacts is limited to admins for now.' });
+    // Ownership enforced below once we know which contact is being edited.
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     const { contactId, contact } = body;
     if (!contactId || !contact) return res.status(400).json({ error: 'contactId and contact are required.' });
+
+    // Admins edit anyone; reps edit only clients they own.
+    await assertCanWriteContact(user, contactId, zohoFetch);
 
     const fields = mapContact(contact);
     if (contact.leftReview !== undefined) fields.Left_Review = !!contact.leftReview;
