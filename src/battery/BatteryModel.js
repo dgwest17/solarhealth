@@ -393,3 +393,56 @@ export const calculateStabilization = (option, inputs, recoveredValuePerYear, ba
     annualNetWin
   };
 };
+
+/**
+ * TOTAL value a battery recovers per year — the SINGLE source of truth.
+ *
+ * Two things a battery claws back, and both have to be counted:
+ *   1. Arbitrage spread — solar exported cheap midday and bought back dear at
+ *      night. Storing it instead captures the difference.
+ *   2. Avoided true-up — if the household currently OWES at true-up, energy
+ *      self-consumed instead of purchased erases part of that bill. Capped by
+ *      how much the battery can physically shift, so a small battery on a big
+ *      deficit doesn't get credit for erasing all of it.
+ *
+ * This lived in BatteryAnalysis.jsx while ConsultationReport.js computed only
+ * (1), so the report understated recovered value by the entire avoided-true-up
+ * component — on a typical under-producer that's ~58% of the number. Both now
+ * call this. Do NOT reimplement it a third time.
+ *
+ * @param touRates        TOU_RATES entry for the utility
+ * @param exportKwh       annual daytime overproduction (or measured export)
+ * @param importKwh       annual nighttime import (or measured import)
+ * @param batteryCapacity kWh
+ * @param batteryEfficiency percent (e.g. 90)
+ * @param utility         utility key
+ * @param annualTrueUp    dollars currently owed at true-up (0 if in credit)
+ */
+export function calculateTotalRecoveredValue(
+  touRates,
+  exportKwh,
+  importKwh,
+  batteryCapacity,
+  batteryEfficiency,
+  utility,
+  annualTrueUp = 0
+) {
+  const recovery = calculateCreditsRecovered(
+    touRates, exportKwh, importKwh, batteryCapacity, batteryEfficiency, utility
+  );
+  const arbitrageRecovered = recovery.creditsRecovered;
+  // Share of the household's night-time purchases the battery can actually
+  // displace — this is what caps the avoided true-up.
+  const shiftRatio = importKwh > 0
+    ? Math.min(1, recovery.shiftedKwh / importKwh)
+    : 0;
+  const avoidedTrueUp = (Number(annualTrueUp) || 0) * shiftRatio;
+
+  return {
+    ...recovery,
+    arbitrageRecovered,
+    shiftRatio,
+    avoidedTrueUp,
+    totalRecoveredPerYear: arbitrageRecovered + avoidedTrueUp
+  };
+}
