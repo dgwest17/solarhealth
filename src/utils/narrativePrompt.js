@@ -47,7 +47,7 @@ SYSTEM
 - Installed: ${inputs.installedMonth}/${inputs.installedYear} (${calculations.yearsSinceInstall} years ago)
 - Size: ${inputs.systemSize} kW
 - Annual production: ${inputs.annualProduction.toLocaleString()} kWh/yr
-- Performance ratio: ${calculations.systemHealth.performanceRatio.toFixed(1)}% of expected (${calculations.systemHealth.expectedProduction.toLocaleString()} kWh/yr expected) — status: ${calculations.systemHealth.status}
+- Performance ratio: ${(calculations.systemHealth && Number.isFinite(calculations.systemHealth.performanceRatio)) ? calculations.systemHealth.performanceRatio.toFixed(1) + '% of expected' : 'not measured (no interval data) — do not comment on performance ratio'} (${(calculations.systemHealth && calculations.systemHealth.expectedProduction) ? calculations.systemHealth.expectedProduction.toLocaleString() : '—'} kWh/yr expected) — status: ${calculations.systemHealth ? calculations.systemHealth.status : 'unknown'}
 - Battery installed: ${inputs.hasBattery ? `Yes (${inputs.batteryCapacity} kWh)` : 'No'}
 
 UTILITY & NEM
