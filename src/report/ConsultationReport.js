@@ -13,7 +13,7 @@ import {
   CONSUMPTION_PROFILES,
   buildDailyOverlay,
   calculateExportEconomics,
-  calculateCreditsRecovered,
+  calculateTotalRecoveredValue,
   NEM3_EXPORT_RATE
 } from '../battery/BatteryModel';
 import { buildEquipmentSchedule, replacementCostFor, projectedEquipmentExposure } from '../tech/equipmentData';
@@ -115,14 +115,20 @@ export function buildConsultationReportHtml({ clientName, clientAddress, repName
   const nowYear = new Date().getFullYear();
 
   const measured = gbProfile && gbProfile.ok ? gbProfile : null;
-  const overlay = buildDailyOverlay('evening_heavy', inputs.currentAnnualUsage, inputs.annualProduction);
+  // Use the client's actual consumption profile — the Battery tab does, and
+  // hardcoding 'evening_heavy' made the report disagree for anyone else.
+  const overlay = buildDailyOverlay(inputs.consumptionProfile || 'evening_heavy', inputs.currentAnnualUsage, inputs.annualProduction);
   const expKwh = measured ? measured.annualExportKwh : overlay.annualDaytimeOverproduction;
   const impKwh = measured ? measured.annualImportKwh : overlay.annualNighttimeImport;
   const econ = calculateExportEconomics(touRates, expKwh, impKwh, inputs.utility);
   const roundTripKwh = Math.min(expKwh, impKwh);
   const spreadLoss = Math.max(0, roundTripKwh * (econ.nightBuyRate - econ.daytimeSellRate));
   const batteryCap = inputs.batteryCapacity || 13.5;
-  const recovery = calculateCreditsRecovered(touRates, expKwh, impKwh, batteryCap, inputs.batteryEfficiency || 90, inputs.utility);
+  // Must match the Battery tab exactly — same function, same true-up input.
+  const reportTrueUp = (nem && nem.type === 'trueup') ? nem.amount : 0;
+  const recovery = calculateTotalRecoveredValue(
+    touRates, expKwh, impKwh, batteryCap, inputs.batteryEfficiency || 90, inputs.utility, reportTrueUp
+  );
 
   const schedule = buildEquipmentSchedule({
     installedYear: inputs.installedYear,
@@ -432,7 +438,7 @@ ${extraUsage.ratePlan === 'SDGE_EVTOU5' && extraUsage.evTouFallbackCost != null 
 ${row('Energy sold to the grid' + (measured ? ' (measured)' : ' (modeled)'), kwh(expKwh) + '/yr')}
 ${row('Energy bought back' + (measured ? ' (measured)' : ' (modeled)'), kwh(impKwh) + '/yr')}
 ${row('Est. value lost to sell-low / buy-high spread', money(spreadLoss) + '/yr')}
-${row('Est. recoverable with a ' + batteryCap + ' kWh battery', money(recovery.creditsRecovered) + '/yr')}
+${row('Est. recoverable with a ' + batteryCap + ' kWh battery', money(recovery.totalRecoveredPerYear) + '/yr')}
 </table>
 
 <h2>${S()} · Battery Incentives Available Now</h2>
