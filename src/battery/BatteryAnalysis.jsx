@@ -5,7 +5,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { Battery } from 'lucide-react';
-import { buildDailyOverlay, calculateCreditsRecovered } from './BatteryModel';
+import { buildDailyOverlay, calculateTotalRecoveredValue } from './BatteryModel';
 import { TOU_RATES } from '../utils/rateData';
 import { calculateNEMImpact, getUtilityRate } from '../utils/calculations';
 import BatteryConsumptionProduction from './BatteryConsumptionProduction';
@@ -105,22 +105,21 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
   // Energy Credits Recovered / year — the overlay-driven time-shift value (the
   // rate-arbitrage spread a battery claws back). Kept exactly as designed.
   const touRates = TOU_RATES[inputs.utility] || TOU_RATES.SCE;
-  const recovery = calculateCreditsRecovered(
+  // Single source of truth — the consultation report calls this same function,
+  // so the two can't drift apart (they did: the report was omitting the
+  // avoided-true-up half entirely).
+  const recovery = calculateTotalRecoveredValue(
     touRates,
     effExport,
     effImport,
     inputs.batteryCapacity,
     inputs.batteryEfficiency,
-    inputs.utility
+    inputs.utility,
+    annualTrueUp
   );
-
-  // If they currently OWE a true-up, a battery that self-consumes also erases
-  // (part of) that true-up — so recovered value = arbitrage spread + avoided
-  // true-up, capped by what the battery can physically shift.
-  const arbitrageRecovered = recovery.creditsRecovered;
-  const shiftRatio = effImport > 0 ? Math.min(1, recovery.shiftedKwh / effImport) : 0;
-  const avoidedTrueUp = annualTrueUp * shiftRatio;
-  const totalRecoveredPerYear = arbitrageRecovered + avoidedTrueUp;
+  const arbitrageRecovered = recovery.arbitrageRecovered;
+  const avoidedTrueUp = recovery.avoidedTrueUp;
+  const totalRecoveredPerYear = recovery.totalRecoveredPerYear;
 
   return (
     <div>
