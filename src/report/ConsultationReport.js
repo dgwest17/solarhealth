@@ -222,7 +222,17 @@ export function buildConsultationReportHtml({ clientName, clientAddress, repName
   const owedNow = !isCredit && nem ? nem.amount : 0;
   const totalExposure = owedNow + extraCost;
   if (calculations.systemHealth && calculations.systemHealth.status === 'poor') {
-    recs.push({ title: 'Investigate under-production', body: `Production is at ${calculations.systemHealth.performanceRatio.toFixed(0)}% of expected for a ${inputs.systemSize} kW system — shading, soiling, or an equipment fault may be costing real production.` });
+    // performanceRatio is intentionally null unless production was MEASURED
+    // (Green Button). Estimate-over-estimate is 100% by construction, so we
+    // say nothing rather than quoting a meaningless percentage.
+    const pr = calculations.systemHealth.performanceRatio;
+    const ratioText = Number.isFinite(pr)
+      ? `Production is at ${pr.toFixed(0)}% of expected for a ${inputs.systemSize} kW system`
+      : `Production appears low for a ${inputs.systemSize} kW system`;
+    recs.push({
+      title: 'Investigate under-production',
+      body: `${ratioText} — shading, soiling, or an equipment fault may be costing real production.`
+    });
   }
   if (totalExposure > 1000) {
     recs.push({ title: 'Battery + additional solar recommended', body: `Projected annual exposure of ${money(totalExposure)}${hasSim ? ` (including ${money(extraCost)} from planned added usage)` : ''} exceeds what storage alone typically recovers — pairing storage with added panels closes the gap.` });
@@ -327,7 +337,7 @@ ${row('Financing', esc(inputs.program))}
 <table>
 ${row('Annual production', kwh(inputs.annualProduction))}
 ${row('Annual consumption', kwh(inputs.currentAnnualUsage))}
-${row('Performance', calculations.systemHealth ? calculations.systemHealth.performanceRatio.toFixed(0) + '% of expected' : '—')}
+${row('Performance', (calculations.systemHealth && Number.isFinite(calculations.systemHealth.performanceRatio)) ? calculations.systemHealth.performanceRatio.toFixed(0) + '% of expected' : 'Not measured — upload Green Button data')}
 ${row('Current utility rate', '$' + calculations.currentUtilityRate + '/kWh')}
 ${row('Payback', calculations.paybackYears + ' years')}
 </table>
