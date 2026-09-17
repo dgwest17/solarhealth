@@ -19,6 +19,8 @@ import { openConsultationReport } from './report/ConsultationReport';
 import { deriveAnnualUsage } from './greenbutton/GreenButtonParser';
 import SystemSpecsSheet from './components/SystemSpecsSheet';
 import BatteryAnalysis from './battery/BatteryAnalysis';
+import EligibilityTab from './incentives/EligibilityTab';
+import TideTab from './incentives/TideTab';
 import LoadSimulator from './simulator/LoadSimulator';
 import GreenButtonUpload from './greenbutton/GreenButtonUpload';
 
@@ -47,7 +49,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
   const [clientAddress, setClientAddress] = useState('');
   const [repName, setRepName] = useState('');
 
-  // Tab switcher: 'audit' | 'battery' | 'simulator'
+  // Tab switcher: 'audit' | 'battery' | 'eligibility' | 'tide' | 'simulator'
   const [activeTab, setActiveTab] = useState('audit');
 
   // The Load Simulator is NON-DESTRUCTIVE. It never changes currentAnnualUsage.
@@ -286,6 +288,26 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
             Battery Analysis
           </button>
           <button
+            onClick={() => setActiveTab('eligibility')}
+            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+              activeTab === 'eligibility'
+                ? 'bg-amber-400 text-slate-900'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            Eligibility
+          </button>
+          <button
+            onClick={() => setActiveTab('tide')}
+            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+              activeTab === 'tide'
+                ? 'bg-amber-400 text-slate-900'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            Tide
+          </button>
+          <button
             onClick={() => setActiveTab('simulator')}
             className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
               activeTab === 'simulator'
@@ -301,6 +323,20 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         {activeTab === 'battery' && (
           <div className="print:hidden">
             <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} extraUsage={extraUsage} measured={gbApplied ? gbProfile : null} calculations={calculations} rateOverride={batteryRateOverride} onRateOverrideChange={persistBatteryRateOverride} />
+          </div>
+        )}
+
+        {/* ELIGIBILITY TAB — can they actually get the rebate? */}
+        {activeTab === 'eligibility' && (
+          <div className="print:hidden">
+            <EligibilityTab inputs={inputs} gbProfile={gbApplied ? gbProfile : null} />
+          </div>
+        )}
+
+        {/* TIDE TAB — what waiting costs */}
+        {activeTab === 'tide' && (
+          <div className="print:hidden">
+            <TideTab inputs={inputs} />
           </div>
         )}
 
