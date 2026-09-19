@@ -46,6 +46,65 @@ export const MONTHLY_USAGE_SHAPE = [
 ];
 
 /**
+ * AVERAGE DAILY EXCESS SOLAR, BY MONTH — the number the SDCP sizing test runs
+ * against, and the one that answers "is there enough sun in December to fill
+ * this battery?"
+ *
+ * This used to be a flat haircut: production minus 42% of the day's load. That
+ * was wrong in a way that mattered most in the month that decides eligibility.
+ * A flat share is blind to WHEN the load happens, so an evening-heavy house in
+ * December — furnace and lights running long after dark, almost nothing at
+ * noon — was charged for eleven kWh of "daytime" load it does not have, and a
+ * 10,000 kWh/yr array came out with 4.3 kWh/day of surplus against a 7.8 kWh
+ * threshold. It failed on an assumption, not on sunlight.
+ *
+ * The honest version overlaps the two shapes hour by hour and sums only the
+ * hours where production genuinely exceeds consumption. Same 10,000 kWh array,
+ * evening-heavy profile, December: 7.1 kWh/day. A daytime-heavy house (pool
+ * pump at noon) correctly gets far less, because it really is consuming its
+ * own production. The profile now moves the answer, which is the point.
+ *
+ * Weekday-only is inherited from the caller — the program dispatches on
+ * weekdays, and weekend surplus does not count toward qualifying.
+ *
+ * @returns array of 12 numbers, Jan..Dec — kWh/day of excess solar.
+ */
+export function estimateMonthlyDailyExcess({
+  annualProductionKwh,
+  annualUsageKwh,
+  consumptionProfile = 'evening_heavy',
+  fallbackDaytimeShare = 0.42
+} = {}) {
+  const production = Number(annualProductionKwh) || 0;
+  const usage = Number(annualUsageKwh) || 0;
+  if (!production) return null;
+
+  const profile = CONSUMPTION_PROFILES[consumptionProfile];
+
+  const scale = (shape, total) => {
+    const sum = shape.reduce((a, b) => a + b, 0);
+    return sum ? shape.map((w) => (w / sum) * total) : shape.map(() => 0);
+  };
+
+  return MONTHLY_SOLAR_SHAPE.map((solarShare, m) => {
+    const days = DAYS[m];
+    const prodDay = (production * solarShare) / days;
+    const useDay = (usage * MONTHLY_USAGE_SHAPE[m]) / days;
+
+    // No profile on file — fall back to the old flat share rather than
+    // pretending to know the shape.
+    if (!profile) return Math.max(0, prodDay - useDay * fallbackDaytimeShare);
+
+    const prodHours = scale(PRODUCTION_SHAPE, prodDay);
+    const useHours = scale(profile.hourly, useDay);
+    let excess = 0;
+    for (let h = 0; h < 24; h++) excess += Math.max(0, prodHours[h] - useHours[h]);
+    return excess;
+  });
+}
+
+
+/**
  * SDG&E residential rate plans, seasonal.
  * Summer = June-October, Winter = November-May (SDG&E definition).
  *

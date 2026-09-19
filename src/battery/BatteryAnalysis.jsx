@@ -225,6 +225,8 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
           overlay={overlay}
           inputs={inputs}
           annualTrueUp={annualTrueUp}
+          calculations={calculations}
+          annualExportKwh={effExport}
         />
       </Accordion>
     </div>
