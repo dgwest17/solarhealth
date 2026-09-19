@@ -20,7 +20,9 @@ import React, { useState, useMemo } from 'react';
 import { CheckCircle2, AlertTriangle, XCircle, Info, FileSearch } from 'lucide-react';
 import { assessEligibility } from './eligibility';
 import { BATTERY_MODELS, getProgram, calcRebate } from './programData';
-import { MONTHLY_SOLAR_SHAPE, MONTHLY_USAGE_SHAPE } from '../battery/BatteryDispatch';
+import { estimateMonthlyDailyExcess } from '../battery/BatteryDispatch';
+import { CONSUMPTION_PROFILES } from '../battery/BatteryModel';
+import { useAssumptions } from '../admin/SettingsContext';
 
 const DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 const money = (v) => '$' + Math.round(Number(v) || 0).toLocaleString();
@@ -34,26 +36,15 @@ const STATUS_STYLE = {
   ineligible:           { ring: 'border-red-400/50 bg-red-900/15',         text: 'text-red-300',     Icon: XCircle }
 };
 
-/**
- * Estimate average weekday daily excess per month when there's no measured data.
- * Uses the same seasonal shapes the dispatch engine uses, so the two agree.
- * Clearly an ESTIMATE — the panel labels it as such.
- */
-const estimateMonthlyExcess = (annualProduction, annualUsage) => {
-  if (!annualProduction || !annualUsage) return null;
-  return MONTHLY_SOLAR_SHAPE.map((solarShare, i) => {
-    const prodDay = (annualProduction * solarShare) / DAYS[i];
-    const useDay = (annualUsage * MONTHLY_USAGE_SHAPE[i]) / DAYS[i];
-    // Daytime surplus only — roughly the share of production exceeding the
-    // daytime portion of load. Deliberately conservative.
-    const daytimeLoad = useDay * 0.42;
-    return Math.max(0, prodDay - daytimeLoad);
-  });
-};
-
-const EligibilityTab = ({ inputs, gbProfile = null }) => {
+const EligibilityTab = ({ inputs, gbProfile = null, consumptionProfile = null }) => {
+  const assumptions = useAssumptions();
   const [batteryId, setBatteryId] = useState('tesla_pw3');
   const [qty, setQty] = useState(1);
+  // The load shape drives the estimate more than anything else here, so it is
+  // an explicit, visible control rather than a buried constant.
+  const [profileKey, setProfileKey] = useState(
+    consumptionProfile || assumptions.defaultConsumptionProfile || 'evening_heavy'
+  );
   const [onCare, setOnCare] = useState(!!inputs.onCareProgram);
   const [hasExistingSolar, setHasExistingSolar] = useState(true);
   const [solarOverOneYear, setSolarOverOneYear] = useState(true);
@@ -64,11 +55,13 @@ const EligibilityTab = ({ inputs, gbProfile = null }) => {
   // Measured data wins; otherwise estimate and say so.
   const measured = gbProfile && gbProfile.monthlyExcess ? gbProfile.monthlyExcess : null;
   const monthlyExcess = useMemo(
-    () => measured || estimateMonthlyExcess(
-      Number(inputs.annualProduction) || 0,
-      Number(inputs.currentAnnualUsage) || 0
-    ) || [],
-    [measured, inputs.annualProduction, inputs.currentAnnualUsage]
+    () => measured || estimateMonthlyDailyExcess({
+      annualProductionKwh: inputs.annualProduction,
+      annualUsageKwh: inputs.currentAnnualUsage,
+      consumptionProfile: profileKey,
+      fallbackDaytimeShare: assumptions.fallbackDaytimeLoadShare
+    }) || [],
+    [measured, inputs.annualProduction, inputs.currentAnnualUsage, profileKey, assumptions.fallbackDaytimeLoadShare]
   );
 
   const result = useMemo(() => assessEligibility({
@@ -181,6 +174,27 @@ const EligibilityTab = ({ inputs, gbProfile = null }) => {
           Average <span className="text-slate-300">weekday</span> daily surplus vs the charge threshold.
           Summer months are tested at 80% of pack capacity, winter at 60%.
         </p>
+
+        {!measured && (
+          <div className="mb-4 rounded-lg border border-slate-700 bg-slate-900/50 p-3">
+            <label className="block text-[11px] text-slate-400 mb-1">
+              Load shape used for the estimate
+            </label>
+            <select
+              value={profileKey} onChange={(e) => setProfileKey(e.target.value)}
+              className="w-full sm:w-[320px] px-2 py-1.5 rounded bg-slate-900/70 border border-slate-600 text-slate-100 text-[12.5px]"
+            >
+              {Object.entries(CONSUMPTION_PROFILES).map(([k, p]) => (
+                <option key={k} value={k}>{p.label}</option>
+              ))}
+            </select>
+            <p className="text-[10.5px] text-slate-500 mt-1.5 max-w-2xl">
+              Surplus is the sun left over after the house has taken what it needs, hour by hour. A home that runs
+              its load in the evening banks far more midday surplus than one running a pool pump at noon — which is
+              why this control moves the verdict more than any other on the page.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-1.5">
           {result.months.map((m) => {

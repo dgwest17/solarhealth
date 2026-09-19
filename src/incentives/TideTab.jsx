@@ -32,6 +32,7 @@ import {
 } from './programData';
 import { calculateNEMImpact, getUtilityRate } from '../utils/calculations';
 import { getConnectionFeeForYear } from '../utils/rateData';
+import { useSettings } from '../admin/SettingsContext';
 
 const WINTER_DAYS = 212, SUMMER_DAYS = 153, WEEKDAYS = 261;
 const MONTH = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -39,24 +40,31 @@ const money = (v) => (v < 0 ? '−$' : '$') + Math.abs(Math.round(Number(v) || 0
 
 const TideTab = ({ inputs }) => {
   const utility = inputs.utility || 'SDGE';
-  const rateDefaults = getRateDefaults(utility);
-  const program = getProgram(utility);
+  // Catalogs and assumptions come from the org's editable defaults, falling
+  // back to the shipped tables when nothing has been customised.
+  const { settings } = useSettings();
+  const A = settings.assumptions;
+  const batteryCatalog = (settings.batteries && settings.batteries.length)
+    ? settings.batteries : BATTERY_MODELS;
+  const rateDefaults = (settings.rates && settings.rates[utility]) || getRateDefaults(utility);
+  const program = (settings.programs && settings.programs[utility]) || getProgram(utility);
 
   const [batteryId, setBatteryId] = useState('tesla_pw3');
   const [qty, setQty] = useState(1);
   const [careOn, setCareOn] = useState(!!inputs.onCareProgram);
   const [planId, setPlanId] = useState(rateDefaults.planId);
   const [s, setS] = useState({
-    util: 88, rte: 89, warranty: 10, cost: 19500,
+    util: A.averageDailyCyclePct, rte: A.roundTripEfficiencyPct, warranty: 10, cost: 19500,
     wpeak: rateDefaults.wpeak, woff: rateDefaults.woff, wsop: rateDefaults.wsop,
     speak: rateDefaults.speak, soff: rateDefaults.soff, ssop: rateDefaults.ssop,
-    esc: 8, care: 32, careEnd: 12,
+    esc: A.rateEscalationPct, care: 32, careEnd: 12,
     path: 'tpo', fed: 30,
     rebCare: program.rebateCare, rebNoCare: program.rebateStandard,
     // Funding is the whole point of this tool. Two months is the working
     // assumption until the program publishes a remaining-funds figure.
-    enrolled: 100, perf: program.perfPerKwh, perfYears: program.perfYears, sdcpEnd: 2,
-    delay: 6, equip: 3, opp: 5, horizon: 20
+    enrolled: 100, perf: program.perfPerKwh, perfYears: program.perfYears,
+    sdcpEnd: A.sdcpFundsRunOutMonths,
+    delay: 6, equip: A.equipmentInflationPct, opp: A.opportunityCostPct, horizon: A.horizonYears
   });
 
   const set = (k, v) => setS((p) => ({ ...p, [k]: v }));
@@ -69,8 +77,8 @@ const TideTab = ({ inputs }) => {
   }));
 
   const applyUtility = (u) => {
-    const rd = getRateDefaults(u);
-    const pg = getProgram(u);
+    const rd = (settings.rates && settings.rates[u]) || getRateDefaults(u);
+    const pg = (settings.programs && settings.programs[u]) || getProgram(u);
     applyRates(rd);
     setS((p) => ({
       ...p,
@@ -86,10 +94,10 @@ const TideTab = ({ inputs }) => {
     applyRates(getRateDefaults(selUtil, id));
   };
   const [selUtil, setSelUtil] = useState(utility);
-  const activeProgram = getProgram(selUtil);
-  const rateDefaultsForPlan = getRateDefaults(selUtil, planId);
+  const activeProgram = (settings.programs && settings.programs[selUtil]) || getProgram(selUtil);
+  const rateDefaultsForPlan = planId ? getRateDefaults(selUtil, planId) : rateDefaults;
 
-  const battery = getBattery(batteryId);
+  const battery = batteryCatalog.find((b) => b.id === batteryId) || getBattery(batteryId);
   const usable = battery.usableKwh * qty;
 
   const NOW = useMemo(() => new Date(), []);
@@ -233,7 +241,7 @@ const TideTab = ({ inputs }) => {
               value={batteryId} onChange={(e) => setBatteryId(e.target.value)}
               className="w-full px-3 py-2 rounded-lg bg-slate-900/70 border border-purple-400/40 text-slate-100 text-sm"
             >
-              {BATTERY_MODELS.map((b) => (
+              {batteryCatalog.map((b) => (
                 <option key={b.id} value={b.id}>{b.make} {b.model} · {b.usableKwh} kWh usable</option>
               ))}
             </select>
