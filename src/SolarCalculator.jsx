@@ -288,6 +288,16 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
             Battery Analysis
           </button>
           <button
+            onClick={() => setActiveTab('simulator')}
+            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+              activeTab === 'simulator'
+                ? 'bg-amber-400 text-slate-900'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            Load Simulator
+          </button>
+          <button
             onClick={() => setActiveTab('eligibility')}
             className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
               activeTab === 'eligibility'
@@ -306,16 +316,6 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
             }`}
           >
             Tide
-          </button>
-          <button
-            onClick={() => setActiveTab('simulator')}
-            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
-              activeTab === 'simulator'
-                ? 'bg-amber-400 text-slate-900'
-                : 'text-slate-300 hover:bg-slate-800'
-            }`}
-          >
-            Load Simulator
           </button>
         </div>
 
