@@ -93,12 +93,20 @@ export function adderCost(adder, sel) {
   return rate * floored;
 }
 
-/** Total of all selected adders, plus whether any of them kills the rebate. */
-export function sumAdders(selections = {}) {
+/**
+ * Total of all selected adders, plus whether any of them kills the rebate.
+ *
+ * `catalog` lets the org's edited adder list (Admin -> Platform Defaults) drive
+ * pricing without this module knowing anything about where it came from. It
+ * falls back to the shipped ADDERS, so a caller that has no settings still
+ * prices correctly.
+ */
+export function sumAdders(selections = {}, catalog = null) {
   let total = 0;
   let blocksRebate = false;
   const lines = [];
-  for (const adder of ADDERS) {
+  const list = Array.isArray(catalog) && catalog.length ? catalog : ADDERS;
+  for (const adder of list) {
     const sel = selections[adder.id];
     if (!sel || !sel.on) continue;
     const cost = adderCost(adder, sel);
@@ -139,6 +147,7 @@ export function monthlyPayment(principal, apr = LOAN_APR, termYears = 20) {
 export function priceBattery({
   contractValue = DEFAULT_CONTRACT_VALUE,
   adderSelections = {},
+  adderCatalog = null,
   fedPct = FED_PCT_DEFAULT,
   usableKwh = 0,
   rebateEligible = true,
@@ -149,7 +158,7 @@ export function priceBattery({
   apr = LOAN_APR
 } = {}) {
   const base = Number(contractValue) || 0;
-  const adders = sumAdders(adderSelections);
+  const adders = sumAdders(adderSelections, adderCatalog);
 
   // 1. Contract
   const contract = base + adders.total;
@@ -218,6 +227,22 @@ export function priceBattery({
  * @param {number} o.monthlySavings      Estimated monthly savings from storage.
  * @param {number} o.escalationPct       Annual utility escalation, e.g. 8.
  * @param {boolean} o.creditsOffsetFees  True only on NEM 1.0.
+ *
+ * THE NEM CLIFF ("Sea Level Rise")
+ *
+ * Grandfathering ends 20 years after PTO. The day it does, exports that were
+ * credited at or near retail drop to the successor tariff's avoided cost, and
+ * a household that is still exporting takes a step increase in its bill that
+ * never comes back. This is not gradual and it is not an escalation — it is a
+ * cliff on a known date, which is why it gets its own marker rather than being
+ * folded into the escalation rate.
+ *
+ * `nemCliffMonthlyAdder` is what that step costs per month, in today's dollars;
+ * it escalates with everything else after it lands. A battery does not stop the
+ * tariff change — it removes the exposure, because stored energy is consumed at
+ * home instead of sold at avoided cost. `nemCliffBatteryShare` is the fraction
+ * of that exposure a battery household still carries; 0 is the default and is
+ * right for a pack sized to soak up the surplus.
  */
 export function projectTwentyYear({
   monthlyBillToday = 0,
@@ -228,7 +253,10 @@ export function projectTwentyYear({
   escalationPct = 8,
   horizonYears = 20,
   creditsOffsetFees = false,
-  rebateCash = 0
+  rebateCash = 0,
+  nemCliffYear = null,
+  nemCliffMonthlyAdder = 0,
+  nemCliffBatteryShare = 0
 } = {}) {
   const esc = (Number(escalationPct) || 0) / 100;
   const bill0 = Number(monthlyBillToday) || 0;
@@ -239,11 +267,20 @@ export function projectTwentyYear({
   let cumUtility = 0;
   let cumBattery = 0;
 
+  const cliffYear = Number.isFinite(Number(nemCliffYear)) && Number(nemCliffYear) > 0
+    ? Math.ceil(Number(nemCliffYear))
+    : null;
+  const cliffAdder = Number(nemCliffMonthlyAdder) || 0;
+
   for (let y = 1; y <= horizonYears; y++) {
     const infl = Math.pow(1 + esc, y - 1);
 
-    // No battery: the whole bill escalates.
-    const utilityMonthly = bill0 * infl;
+    // The cliff lands once and stays, escalating with everything else.
+    const cliffActive = cliffYear !== null && y >= cliffYear;
+    const cliffNow = cliffActive ? cliffAdder * infl : 0;
+
+    // No battery: the whole bill escalates, and carries the cliff in full.
+    const utilityMonthly = bill0 * infl + cliffNow;
 
     // With a battery: savings escalate with rates (they are avoided rate), but
     // the bill cannot fall below the connection fee unless credits can offset
@@ -251,7 +288,12 @@ export function projectTwentyYear({
     const escalatedSavings = save0 * infl;
     const escalatedFee = fee0 * infl;
     const floor = creditsOffsetFees ? 0 : escalatedFee;
-    const residualUtility = Math.max(floor, utilityMonthly - escalatedSavings);
+    // A battery household keeps only its residual share of the cliff.
+    const batteryCliff = cliffNow * Math.min(1, Math.max(0, Number(nemCliffBatteryShare) || 0));
+    const residualUtility = Math.max(
+      floor,
+      (bill0 * infl + batteryCliff) - escalatedSavings
+    );
     const loanMonthly = y <= termYears ? pmt : 0;
     const batteryMonthly = residualUtility + loanMonthly;
 
@@ -269,6 +311,13 @@ export function projectTwentyYear({
       batteryDaily: (batteryMonthly * 12) / 365,
       batteryYearly: batteryMonthly * 12,
       monthlyDelta: batteryMonthly - utilityMonthly,
+      // Split out for the stacked chart: fee floor, energy above it, payment.
+      connectionFeeMonthly: escalatedFee,
+      energyMonthly: Math.max(0, residualUtility - escalatedFee),
+      utilityFeeMonthly: escalatedFee,
+      utilityEnergyMonthly: Math.max(0, utilityMonthly - escalatedFee),
+      cliffMonthly: cliffNow,
+      cliffActive,
       cumUtility,
       cumBattery,
       // Positive = ahead by adding the battery.
@@ -285,6 +334,8 @@ export function projectTwentyYear({
 
   return {
     rows,
+    cliffYear,
+    cliffAdder,
     totalUtility: last ? last.cumUtility : 0,
     totalBattery: last ? last.cumBattery : 0,
     lifetimeSavings: last ? last.netPosition : 0,
