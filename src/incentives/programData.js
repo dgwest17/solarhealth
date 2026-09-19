@@ -13,24 +13,38 @@
  * marketing spec sheet.
  */
 
+import { RATE_PLANS } from '../battery/BatteryDispatch';
+import { resolveWarranty } from '../tech/warrantyData';
+
 /** Usable capacity in kWh, per the sizing tool's DataVal sheet. */
 export const BATTERY_MODELS = [
-  { id: 'fwh_apower_x',   make: 'FranklinWH', model: 'aPower X',                        usableKwh: 13.6 },
-  { id: 'fwh_apower_2',   make: 'FranklinWH', model: 'aPower 2',                        usableKwh: 15.0 },
-  { id: 'fwh_apower_s',   make: 'FranklinWH', model: 'aPower S',                        usableKwh: 15.0 },
-  { id: 'tesla_pw3',      make: 'Tesla',      model: 'Powerwall 3',                     usableKwh: 13.5 },
-  { id: 'tesla_pw3_x1',   make: 'Tesla',      model: 'Powerwall 3 + 1 Expansion Pack',  usableKwh: 27.0 },
-  { id: 'tesla_pw3_x2',   make: 'Tesla',      model: 'Powerwall 3 + 2 Expansion Packs', usableKwh: 40.5 },
-  { id: 'enphase_10c',    make: 'Enphase',    model: '10C',                             usableKwh: 9.5 },
-  { id: 'enphase_5p',     make: 'Enphase',    model: '5P',                              usableKwh: 4.5 },
-  { id: 'se_home_400v',   make: 'SolarEdge',  model: 'Home Battery 400V',               usableKwh: 9.7 },
-  { id: 'se_nexis_5k',    make: 'SolarEdge',  model: 'Nexis NX-BLCK-5K',                usableKwh: 4.65 },
-  { id: 'lunar_10',       make: 'Lunar',      model: 'L2-ESS-10KWH',                    usableKwh: 10.0 },
-  { id: 'lunar_15',       make: 'Lunar',      model: 'L2-ESS-15KWH',                    usableKwh: 15.0 },
-  { id: 'lunar_20',       make: 'Lunar',      model: 'L2-ESS-20KWH',                    usableKwh: 20.0 },
-  { id: 'lunar_25',       make: 'Lunar',      model: 'L2-ESS-20KWH + LE-DC-UNIT',       usableKwh: 25.0 },
-  { id: 'lunar_30',       make: 'Lunar',      model: 'L2-ESS-20KWH + 2x LE-DC-UNIT',    usableKwh: 30.0 }
+  { id: 'fwh_apower_x',   make: 'FranklinWH', model: 'aPower X',                        usableKwh: 13.6, warrantyMake: 'franklinwh' },
+  { id: 'fwh_apower_2',   make: 'FranklinWH', model: 'aPower 2',                        usableKwh: 15.0, warrantyMake: 'franklinwh' },
+  { id: 'fwh_apower_s',   make: 'FranklinWH', model: 'aPower S',                        usableKwh: 15.0, warrantyMake: 'franklinwh' },
+  { id: 'tesla_pw3',      make: 'Tesla',      model: 'Powerwall 3',                     usableKwh: 13.5, warrantyMake: 'tesla_pw' },
+  { id: 'tesla_pw3_x1',   make: 'Tesla',      model: 'Powerwall 3 + 1 Expansion Pack',  usableKwh: 27.0, warrantyMake: 'tesla_pw' },
+  { id: 'tesla_pw3_x2',   make: 'Tesla',      model: 'Powerwall 3 + 2 Expansion Packs', usableKwh: 40.5, warrantyMake: 'tesla_pw' },
+  { id: 'enphase_10c',    make: 'Enphase',    model: '10C',                             usableKwh: 9.5, warrantyMake: 'enphase_bat' },
+  { id: 'enphase_5p',     make: 'Enphase',    model: '5P',                              usableKwh: 4.5, warrantyMake: 'enphase_bat' },
+  { id: 'se_home_400v',   make: 'SolarEdge',  model: 'Home Battery 400V',               usableKwh: 9.7, warrantyMake: 'solaredge_bat' },
+  { id: 'se_nexis_5k',    make: 'SolarEdge',  model: 'Nexis NX-BLCK-5K',                usableKwh: 4.65, warrantyMake: 'solaredge_bat' },
+  { id: 'lunar_10',       make: 'Lunar',      model: 'L2-ESS-10KWH',                    usableKwh: 10.0, warrantyMake: 'lunar' },
+  { id: 'lunar_15',       make: 'Lunar',      model: 'L2-ESS-15KWH',                    usableKwh: 15.0, warrantyMake: 'lunar' },
+  { id: 'lunar_20',       make: 'Lunar',      model: 'L2-ESS-20KWH',                    usableKwh: 20.0, warrantyMake: 'lunar' },
+  { id: 'lunar_25',       make: 'Lunar',      model: 'L2-ESS-20KWH + LE-DC-UNIT',       usableKwh: 25.0, warrantyMake: 'lunar' },
+  { id: 'lunar_30',       make: 'Lunar',      model: 'L2-ESS-20KWH + 2x LE-DC-UNIT',    usableKwh: 30.0, warrantyMake: 'lunar' }
 ];
+
+/**
+ * Warranty term for a pack, resolved from the shared warranty table rather
+ * than re-typed here. This is the year the manufacturer's retention figure
+ * (70% for every pack we sell) is measured at — which is exactly what the Tide
+ * degradation curve needs, so the two can't disagree.
+ */
+export const getBatteryWarrantyYears = (battery, asOfYear = new Date().getFullYear()) => {
+  const rule = resolveWarranty('battery', (battery && battery.warrantyMake) || 'other_battery', asOfYear);
+  return (rule && rule.productYears) || 10;
+};
 
 export const getBattery = (id) =>
   BATTERY_MODELS.find((b) => b.id === id) || BATTERY_MODELS[3]; // default Powerwall 3
@@ -129,16 +143,67 @@ export const calcRebate = (program, usableKwh, qty = 1, onCare = false) => {
 };
 
 /**
- * SDG&E seasonal rate defaults used by the Tide model. All-in = generation +
- * delivery. Peak is the 4–9pm window; super-off-peak is the midday/overnight
- * trough the battery charges from.
+ * SEASONAL RATE TABLE — derived, not re-typed.
+ *
+ * SDG&E's tiers come straight out of RATE_PLANS in the dispatch engine, which
+ * is the rate table Dave confirmed. Tide used to carry its own copy, and the
+ * copy had drifted: winter peak read $0.354 against an actual $0.503, and the
+ * "super off-peak" figures ($0.035 / $0.042) were export avoided-cost values
+ * masquerading as retail rates. Two tables answering one question is the bug
+ * that has bitten this codebase three times now — so there is one table.
+ *
+ * A battery client lands on EV-TOU-5: the midday super-off-peak window is what
+ * makes storage work, so that is the default plan for the Tide model. TOU-DR1
+ * is selectable for a client who will not switch.
  */
-export const UTILITY_RATE_DEFAULTS = {
-  SDGE: { wpeak: 0.354, wsop: 0.0347, speak: 0.669, ssop: 0.0417 },
-  SMUD: { wpeak: 0.180, wsop: 0.0900, speak: 0.310, ssop: 0.1000 },
-  PGE:  { wpeak: 0.420, wsop: 0.2000, speak: 0.600, ssop: 0.2200 },
-  SCE:  { wpeak: 0.380, wsop: 0.1800, speak: 0.550, ssop: 0.2000 }
+export const RATE_PLAN_OPTIONS = {
+  SDGE: [
+    { id: 'SDGE_EVTOU5',  label: 'EV-TOU-5 (recommended with storage)' },
+    { id: 'SDGE_TOU_DR1', label: 'TOU-DR1 (standard)' }
+  ]
 };
 
-export const getRateDefaults = (utility) =>
-  UTILITY_RATE_DEFAULTS[utility] || UTILITY_RATE_DEFAULTS.SDGE;
+const fromPlan = (plan) => ({
+  wpeak: plan.winter.peak,
+  woff:  plan.winter.offPeak,
+  wsop:  plan.winter.superOffPeak,
+  speak: plan.summer.peak,
+  soff:  plan.summer.offPeak,
+  ssop:  plan.summer.superOffPeak,
+  planId: plan.id,
+  planLabel: plan.label,
+  estimated: !!plan.winterEstimated
+});
+
+/**
+ * Non-SDG&E territories have no confirmed seasonal table yet. These are
+ * placeholders scaled off each utility's TOU_RATES entry so the shape is right
+ * and the arithmetic runs — they are flagged `estimated` and the UI says so.
+ * Replace with real tariff data before quoting outside San Diego.
+ */
+const estimateSeasonal = (peak, offPeak, superOffPeak) => ({
+  speak: peak,
+  soff:  offPeak,
+  ssop:  superOffPeak,
+  // Winter peak runs materially below summer peak on every CA TOU tariff, but
+  // nowhere near as far below as Tide previously assumed.
+  wpeak: Number((peak * 0.73).toFixed(3)),
+  woff:  Number((offPeak * 0.93).toFixed(3)),
+  wsop:  superOffPeak,
+  planId: null,
+  planLabel: 'Estimated seasonal split',
+  estimated: true
+});
+
+export const UTILITY_RATE_DEFAULTS = {
+  SDGE: fromPlan(RATE_PLANS.SDGE_EVTOU5),
+  SMUD: estimateSeasonal(0.3765, 0.1550, 0.1000),
+  PGE:  estimateSeasonal(0.5800, 0.3000, 0.2600),
+  SCE:  estimateSeasonal(0.6500, 0.3500, 0.2500)
+};
+
+/** Rate defaults for a utility, optionally for a specific named plan. */
+export const getRateDefaults = (utility, planId = null) => {
+  if (planId && RATE_PLANS[planId]) return fromPlan(RATE_PLANS[planId]);
+  return UTILITY_RATE_DEFAULTS[utility] || UTILITY_RATE_DEFAULTS.SDGE;
+};

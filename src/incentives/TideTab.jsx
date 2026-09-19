@@ -25,8 +25,13 @@
  *
  * Rendered by: src/SolarCalculator.jsx (Tide tab)
  */
-import React, { useState, useMemo } from 'react';
-import { BATTERY_MODELS, getBattery, getProgram, getRateDefaults } from './programData';
+import React, { useState, useMemo, useEffect } from 'react';
+import {
+  BATTERY_MODELS, getBattery, getProgram, getRateDefaults,
+  getBatteryWarrantyYears, RATE_PLAN_OPTIONS
+} from './programData';
+import { calculateNEMImpact, getUtilityRate } from '../utils/calculations';
+import { getConnectionFeeForYear } from '../utils/rateData';
 
 const WINTER_DAYS = 212, SUMMER_DAYS = 153, WEEKDAYS = 261;
 const MONTH = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -40,38 +45,91 @@ const TideTab = ({ inputs }) => {
   const [batteryId, setBatteryId] = useState('tesla_pw3');
   const [qty, setQty] = useState(1);
   const [careOn, setCareOn] = useState(!!inputs.onCareProgram);
+  const [planId, setPlanId] = useState(rateDefaults.planId);
   const [s, setS] = useState({
     util: 88, rte: 89, warranty: 10, cost: 19500,
-    wpeak: rateDefaults.wpeak, wsop: rateDefaults.wsop,
-    speak: rateDefaults.speak, ssop: rateDefaults.ssop,
+    wpeak: rateDefaults.wpeak, woff: rateDefaults.woff, wsop: rateDefaults.wsop,
+    speak: rateDefaults.speak, soff: rateDefaults.soff, ssop: rateDefaults.ssop,
     esc: 8, care: 32, careEnd: 12,
     path: 'tpo', fed: 30,
     rebCare: program.rebateCare, rebNoCare: program.rebateStandard,
-    enrolled: 100, perf: program.perfPerKwh, perfYears: program.perfYears, sdcpEnd: 3,
+    // Funding is the whole point of this tool. Two months is the working
+    // assumption until the program publishes a remaining-funds figure.
+    enrolled: 100, perf: program.perfPerKwh, perfYears: program.perfYears, sdcpEnd: 2,
     delay: 6, equip: 3, opp: 5, horizon: 20
   });
 
   const set = (k, v) => setS((p) => ({ ...p, [k]: v }));
 
   // Swapping utility reloads that territory's rates and program terms.
+  const applyRates = (rd) => setS((p) => ({
+    ...p,
+    wpeak: rd.wpeak, woff: rd.woff, wsop: rd.wsop,
+    speak: rd.speak, soff: rd.soff, ssop: rd.ssop
+  }));
+
   const applyUtility = (u) => {
     const rd = getRateDefaults(u);
     const pg = getProgram(u);
+    applyRates(rd);
     setS((p) => ({
       ...p,
-      wpeak: rd.wpeak, wsop: rd.wsop, speak: rd.speak, ssop: rd.ssop,
       rebCare: pg.rebateCare, rebNoCare: pg.rebateStandard,
       perf: pg.perfPerKwh, perfYears: pg.perfYears
     }));
+    setPlanId(rd.planId);
     setSelUtil(u);
+  };
+
+  const applyPlan = (id) => {
+    setPlanId(id);
+    applyRates(getRateDefaults(selUtil, id));
   };
   const [selUtil, setSelUtil] = useState(utility);
   const activeProgram = getProgram(selUtil);
+  const rateDefaultsForPlan = getRateDefaults(selUtil, planId);
 
   const battery = getBattery(batteryId);
   const usable = battery.usableKwh * qty;
 
   const NOW = useMemo(() => new Date(), []);
+
+  // The 70%-capacity year IS the manufacturer's warranty term — they are the
+  // same number stated two ways, so the degradation curve follows the selected
+  // pack rather than a hard-coded 10. Franklin and Enphase run 15; Tesla 10.
+  const warrantyYears = getBatteryWarrantyYears(battery, NOW.getFullYear());
+  useEffect(() => {
+    setS((p) => (p.warranty === warrantyYears ? p : { ...p, warranty: warrantyYears }));
+  }, [warrantyYears]);
+
+  // ---- Client context header -------------------------------------------
+  // Computed with the audit's own functions, not a second implementation, so
+  // the figures on this tab match the Audit tab exactly.
+  const ctx = useMemo(() => {
+    const production = Number(inputs.annualProduction) || 0;
+    const usage = Number(inputs.currentAnnualUsage) || 0;
+    const year = inputs.nowYear || NOW.getFullYear();
+    const fee = getConnectionFeeForYear(year, inputs.connectionFeeMonthly);
+    const annualFees = fee * 12;
+    let energyCharge = 0;
+    if (production > 0 || usage > 0) {
+      const nem = calculateNEMImpact(
+        production, usage,
+        getUtilityRate(year, inputs.utility, inputs.onCareProgram),
+        inputs.nemVersion, inputs.exportRate
+      );
+      energyCharge = nem.type === 'trueup' ? nem.amount : -nem.amount;
+    }
+    return {
+      production, usage,
+      systemSize: Number(inputs.systemSize) || 0,
+      monthlyFee: fee,
+      annualFees,
+      energyCharge,
+      annualBill: annualFees + energyCharge,
+      offset: usage > 0 ? Math.round((production / usage) * 100) : null
+    };
+  }, [inputs, NOW]);
   const FED_MONTHS = Math.max(0, (2027 - NOW.getFullYear()) * 12 + (12 - (NOW.getMonth() + 1)));
   const stamp = (mo) => {
     const d = new Date(NOW.getFullYear(), NOW.getMonth() + mo, 1);
@@ -80,6 +138,9 @@ const TideTab = ({ inputs }) => {
 
   const m = useMemo(() => {
     const util = s.util / 100, rte = s.rte / 100;
+    // Arbitrage spread = peak minus super-off-peak. Off-peak is the middle
+    // band the battery neither charges nor discharges into, so it shows in the
+    // rate ladder for context but never enters the spread.
     const wSpread = s.wpeak - s.wsop, sSpread = s.speak - s.ssop;
     const esc = s.esc / 100, care = s.care / 100;
     const careMo = careOn ? Math.max(0, Math.round(s.careEnd)) : 0;
@@ -163,6 +224,74 @@ const TideTab = ({ inputs }) => {
 
   return (
     <div className="space-y-4">
+      {/* ---- battery selection: the input that moves the most money ---- */}
+      <div className="rounded-xl border border-purple-400/30 bg-slate-900/50 p-4">
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_110px_auto] gap-3 items-end">
+          <div>
+            <label className="block text-[11px] uppercase tracking-wider text-purple-300 mb-1">Battery</label>
+            <select
+              value={batteryId} onChange={(e) => setBatteryId(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg bg-slate-900/70 border border-purple-400/40 text-slate-100 text-sm"
+            >
+              {BATTERY_MODELS.map((b) => (
+                <option key={b.id} value={b.id}>{b.make} {b.model} · {b.usableKwh} kWh usable</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] uppercase tracking-wider text-purple-300 mb-1">Qty</label>
+            <select value={qty} onChange={(e) => setQty(Number(e.target.value))}
+              className="w-full px-3 py-2 rounded-lg bg-slate-900/70 border border-purple-400/40 text-slate-100 text-sm">
+              {[1, 2, 3, 4].map((n) => <option key={n} value={n}>&times;{n}</option>)}
+            </select>
+          </div>
+          <div className="text-right">
+            <div className="text-[11px] text-slate-400">Usable capacity</div>
+            <div className="text-2xl font-bold text-purple-300 font-mono">{usable} kWh</div>
+            <div className="text-[11px] text-slate-500">70% at year {s.warranty}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ---- who this client is ---- */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-slate-700 border border-slate-700 rounded-xl overflow-hidden">
+        <div className="bg-slate-900 p-4">
+          <span className="block text-[11.5px] text-slate-400 mb-1">Average yearly bill</span>
+          <b className="font-mono text-[21px] font-medium text-slate-100 block">
+            {ctx.production || ctx.usage ? money(ctx.annualBill) : '—'}
+          </b>
+          <small className="block text-[11px] text-slate-500 mt-0.5">
+            {money(ctx.annualFees)} connection fees ({money(ctx.monthlyFee)}/mo)
+            {ctx.energyCharge >= 0
+              ? ` + ${money(ctx.energyCharge)} true-up`
+              : ` − ${money(-ctx.energyCharge)} export credit`}
+          </small>
+        </div>
+        <div className="bg-slate-900 p-4">
+          <span className="block text-[11.5px] text-slate-400 mb-1">Annual production</span>
+          <b className="font-mono text-[21px] font-medium text-slate-100 block">
+            {ctx.production ? ctx.production.toLocaleString() : '—'}
+          </b>
+          <small className="block text-[11px] text-slate-500 mt-0.5">kWh per year</small>
+        </div>
+        <div className="bg-slate-900 p-4">
+          <span className="block text-[11.5px] text-slate-400 mb-1">Annual consumption</span>
+          <b className="font-mono text-[21px] font-medium text-slate-100 block">
+            {ctx.usage ? ctx.usage.toLocaleString() : '—'}
+          </b>
+          <small className="block text-[11px] text-slate-500 mt-0.5">
+            {ctx.offset !== null ? `${ctx.offset}% offset` : 'kWh per year'}
+          </small>
+        </div>
+        <div className="bg-slate-900 p-4">
+          <span className="block text-[11.5px] text-slate-400 mb-1">System size</span>
+          <b className="font-mono text-[21px] font-medium text-slate-100 block">
+            {ctx.systemSize ? ctx.systemSize + ' kW' : '—'}
+          </b>
+          <small className="block text-[11px] text-slate-500 mt-0.5">{inputs.nemVersion || 'NEM —'}</small>
+        </div>
+      </div>
+
       {/* ---- headline ---- */}
       <div className="rounded-xl border border-cyan-500/25 bg-slate-800/50 p-5">
         <div className="flex items-baseline justify-between gap-5 flex-wrap mb-3">
@@ -195,8 +324,14 @@ const TideTab = ({ inputs }) => {
           <path d={line(m.now.rows)} fill="none" stroke="#2F9E8F" strokeWidth="2.5" strokeLinejoin="round" />
           {m.now.be && (
             <>
-              <circle cx={X(m.now.be - 1)} cy={zeroY} r="4" fill="#F0A03C" />
-              <text x={X(m.now.be - 1)} y={zeroY - 11} textAnchor="middle" fill="#F0A03C" fontSize="10.5" fontFamily="monospace">breaks even</text>
+              <line
+                x1={X(m.now.be - 1)} y1={P.t} x2={X(m.now.be - 1)} y2={H - P.b}
+                stroke="#facc15" strokeWidth="2.5" strokeDasharray="7 5"
+              />
+              <circle cx={X(m.now.be - 1)} cy={zeroY} r="4.5" fill="#facc15" stroke="#0f172a" strokeWidth="1.5" />
+              <text x={X(m.now.be - 1) + 7} y={P.t + 12} fill="#facc15" fontSize="11.5" fontFamily="monospace" fontWeight="bold">
+                breaks even · yr {m.now.be}
+              </text>
             </>
           )}
           {Array.from({ length: m.horizon }, (_, i) => i).filter((i) => i % Math.ceil(m.horizon / 8) === 0).map((i) => (
@@ -234,19 +369,19 @@ const TideTab = ({ inputs }) => {
               {title} · {stamp(p.mo)}
             </h5>
             <dl className="font-mono text-[12.5px] space-y-1">
-              <div className="flex justify-between"><dt className="text-slate-400 font-sans">Installed cost</dt><dd>{money(p.gross)}</dd></div>
+              <div className="flex justify-between"><dt className="text-slate-400 font-sans">Battery cost, installed</dt><dd>{money(p.gross)}</dd></div>
+              <div className="flex justify-between">
+                <dt className="text-slate-400 font-sans">Federal {Math.round(s.fed)}%</dt>
+                <dd className={p.fedOk ? '' : 'text-red-400/75'}>{p.fed ? '− ' + money(p.fed) : 'expired'}</dd>
+              </div>
               <div className="flex justify-between">
                 <dt className="text-slate-400 font-sans">
                   {p.sdcpOpen ? `${activeProgram.short} rebate, ${p.onCare ? 'CARE' : 'standard'} tier` : `${activeProgram.short} rebate`}
                 </dt>
                 <dd className={p.rebate > 0 ? '' : 'text-red-400/75'}>{p.rebate ? '− ' + money(p.rebate) : 'fund exhausted'}</dd>
               </div>
-              <div className="flex justify-between">
-                <dt className="text-slate-400 font-sans">Federal 30%</dt>
-                <dd className={p.fedOk ? '' : 'text-red-400/75'}>{p.fed ? '− ' + money(p.fed) : 'expired'}</dd>
-              </div>
               <div className="flex justify-between border-t border-slate-700 mt-2 pt-2 text-[17px]">
-                <dt className="text-slate-300 font-sans text-[13px] self-center">Out of pocket</dt><dd>{money(p.net)}</dd>
+                <dt className="text-slate-300 font-sans text-[13px] self-center">Net investment</dt><dd>{money(p.net)}</dd>
               </div>
             </dl>
           </div>
@@ -276,26 +411,15 @@ const TideTab = ({ inputs }) => {
           {/* battery + utility + CARE — the three additions */}
           <div className="border-t border-slate-700 pt-4">
             <h4 className="text-[15px] font-semibold text-slate-100 mb-3">The battery</h4>
-            <div className="mb-2">
-              <label className="block text-[11px] text-slate-400 mb-1">Model</label>
-              <select
-                value={batteryId} onChange={(e) => setBatteryId(e.target.value)}
-                className="w-full px-2 py-1.5 rounded bg-slate-900/70 border border-slate-600 text-slate-100 text-[12.5px]"
-              >
-                {BATTERY_MODELS.map((b) => <option key={b.id} value={b.id}>{b.make} {b.model} · {b.usableKwh} kWh</option>)}
-              </select>
-            </div>
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <label className="text-[12px] text-slate-400 flex-1">Quantity</label>
-              <select value={qty} onChange={(e) => setQty(Number(e.target.value))}
-                className="w-[92px] px-2 py-1 rounded bg-slate-900/70 border border-slate-600 text-slate-100 text-[12.5px]">
-                {[1, 2, 3, 4].map((n) => <option key={n} value={n}>×{n}</option>)}
-              </select>
-              <span className="w-[30px] text-[11px] text-purple-300 font-mono">{usable}</span>
-            </div>
+            <p className="text-[11.5px] text-slate-500 mb-3">
+              {battery.make} {battery.model} &times;{qty} &middot; {usable} kWh usable. Change the pack at the top.
+            </p>
             <Num k="util" label="Average daily cycle" suffix="%" />
             <Num k="rte" label="Round-trip efficiency" suffix="%" />
             <Num k="warranty" label="Reaches 70% capacity at" suffix="yr" />
+            <p className="text-[10.5px] text-slate-500 -mt-1 mb-2">
+              {battery.make}&rsquo;s warranty term ({warrantyYears} yr). Override only against a certificate.
+            </p>
             <Num k="cost" label="Installed cost, before rebate" step={500} suffix="$" />
           </div>
 
@@ -317,10 +441,36 @@ const TideTab = ({ inputs }) => {
                 <p className="text-[10px] text-amber-400/80 mt-1">Unverified program figures — confirm before quoting.</p>
               )}
             </div>
-            <Num k="wpeak" label="Winter peak, all-in" step={0.001} suffix="$" />
-            <Num k="wsop" label="Winter super off-peak" step={0.001} suffix="$" />
-            <Num k="speak" label="Summer peak, all-in" step={0.001} suffix="$" />
+            {(RATE_PLAN_OPTIONS[selUtil] || []).length > 0 && (
+              <div className="mb-3">
+                <label className="block text-[11px] text-slate-400 mb-1">Rate plan with storage</label>
+                <select
+                  value={planId || ''} onChange={(e) => applyPlan(e.target.value)}
+                  className="w-full px-2 py-1.5 rounded bg-slate-900/70 border border-slate-600 text-slate-100 text-[12.5px]"
+                >
+                  {RATE_PLAN_OPTIONS[selUtil].map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                </select>
+              </div>
+            )}
+            <p className="text-[11px] text-slate-500 mb-2">
+              Summer — the battery charges at super off-peak and discharges into peak.
+            </p>
+            <Num k="speak" label="Summer on-peak" step={0.001} suffix="$" />
+            <Num k="soff" label="Summer off-peak" step={0.001} suffix="$" />
             <Num k="ssop" label="Summer super off-peak" step={0.001} suffix="$" />
+            <p className="text-[11px] text-slate-500 mt-3 mb-2">Winter</p>
+            <Num k="wpeak" label="Winter on-peak" step={0.001} suffix="$" />
+            <Num k="woff" label="Winter off-peak" step={0.001} suffix="$" />
+            <Num k="wsop" label="Winter super off-peak" step={0.001} suffix="$" />
+            <p className="text-[11px] text-slate-500 mt-2 mb-2">
+              Spread worked: {money((s.speak - s.ssop) * 100)}&cent;/kWh summer,{' '}
+              {money((s.wpeak - s.wsop) * 100)}&cent;/kWh winter. Off-peak is the band the battery sits out.
+            </p>
+            {rateDefaultsForPlan.estimated && (
+              <p className="text-[10px] text-amber-400/80 mb-2">
+                Seasonal split estimated for this territory — confirm against the tariff sheet before quoting.
+              </p>
+            )}
             <Num k="esc" label="Rate escalation" step={0.1} suffix="%" />
           </div>
 
