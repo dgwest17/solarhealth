@@ -17,6 +17,8 @@ A California solar financial-audit platform for **Your Energy Best** (Beacon Ene
 - [Directory layout](#directory-layout)
 - [Core domain logic](#core-domain-logic)
 - [Battery dispatch engine](#battery-dispatch-engine)
+- [Battery pricing & the 20-year comparison](#battery-pricing--the-20-year-comparison)
+- [Platform defaults (admin)](#platform-defaults-admin)
 - [API endpoints](#api-endpoints)
 - [Environment variables](#environment-variables)
 - [Local development](#local-development)
@@ -85,6 +87,8 @@ Supabase  ◄─────────────────────► 
 
 **Empty means empty.** If a field is blank in Zoho, the tool shows `—` (or "— not set —" on dropdowns) and lists it in a "Missing from the CRM" banner. The API never invents defaults — a rep filling in real data must never be shown a fabricated number they might trust. Blank inputs stay blank end-to-end rather than becoming `NaN` or a placeholder value.
 
+**One tariff table.** SDG&E's TOU tiers are defined once, in `RATE_PLANS` (`src/battery/BatteryDispatch.js`). `src/incentives/programData.js` derives its seasonal defaults from it rather than carrying a copy; battery warranty terms likewise resolve through `src/tech/warrantyData.js`. Two tables answering one question has been the dominant bug class in this codebase — it produced the $0.14-vs-$0.12 EV-TOU mismatch, the rep read-vs-list permission divergence, and a $1,889/yr gap between the battery tab and the consultation report. When a rate or a warranty term needs changing, there should be exactly one line to change.
+
 **Supabase `client_data`** — tool-only settings persisted per contact so they survive reloads: Load Simulator loads, consumption profile, and battery rate overrides. These never touch the CRM.
 
 ---
@@ -99,6 +103,7 @@ solarhealth/
 │   ├── client.js                # read one client (project + contact) → audit inputs
 │   ├── clients.js               # dashboard list
 │   ├── create-client.js         # new client (sets sane lifecycle/ownership defaults)
+│   ├── settings.js              # org-wide editable defaults (GET authed / PUT admin)
 │   ├── save-project.js          # write Solar_Projects fields (whitelisted)
 │   ├── save-contact.js          # write Contacts fields (graceful field-absent fallback)
 │   ├── gb-profile.js            # per-client tool settings (Supabase): loads, profile, rate override
@@ -114,7 +119,10 @@ solarhealth/
 │   ├── simulator/               # Load Simulator (future loads, EV-vs-gas)
 │   ├── greenbutton/             # Green Button (utility interval data) parser + upload
 │   ├── report/                  # ConsultationReport.js — the HTML report builder
-│   ├── tech/                    # systemScore, equipment data, incentives
+│   ├── incentives/              # Eligibility (SDCP) + Tide tabs, battery/program catalog
+│   ├── admin/                   # editable platform defaults (schema, context, page)
+│   ├── pricing/                 # loanPricing.js — contract → federal → rebate → payment
+│   ├── tech/                    # systemScore, equipment data, warranties, incentives
 │   ├── utils/                   # calculations, rateData, loan math, narrative prompt
 │   ├── hooks/useAuth.js         # Supabase auth + password-recovery event handling
 │   ├── config/                  # branding, tooltip copy
@@ -161,6 +169,60 @@ What it models:
 - **Manual rate override** — a switch reveals an editable buy/sell grid so a rep can enter the client's exact tariff (both buy and export-credit rates, seasonal). Blank fields fall back to the published schedule. Persisted per client.
 - **Dispatch incentive programs** — e.g. **SDCP (San Diego Community Power)**: +$0.10/kWh on battery energy discharged during **weekday 4–9pm** events (to home or grid — *not* a flat export adder), plus a one-time upfront rebate ($350/kWh new, $250/kWh add-on, $10k cap, 5-yr enrollment). Modeled precisely, not as a blanket bonus.
 - **Load Simulator integration** — planned new load (EV, etc.) folds into modeled usage so the battery is sized against the home's future consumption, not just today's.
+
+---
+
+## Battery pricing & the 20-year comparison
+
+`src/pricing/loanPricing.js` holds every number behind **Stabilize Your Bill**. Pure functions, no React, so the headline payment and the collapsed Breakdown cannot disagree.
+
+**Order of operations is load-bearing:**
+
+| Step | Figure | Notes |
+|---|---|---|
+| 1 | Contract value | Base + adders. Carries a 10% dealer fee (`DEALER_FEE`) — never displayed. |
+| 2 | Federal deduction | `fedPct`, default 30%, slider 25–30%. |
+| 3 | **Amount financed** | Contract − federal. **The loan is sized here.** |
+| 4 | Storage rebate | $250 × usable kWh, capped at $10,000. |
+| 5 | Net investment | Amount financed − rebate. Breakdown only. |
+
+The rebate sits *below* the loan because it arrives months after funding. "Cash in Your Pocket" lets the homeowner keep it or roll it in; only the roll-in case re-sizes the payment off step 5.
+
+`LOAN_APR` (5.49%) is fixed and never rendered. Terms: 20 (default) / 15 / 12 / 8 years.
+
+**Adders:** sub-panel $1,000 · main panel upgrade $4,000 · EV charger wiring $700 · conduit $20/ft beyond the first 10 · solar add-on · non-export $1,200. **Non-export forfeits the storage rebate** — `blocksRebate` zeroes it everywhere downstream.
+
+**Solar add-on** prices at `panels × perPanel + baseline`, where the baseline applies from `minUnits` through `baselineMaxUnits` and then drops away. At the shipped numbers ($500/panel, $1,000 baseline through 7 panels) eight panels cost $4,000 against seven at $4,500 — the eighth panel is free and then some. The slider says so out loud rather than smoothing it over, because a rep who knows about the cliff sells the eighth panel.
+
+**Rep commission** is the base contract above its floor — the slider and the contract value are the same control from two ends. The floor moves with how the deal is paid for: dealer-fee financing buys the customer's rate down and that cost sits inside the contract, so cash ($15,250) and the unsubsidised 8.49%/20-year card ($15,250) can be written below the subsidised 5.49% floor ($16,500). Commission is measured on the **base** contract, never the adder-inflated one, so a main-panel upgrade does not read as money the rep earned. It lives in a **Configuration** panel nested inside Breakdown and closed by default — Breakdown itself gets opened in front of customers.
+
+`projectTwentyYear()` runs the side-by-side. The horizon is pinned at 20 years whatever term is selected: a 12-year loan going quiet in year 13 while savings keep running *is* the argument, so truncating at the term would hide it. Connection fees are modelled as a floor the bill cannot fall below — except on NEM 1.0, the only tariff where export credits can offset them.
+
+---
+
+## Platform defaults (admin)
+
+Market assumptions are editable in the app — **Defaults** in the top nav, admin only. Nothing in `src/admin/` re-types a number: `settingsSchema.js` imports the constants from `loanPricing.js`, `programData.js`, `BatteryDispatch.js` and `rateData.js` and presents them as an editable layer. If nobody has ever opened the page, the app behaves exactly as if the layer were not there.
+
+**Only changes are stored.** `diffSettings()` reduces the edited object back to what differs from code, and `mergeSettings()` reapplies it. So raising the storage rebate in code still reaches every org that has not overridden it — a settings store that snapshots everything silently freezes future fixes, which is the trap this avoids.
+
+Editable: battery catalog · lenders and their rate cards (per-term APR, dealer fee, prepayment penalty) · adder pricing · solar panel options and per-panel pricing · incentive programs · utility rate tiers · and the modelling assumptions (contract value, federal %, escalation, horizon, cycle, round-trip efficiency, charge efficiency, funding window).
+
+**One-time setup** — run in the Supabase SQL editor:
+
+```sql
+create table app_settings (
+  id          text primary key default 'default',
+  settings    jsonb not null default '{}'::jsonb,
+  updated_at  timestamptz default now(),
+  updated_by  text
+);
+insert into app_settings (id) values ('default') on conflict do nothing;
+```
+
+Until that runs, `GET /api/settings` returns an empty patch and the app runs on shipped defaults; only a save reports the missing table. RLS stays locked — the endpoint uses the service key and enforces admin server-side, from the role resolved off a verified Supabase token.
+
+**Who is an admin.** `ADMIN_EMAILS` (comma-separated), plus the account owner, who is always an admin. The owner defaults to `davidgwest17@gmail.com` and is overridable with `OWNER_EMAIL`. That floor exists because the unmatched case resolves to `client`: an unset or mistyped `ADMIN_EMAILS` would silently demote the person who owns the platform, and the symptom (no Defaults tab) looks nothing like the cause. The resolved role is printed in the nav bar so a wrong one is visible rather than silent.
 
 ---
 
