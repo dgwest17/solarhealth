@@ -53,6 +53,79 @@ export const FED_PCT_DEFAULT = 0.30;
 /** Local storage rebate, $/kWh of USABLE capacity (SDCP standard tier). */
 export const LOCAL_REBATE_PER_KWH = 250;
 
+/* ---------------------------------------------------------------------------
+ * REP COMMISSION
+ *
+ * The floor is the lowest contract value the battery can be written at. Every
+ * dollar above it is the rep's commission, so the commission slider and the
+ * contract value are the same control seen from two ends.
+ *
+ * The floor moves with how the deal is paid for. Dealer-fee financing buys the
+ * customer's rate down, and the cost of that buy-down sits inside the contract
+ * value — so a deal that does not need it can be written lower. Cash needs no
+ * buy-down at all, and the 8.49% paper needs much less than the 5.49%, which is
+ * why both land on the same lower floor.
+ *
+ * These are rep-facing figures. Nothing here renders outside the hidden
+ * Breakdown panel.
+ * ------------------------------------------------------------------------- */
+
+/** Floor on subsidised paper — the 5.49% product. */
+export const COMMISSION_FLOOR_STANDARD = 16500;
+
+/** Floor with no rate buy-down: cash, or the 8.49% / 20-year term. */
+export const COMMISSION_FLOOR_UNSUBSIDISED = 15250;
+
+/** APR at or above which the floor drops (the unsubsidised rate card). */
+export const UNSUBSIDISED_APR = 0.0849;
+
+/**
+ * Added solar raises the floor, because the panels cost something to install
+ * before anyone earns on them. Dave is setting the real scale later; until
+ * then the adder's own price carries the whole increase and this stays at
+ * zero, which is honest rather than a placeholder number nobody chose.
+ */
+export const COMMISSION_FLOOR_PER_ADDED_PANEL = 0;
+
+/**
+ * The floor for a given deal.
+ *
+ * @param {string} mode        'loan' | 'cash' | 'lease'
+ * @param {object} termCard    { years, apr, minContractValue? }
+ * @param {number} addedPanels Panels on the solar add-on, if any.
+ */
+export function commissionFloor({
+  mode = 'loan',
+  termCard = null,
+  addedPanels = 0,
+  floorStandard = COMMISSION_FLOOR_STANDARD,
+  floorUnsubsidised = COMMISSION_FLOOR_UNSUBSIDISED,
+  unsubsidisedApr = UNSUBSIDISED_APR,
+  perAddedPanel = COMMISSION_FLOOR_PER_ADDED_PANEL
+} = {}) {
+  let base;
+  let reason;
+
+  // An explicit per-term floor from the rate card always wins — that is the
+  // lever Dave uses when a lender changes terms.
+  if (termCard && Number.isFinite(Number(termCard.minContractValue)) && mode !== 'cash') {
+    base = Number(termCard.minContractValue);
+    reason = `${termCard.years}-year rate card`;
+  } else if (mode === 'cash') {
+    base = floorUnsubsidised;
+    reason = 'cash — no rate buy-down';
+  } else if (termCard && Number(termCard.apr) >= unsubsidisedApr) {
+    base = floorUnsubsidised;
+    reason = 'unsubsidised rate';
+  } else {
+    base = floorStandard;
+    reason = 'standard rate card';
+  }
+
+  const panelUplift = Math.max(0, Number(addedPanels) || 0) * (Number(perAddedPanel) || 0);
+  return { floor: base + panelUplift, base, panelUplift, reason };
+}
+
 /**
  * Contract adders. `perUnit` items multiply by a quantity; `flat` items are on
  * or off. Conduit is billed per foot BEYOND the first 10 (included in base).
@@ -66,14 +139,50 @@ export const ADDERS = [
   { id: 'ev_wiring',  label: 'EV charger wiring',         kind: 'flat',    amount: 700 },
   { id: 'conduit',    label: 'Conduit run',               kind: 'perUnit', amount: 20,
     unit: 'ft', freeUnits: 10, hint: 'First 10 ft included' },
-  { id: 'solar_add',  label: 'Solar add-on',              kind: 'perUnit', amount: 0,
-    unit: 'panels', minUnits: 4, pending: true,
-    hint: 'Minimum 4 panels. Per-panel cost not yet set — enter it to price.' },
+  { id: 'solar_add',  label: 'Solar add-on',              kind: 'solarPanels', amount: 500,
+    unit: 'panels', minUnits: 4, maxUnits: 24,
+    baselineAmount: 1000, baselineMaxUnits: 7,
+    hint: 'Minimum 4 panels. A $1,000 baseline applies at 4-7 panels and drops away above 7.' },
   { id: 'non_export', label: 'Non-export system',         kind: 'flat',    amount: 1200,
     blocksRebate: true, hint: 'A non-exporting system is not eligible for the storage rebate.' }
 ];
 
 export const getAdder = (id) => ADDERS.find((a) => a.id === id) || null;
+
+/**
+ * SOLAR ADD-ON PRICING.
+ *
+ *   cost = panels x perPanel  +  baseline, where baseline applies only from
+ *   `minUnits` through `baselineMaxUnits` and drops away above it.
+ *
+ * At the shipped numbers ($500/panel, $1,000 baseline through 7) that makes 8
+ * panels cost $4,000 against 7 panels at $4,500 — the eighth panel is free and
+ * then some. That is what the pricing says, so it is what this returns; the UI
+ * points the cliff out at the slider rather than quietly smoothing it, because
+ * a rep who knows about it can sell the eighth panel instead of the seventh.
+ */
+export function solarAddOnCost(adder, units) {
+  if (!adder) return { cost: 0, panels: 0, perPanel: 0, baseline: 0, baselineApplies: false };
+  const min = adder.minUnits || 0;
+  const raw = Number(units) || 0;
+  const panels = raw > 0 ? Math.max(min, raw) : 0;
+  if (!panels) return { cost: 0, panels: 0, perPanel: adder.amount || 0, baseline: 0, baselineApplies: false };
+
+  const perPanel = Number(adder.amount) || 0;
+  const baselineAmount = Number(adder.baselineAmount) || 0;
+  const baselineMax = Number(adder.baselineMaxUnits) || 0;
+  const baselineApplies = baselineAmount > 0 && baselineMax > 0 && panels <= baselineMax;
+  const baseline = baselineApplies ? baselineAmount : 0;
+
+  return {
+    panels,
+    perPanel,
+    baseline,
+    baselineApplies,
+    panelsCost: panels * perPanel,
+    cost: panels * perPanel + baseline
+  };
+}
 
 /**
  * Cost of one adder given its selection state.
@@ -87,6 +196,9 @@ export function adderCost(adder, sel) {
     ? Number(sel.amount)
     : adder.amount;
   if (adder.kind === 'flat') return rate;
+  if (adder.kind === 'solarPanels') {
+    return solarAddOnCost({ ...adder, amount: rate }, sel.units).cost;
+  }
   const raw = Number(sel.units) || 0;
   const billable = Math.max(0, raw - (adder.freeUnits || 0));
   const floored = adder.minUnits && raw > 0 ? Math.max(billable, Math.max(0, adder.minUnits - (adder.freeUnits || 0))) : billable;
@@ -112,7 +224,15 @@ export function sumAdders(selections = {}, catalog = null) {
     const cost = adderCost(adder, sel);
     if (adder.blocksRebate) blocksRebate = true;
     total += cost;
-    lines.push({ id: adder.id, label: adder.label, cost, units: sel.units || null, pending: !!adder.pending && !cost });
+    const detail = adder.kind === 'solarPanels'
+      ? solarAddOnCost({ ...adder, amount: (sel.amount != null && sel.amount !== '' ? Number(sel.amount) : adder.amount) }, sel.units)
+      : null;
+    lines.push({
+      id: adder.id, label: adder.label, cost,
+      units: detail ? detail.panels : (sel.units || null),
+      detail,
+      pending: !!adder.pending && !cost
+    });
   }
   return { total, blocksRebate, lines };
 }
@@ -155,7 +275,10 @@ export function priceBattery({
   rebateCap = 10000,
   termYears = LOAN_TERMS_YEARS[0],
   applyRebateToLoan = false,
-  apr = LOAN_APR
+  apr = LOAN_APR,
+  mode = 'loan',
+  termCard = null,
+  commissionSettings = null
 } = {}) {
   const base = Number(contractValue) || 0;
   const adders = sumAdders(adderSelections, adderCatalog);
@@ -178,6 +301,26 @@ export function priceBattery({
 
   // 5. Net investment
   const net = Math.max(0, paymentBase - rebate);
+
+  // ---- commission: everything the base contract carries above its floor ----
+  const solarLine = adders.lines.find((l) => l.id === 'solar_add');
+  const addedPanels = solarLine && solarLine.detail ? solarLine.detail.panels : 0;
+  const floorInfo = commissionFloor({
+    mode,
+    termCard: termCard || { years: termYears, apr },
+    addedPanels,
+    ...(commissionSettings || {})
+  });
+  const commission = {
+    ...floorInfo,
+    addedPanels,
+    // Measured against the BASE contract, not the adder-inflated one: adders
+    // are pass-through cost, so loading a deal with a main-panel upgrade must
+    // not read as commission the rep has not earned.
+    contractValue: base,
+    amount: Math.round(base - floorInfo.floor),
+    belowFloor: base < floorInfo.floor
+  };
 
   const financed = applyRebateToLoan ? net : paymentBase;
   const payment = monthlyPayment(financed, apr, termYears);
@@ -204,6 +347,9 @@ export function priceBattery({
     totalOfPayments,
     totalInterest: Math.max(0, totalOfPayments - financed),
     applyRebateToLoan: !!applyRebateToLoan,
+    // ---- rep-facing only ----
+    commission,
+
     // Internal reconciliation only — never rendered.
     grossBeforeDealerFee: contract * (1 - DEALER_FEE),
     dealerFeeAmount: contract * DEALER_FEE
