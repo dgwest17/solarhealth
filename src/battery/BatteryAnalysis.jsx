@@ -5,7 +5,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { Battery } from 'lucide-react';
-import { buildDailyOverlay, calculateTotalRecoveredValue } from './BatteryModel';
+import { buildOverlayWithAddedLoad, calculateTotalRecoveredValue } from './BatteryModel';
 import { TOU_RATES } from '../utils/rateData';
 import { calculateNEMImpact, getUtilityRate } from '../utils/calculations';
 import BatteryConsumptionProduction from './BatteryConsumptionProduction';
@@ -50,10 +50,17 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
   const annualCheck = nemImpact.type === 'credit' ? nemImpact.amount : 0;
   const owesUtility = nemImpact.type === 'trueup';
 
-  const overlay = buildDailyOverlay(
+  // The overlay carries the planned load from the Load Simulator as a second
+  // series. The client's real curve is never rewritten — the projection sits
+  // over it, so every section below can show base and added separately.
+  const addedKwh = (extraUsage && Number(extraUsage.addedKwh)) || 0;
+  const addedDaytimePct = (extraUsage && Number(extraUsage.daytimePct)) || 40;
+  const overlay = buildOverlayWithAddedLoad(
     profileKey,
     inputs.currentAnnualUsage,
-    inputs.annualProduction
+    inputs.annualProduction,
+    addedKwh,
+    addedDaytimePct
   );
 
   // Shared export/import figures — lifted here so §3 (Export Inefficiencies)
@@ -164,6 +171,7 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
           profileKey={profileKey}
           setProfileKey={setProfileKey}
           overlay={overlay}
+          extraUsage={extraUsage}
         />
       </Accordion>
 
@@ -208,6 +216,7 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
           avoidedTrueUp={avoidedTrueUp}
           arbitrageRecovered={arbitrageRecovered}
           totalRecoveredPerYear={totalRecoveredPerYear}
+          extraUsage={extraUsage}
         />
       </Accordion>
 

@@ -12,7 +12,8 @@ import { CONSUMPTION_PROFILES } from './BatteryModel';
  * consumption = orange, with daytime overproduction highlighted.
  * Receives the shared `overlay` from the container.
  */
-const BatteryConsumptionProduction = ({ inputs, profileKey, setProfileKey, overlay }) => {
+const BatteryConsumptionProduction = ({ inputs, profileKey, setProfileKey, overlay, extraUsage = null }) => {
+  const hasAdded = !!overlay.hasAddedLoad;
   // Find the daytime overproduction window (first/last hour with surplus)
   const surplusHours = overlay.data.filter((d) => d.surplus > 0).map((d) => d.hour);
   const surplusStart = surplusHours.length ? Math.min(...surplusHours) : null;
@@ -58,6 +59,14 @@ const BatteryConsumptionProduction = ({ inputs, profileKey, setProfileKey, overl
           <span className="w-4 h-4 rounded" style={{ background: '#f97316' }} />
           <span className="text-sm text-slate-300">Consumption</span>
         </div>
+        {hasAdded && (
+          <div className="flex items-center gap-2">
+            <span className="w-5 border-t-2 border-dashed" style={{ borderColor: '#38bdf8' }} />
+            <span className="text-sm text-sky-300">
+              With planned load (+{overlay.addedKwh.toLocaleString()} kWh/yr)
+            </span>
+          </div>
+        )}
       </div>
 
       <ResponsiveContainer width="100%" height={340}>
@@ -77,7 +86,10 @@ const BatteryConsumptionProduction = ({ inputs, profileKey, setProfileKey, overl
           <YAxis stroke="#94a3b8" fontSize={11} unit=" kWh" width={60} />
           <Tooltip
             contentStyle={{ background: '#0f1e36', border: '1px solid #facc1555', borderRadius: 8, color: '#e2e8f0' }}
-            formatter={(value, name) => [`${value} kWh`, name === 'production' ? 'Production' : 'Consumption']}
+            formatter={(value, name) => [`${value} kWh`,
+              name === 'production' ? 'Production'
+                : name === 'consumptionWithAdded' ? 'With planned load'
+                : 'Consumption']}
             labelFormatter={(l) => `Hour: ${l}`}
           />
           {/* Highlight daytime overproduction window */}
@@ -92,8 +104,33 @@ const BatteryConsumptionProduction = ({ inputs, profileKey, setProfileKey, overl
           )}
           <Area type="monotone" dataKey="production" stroke="#facc15" strokeWidth={2} fill="url(#prodGrad)" />
           <Area type="monotone" dataKey="consumption" stroke="#f97316" strokeWidth={2} fill="url(#consGrad)" />
+          {/* The planned load rides ON TOP of the real curve, unfilled, so the
+              client's measured consumption stays legible underneath it. */}
+          {hasAdded && (
+            <Area
+              type="monotone" dataKey="consumptionWithAdded"
+              stroke="#38bdf8" strokeWidth={2} strokeDasharray="5 4"
+              fill="none" dot={false}
+            />
+          )}
         </AreaChart>
       </ResponsiveContainer>
+
+      {hasAdded && (
+        <div className="mt-3 rounded-lg border border-sky-400/30 bg-sky-500/10 p-3 text-[12px] text-sky-100">
+          <b>Planned load added.</b> {overlay.addedKwh.toLocaleString()} kWh/yr
+          {extraUsage && extraUsage.daytimePct != null ? ` at ${Math.round(extraUsage.daytimePct)}% daytime` : ''} —
+          placed by when it actually draws, not spread across the household curve.
+          {overlay.surplusLostToAddedLoad > 0 && (
+            <> It consumes <b>{overlay.surplusLostToAddedLoad.toLocaleString()} kWh</b> of the surplus that used to
+              be exported</>
+          )}
+          {overlay.importAddedByLoad > 0 && (
+            <> and adds <b className="text-red-200">{overlay.importAddedByLoad.toLocaleString()} kWh</b> of grid
+              import after dark</>
+          )}.
+        </div>
+      )}
 
       {/* Verdict + pointer to Section 2 */}
       <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4">

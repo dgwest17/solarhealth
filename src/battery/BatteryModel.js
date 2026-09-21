@@ -121,6 +121,90 @@ export const buildDailyOverlay = (profileKey, annualUsageKwh, annualProductionKw
   };
 };
 
+/**
+ * ADDED LOAD — the hourly shape of a planned load (EV, heat pump, pool pump).
+ *
+ * The household profile is the wrong shape to reuse here. An EV that charges
+ * at 1am and a pool pump that runs at noon are both "added load", and spreading
+ * either one across the house's own curve would put the EV's draw in the middle
+ * of the day, where it would look absorbed by solar it never touches.
+ *
+ * So the added load is placed by its OWN daytime share — the figure the Load
+ * Simulator already collects per appliance. Daytime kWh land in the solar
+ * window weighted by production (that is when they can actually be self-
+ * consumed), and the remainder spreads across the dark hours.
+ *
+ * One definition, used by the overlay chart and the grid-cost projection, so
+ * the line drawn on the graph and the dollars underneath it cannot disagree.
+ *
+ * @param annualAddedKwh
+ * @param daytimePct  0-100, share of the load drawn while the sun is up.
+ * @returns 24 numbers — kWh/hour on an average day.
+ */
+export const buildAddedLoadShape = (annualAddedKwh, daytimePct = 40) => {
+  const dailyAdded = (Number(annualAddedKwh) || 0) / 365;
+  if (dailyAdded <= 0) return new Array(24).fill(0);
+
+  const dayShare = Math.min(1, Math.max(0, (Number(daytimePct) || 0) / 100));
+  const dayKwh = dailyAdded * dayShare;
+  const nightKwh = dailyAdded - dayKwh;
+
+  const solarSum = PRODUCTION_SHAPE.reduce((a, b) => a + b, 0);
+  const darkHours = PRODUCTION_SHAPE.filter((w) => w === 0).length;
+
+  return PRODUCTION_SHAPE.map((w) => (
+    w > 0
+      ? (w / solarSum) * dayKwh
+      : (darkHours ? nightKwh / darkHours : 0)
+  ));
+};
+
+/**
+ * Overlay for the consumption/production chart WITH a planned load layered on.
+ *
+ * Returns the base overlay untouched plus a `consumptionWithAdded` series and
+ * the annual figures that result. The base series is never rewritten — the
+ * client's real curve stays on the chart and the projection sits over it.
+ */
+export const buildOverlayWithAddedLoad = (
+  profileKey, annualUsageKwh, annualProductionKwh, annualAddedKwh = 0, daytimePct = 40
+) => {
+  const base = buildDailyOverlay(profileKey, annualUsageKwh, annualProductionKwh);
+  const added = Number(annualAddedKwh) || 0;
+  if (added <= 0) return { ...base, hasAddedLoad: false, addedKwh: 0 };
+
+  const addedShape = buildAddedLoadShape(added, daytimePct);
+
+  let daytimeOverproduction = 0;
+  let nighttimeImport = 0;
+  const data = base.data.map((row, h) => {
+    const withAdded = row.consumption + addedShape[h];
+    const surplus = Math.max(0, row.production - withAdded);
+    daytimeOverproduction += surplus;
+    if (row.production === 0) nighttimeImport += withAdded;
+    return {
+      ...row,
+      addedLoad: Math.round(addedShape[h] * 100) / 100,
+      consumptionWithAdded: Math.round(withAdded * 100) / 100,
+      surplusWithAdded: Math.round(surplus * 100) / 100
+    };
+  });
+
+  return {
+    ...base,
+    data,
+    hasAddedLoad: true,
+    addedKwh: Math.round(added),
+    addedDaytimePct: daytimePct,
+    // What the added load does to the two figures the battery math runs on.
+    annualDaytimeOverproductionWithAdded: Math.round(daytimeOverproduction * 365),
+    annualNighttimeImportWithAdded: Math.round(nighttimeImport * 365),
+    // The deltas, which is what the sublines report.
+    surplusLostToAddedLoad: Math.max(0, base.annualDaytimeOverproduction - Math.round(daytimeOverproduction * 365)),
+    importAddedByLoad: Math.max(0, Math.round(nighttimeImport * 365) - base.annualNighttimeImport)
+  };
+};
+
 /* ============================================================
    SECTION 3 & 4 — Export economics + battery recovery
    ============================================================ */

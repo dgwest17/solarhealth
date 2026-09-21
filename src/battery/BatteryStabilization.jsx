@@ -33,10 +33,10 @@
  */
 import React, { useState, useMemo } from 'react';
 import {
-  ChevronDown, ShieldCheck, Home, RefreshCw, Check, Wallet, TrendingUp, Waves
+  ChevronDown, ShieldCheck, Home, RefreshCw, Check, Wallet, TrendingUp, Waves, Lock
 } from 'lucide-react';
 import { estimateBackupHours } from './BatteryModel';
-import { priceBattery, projectTwentyYear } from '../pricing/loanPricing';
+import { priceBattery, projectTwentyYear, solarAddOnCost } from '../pricing/loanPricing';
 import { getConnectionFeeForYear } from '../utils/rateData';
 import { NEM3_EXPORT_MIDDAY } from './BatteryDispatch';
 import { useSettings } from '../admin/SettingsContext';
@@ -81,6 +81,7 @@ const BatteryStabilization = ({
   const [applyRebateToLoan, setApplyRebateToLoan] = useState(false);
   const [adderSel, setAdderSel] = useState({});
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [showCommission, setShowCommission] = useState(false);
 
   // ---- graph controls ----
   const [showBattery, setShowBattery] = useState(false);
@@ -158,9 +159,17 @@ const BatteryStabilization = ({
     rebatePerKwh: A.localRebatePerKwh,
     termYears,
     apr: activeTermCard.apr,
-    applyRebateToLoan
+    applyRebateToLoan,
+    mode,
+    termCard: activeTermCard,
+    commissionSettings: {
+      floorStandard: A.commissionFloorStandard,
+      floorUnsubsidised: A.commissionFloorUnsubsidised,
+      unsubsidisedApr: A.commissionUnsubsidisedApr,
+      perAddedPanel: A.commissionFloorPerAddedPanel
+    }
   }), [contractValue, adderSel, settings.adders, fedPct, totalKwh, termYears,
-       activeTermCard.apr, applyRebateToLoan, inputs.utility, A.localRebatePerKwh]);
+       activeTermCard, applyRebateToLoan, inputs.utility, A, mode]);
 
   const activePayment =
     mode === 'loan'  ? price.monthlyPayment :
@@ -685,7 +694,9 @@ const BatteryStabilization = ({
                 <dl className="font-mono text-[13px] space-y-1">
                   <Row label="Contract value" value={money(price.base)} />
                   {price.adders.lines.map((l) => (
-                    <Row key={l.id} label={l.label + (l.units ? ` (${l.units})` : '')}
+                    <Row key={l.id}
+                         label={l.label + (l.units ? ` (${l.units}${l.detail ? ' panels' : ''})` : '')
+                           + (l.detail && l.detail.baselineApplies ? ` incl. ${money(l.detail.baseline)} baseline` : '')}
                          value={l.pending ? 'price TBD' : '+ ' + money(l.cost)}
                          tone={l.pending ? 'muted' : undefined} />
                   ))}
@@ -752,27 +763,67 @@ const BatteryStabilization = ({
                                 : a.amount ? `${money(a.amount)}/${a.unit}` : `—/${a.unit}`}
                             </span>
                           </label>
+                          {sel.on && a.kind === 'solarPanels' && (() => {
+                            const perPanel = sel.amount != null && sel.amount !== ''
+                              ? Number(sel.amount) : a.amount;
+                            const min = a.minUnits || 4;
+                            const max = a.maxUnits || 24;
+                            const units = Math.max(min, Number(sel.units) || min);
+                            const q = solarAddOnCost({ ...a, amount: perPanel }, units);
+                            // One more panel costs less than the one before it
+                            // wherever the baseline falls away. Say so, rather
+                            // than letting a rep quote the expensive side of it.
+                            const nextCheaper = solarAddOnCost({ ...a, amount: perPanel }, units + 1).cost < q.cost;
+                            return (
+                              <div className="mt-2 pl-6">
+                                {panelPriced && (
+                                  <select value={sel.panelId || ''}
+                                    onChange={(e) => {
+                                      const p = settings.panels.find((x) => x.id === e.target.value);
+                                      setAdder(a.id, { panelId: e.target.value, amount: p ? p.pricePerPanel : undefined });
+                                    }}
+                                    className="mb-2 px-2 py-1 rounded bg-slate-900/70 border border-slate-600 text-slate-100 text-[12px]">
+                                    <option value="">Default pricing</option>
+                                    {settings.panels.filter((p) => p.active !== false).map((p) => (
+                                      <option key={p.id} value={p.id}>
+                                        {p.make} {p.model} · {money(p.pricePerPanel)}/panel
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+                                <div className="flex items-center justify-between text-[12px] mb-1">
+                                  <span className="text-slate-400">{units} panels</span>
+                                  <span className="font-mono text-slate-200">{money(q.cost)}</span>
+                                </div>
+                                <input
+                                  type="range" min={min} max={max} step={1} value={units}
+                                  onChange={(e) => setAdder(a.id, { units: Number(e.target.value) })}
+                                  className="w-full accent-cyan-400"
+                                />
+                                <div className="flex justify-between text-[10px] text-slate-500">
+                                  <span>{min} min</span><span>{max}</span>
+                                </div>
+                                <p className="text-[10.5px] text-slate-500 mt-1">
+                                  {units} × {money(perPanel)}
+                                  {q.baselineApplies
+                                    ? <> + {money(q.baseline)} baseline (applies through {a.baselineMaxUnits} panels)</>
+                                    : <> · baseline no longer applies above {a.baselineMaxUnits} panels</>}
+                                </p>
+                                {nextCheaper && (
+                                  <p className="text-[10.5px] text-amber-300 mt-1">
+                                    {units + 1} panels costs {money(solarAddOnCost({ ...a, amount: perPanel }, units + 1).cost)} —
+                                    less than {units}, because the baseline drops away. Sell the extra panel.
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })()}
                           {sel.on && a.kind === 'perUnit' && (
                             <div className="flex flex-wrap gap-2 mt-2 pl-6">
-                              {a.id === 'solar_add' && panelPriced && (
-                                <select value={sel.panelId || ''}
-                                  onChange={(e) => {
-                                    const p = settings.panels.find((x) => x.id === e.target.value);
-                                    setAdder(a.id, { panelId: e.target.value, amount: p ? p.pricePerPanel : undefined });
-                                  }}
-                                  className="px-2 py-1 rounded bg-slate-900/70 border border-slate-600 text-slate-100 text-[12px]">
-                                  <option value="">Choose panel…</option>
-                                  {settings.panels.filter((p) => p.active !== false).map((p) => (
-                                    <option key={p.id} value={p.id}>
-                                      {p.make} {p.model} · {money(p.pricePerPanel)}/panel
-                                    </option>
-                                  ))}
-                                </select>
-                              )}
                               <input type="number" placeholder={a.unit} value={sel.units ?? ''}
                                 onChange={(e) => setAdder(a.id, { units: e.target.value })}
                                 className="w-[86px] px-2 py-1 rounded bg-slate-900/70 border border-slate-600 text-slate-100 font-mono text-[12px]" />
-                              {!a.amount && !panelPriced && (
+                              {!a.amount && (
                                 <input type="number" placeholder={`$ per ${String(a.unit || 'unit').replace(/s$/, '')}`}
                                   value={sel.amount ?? ''}
                                   onChange={(e) => setAdder(a.id, { amount: e.target.value })}
@@ -792,6 +843,89 @@ const BatteryStabilization = ({
                   </p>
                 </div>
               </div>
+            </div>
+
+            {/* ---- REP CONFIGURATION: commission ----
+                Nested one level deeper than Breakdown and closed by default,
+                because Breakdown itself gets opened in front of customers to
+                justify the price stack. This must not be one click away from
+                that conversation. */}
+            <div className="border-t border-slate-700 pt-4">
+              <button
+                onClick={() => setShowCommission((v) => !v)}
+                className="w-full flex items-center justify-between py-2 text-left hover:bg-white/5 rounded-lg px-2 transition-colors"
+              >
+                <span className="text-[13px] font-semibold text-slate-400 flex items-center gap-2">
+                  <Lock size={13} /> Configuration
+                </span>
+                <ChevronDown size={16} className={`text-slate-500 transition-transform ${showCommission ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showCommission && (
+                <div className="mt-3 rounded-xl border border-violet-400/30 bg-violet-500/5 p-4">
+                  <div className="flex flex-wrap items-baseline justify-between gap-4 mb-3">
+                    <div>
+                      <div className="text-[11px] uppercase tracking-widest text-violet-300">Your commission</div>
+                      <div className={`text-4xl font-extrabold mt-1 ${
+                        price.commission.belowFloor ? 'text-red-400' : 'text-violet-200'
+                      }`}>{money(price.commission.amount)}</div>
+                    </div>
+                    <div className="text-right text-[12px] font-mono text-slate-400">
+                      <div>Contract {money(price.commission.contractValue)}</div>
+                      <div>Floor {money(price.commission.floor)}</div>
+                      <div className="text-[10.5px] text-slate-500">{price.commission.reason}</div>
+                    </div>
+                  </div>
+
+                  <input
+                    type="range"
+                    min={price.commission.floor}
+                    max={price.commission.floor + 12000}
+                    step={250}
+                    value={Math.max(price.commission.floor, Number(contractValue) || 0)}
+                    onChange={(e) => setContractValue(Number(e.target.value))}
+                    className="w-full accent-violet-400"
+                  />
+                  <div className="flex justify-between text-[10.5px] text-slate-500">
+                    <span>{money(price.commission.floor)} · no commission</span>
+                    <span>{money(price.commission.floor + 12000)}</span>
+                  </div>
+
+                  {price.commission.belowFloor && (
+                    <p className="text-[11.5px] text-red-300 mt-2">
+                      Contract value is below the floor for this deal — it cannot be written here.
+                      Raise it to {money(price.commission.floor)} or switch to a rate card with a lower floor.
+                    </p>
+                  )}
+
+                  <div className="mt-3 pt-3 border-t border-violet-400/20 text-[11px] text-slate-400 space-y-1">
+                    <div className="flex justify-between gap-3">
+                      <span>Floor, before solar</span>
+                      <span className="font-mono">{money(price.commission.base)}</span>
+                    </div>
+                    {price.commission.addedPanels > 0 && (
+                      <div className="flex justify-between gap-3">
+                        <span>{price.commission.addedPanels} added panels</span>
+                        <span className="font-mono">
+                          {price.commission.panelUplift > 0 ? '+' + money(price.commission.panelUplift) : 'no uplift set'}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between gap-3">
+                      <span>Payment at this contract value</span>
+                      <span className="font-mono text-cyan-300">{money2(price.monthlyPayment)}/mo</span>
+                    </div>
+                    <p className="text-[10.5px] text-slate-500 pt-1">
+                      Commission is measured on the base contract only — adders are pass-through cost, so a main
+                      panel upgrade does not read as money you earned. Cash and the unsubsidised rate card carry a
+                      lower floor because neither needs the rate bought down.
+                      {price.commission.addedPanels > 0 && price.commission.panelUplift === 0 && (
+                        <> The per-panel floor uplift is still set to zero in Admin → Platform Defaults.</>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="overflow-x-auto border-t border-slate-700 pt-4">

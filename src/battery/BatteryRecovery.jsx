@@ -34,8 +34,17 @@ import {
 const BatteryRecovery = ({
   inputs, overlay, effExport, effImport,
   annualTrueUp = 0, annualCheck = 0, owesUtility = false,
-  avoidedTrueUp = 0, arbitrageRecovered = null, totalRecoveredPerYear = null
+  avoidedTrueUp = 0, arbitrageRecovered = null, totalRecoveredPerYear = null,
+  extraUsage = null
 }) => {
+  // PLANNED LOAD. The audit's true-up already contains this load's cost (the
+  // engine recomputes with plannedAddedKwh), so nothing here adds it again —
+  // it is split back out so the client can see which part of the bill is the
+  // house they have and which part is the car they are thinking about.
+  const addedKwh = (extraUsage && Number(extraUsage.addedKwh)) || 0;
+  const addedCost = (extraUsage && Number(extraUsage.cost)) || 0;
+  const hasAdded = addedKwh > 0;
+  const baseTrueUp = Math.max(0, (Number(annualTrueUp) || 0) - addedCost);
   const expKwh = effExport != null ? effExport : overlay.annualDaytimeOverproduction;
   const impKwh = effImport != null ? effImport : overlay.annualNighttimeImport;
   const touRates = TOU_RATES[inputs.utility] || TOU_RATES.SCE;
@@ -57,14 +66,29 @@ const BatteryRecovery = ({
     u
   );
 
-  const loss = projectCreditLoss(
+  // Cost of doing nothing, WITHOUT the planned load — the baseline curve.
+  const lossBase = projectCreditLoss(
     touRates,
-    expKwh,
-    impKwh,
+    overlay.annualDaytimeOverproduction,
+    overlay.annualNighttimeImport,
     8, // 8%/yr peak escalation
     10,
     u
   );
+
+  // And WITH it. A planned load makes doing nothing more expensive, not less:
+  // it eats exportable surplus and adds night-time purchases, and both halves
+  // escalate at the same 8% a year. `expKwh`/`impKwh` already carry the load
+  // when the overlay was built with it.
+  const loss = projectCreditLoss(
+    touRates,
+    expKwh,
+    impKwh,
+    8,
+    10,
+    u
+  );
+  const lossFromAddedLoad = Math.max(0, loss.totalLost - lossBase.totalLost);
 
   const money = (v) => `$${Math.round(v).toLocaleString()}`;
   const rate = (v) => `$${v.toFixed(3)}/kWh`;
@@ -127,6 +151,18 @@ const BatteryRecovery = ({
               <>
                 <div className="text-xs text-red-200 mb-1 font-semibold uppercase tracking-wide">You Pay {utilName}</div>
                 <div className="text-3xl font-extrabold text-red-400">{money(annualTrueUp)}<span className="text-base font-normal text-slate-400">/yr</span></div>
+                {hasAdded && addedCost > 0 && (
+                  <div className="mt-1.5 text-[11px] border-t border-red-400/25 pt-1.5 space-y-0.5">
+                    <div className="flex justify-between gap-3 text-slate-300">
+                      <span>Your system today</span>
+                      <span className="font-mono">{money(baseTrueUp)}/yr</span>
+                    </div>
+                    <div className="flex justify-between gap-3 text-sky-200">
+                      <span>Planned load ({addedKwh.toLocaleString()} kWh)</span>
+                      <span className="font-mono">+{money(addedCost)}/yr</span>
+                    </div>
+                  </div>
+                )}
                 <p className="text-[11px] text-red-200/80 mt-2">
                   {utilName} does not pay you — you owe them this true-up every single year, and it only grows.
                 </p>
@@ -251,6 +287,22 @@ const BatteryRecovery = ({
           <div className="text-xs text-slate-500 mt-1">
             Nighttime rate rising from {rate(touRates.peak)} to ~{rate(loss.finalYearRate)} by {loss.rows[loss.rows.length-1].year}
           </div>
+          {hasAdded && lossFromAddedLoad > 0 && (
+            <div className="mt-2 inline-block text-left rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-[11.5px] text-sky-100">
+              <div className="flex justify-between gap-6">
+                <span>Without the planned load</span>
+                <span className="font-mono">{money(lossBase.totalLost)}</span>
+              </div>
+              <div className="flex justify-between gap-6">
+                <span>Added by {addedKwh.toLocaleString()} kWh of new load</span>
+                <span className="font-mono text-red-300">+{money(lossFromAddedLoad)}</span>
+              </div>
+              <div className="text-[10.5px] text-sky-200/80 mt-1 max-w-[42ch]">
+                The new load costs more every year it runs, not a flat amount — it buys peak power at a rate
+                climbing 8% a year while eating surplus that used to be exported.
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
