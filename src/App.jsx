@@ -4,8 +4,9 @@ import { supabase, apiFetch } from './lib/supabaseClient';
 import LoginScreen from './components/LoginScreen';
 import ResetPasswordScreen from './components/ResetPasswordScreen';
 import ClientDashboard from './components/ClientDashboard';
+import AdminSettings from './admin/AdminSettings';
 import SolarCalculator from './SolarCalculator';
-import { ArrowLeft, RefreshCw, AlertCircle, FlaskConical } from 'lucide-react';
+import { ArrowLeft, RefreshCw, AlertCircle, FlaskConical, SlidersHorizontal } from 'lucide-react';
 
 /**
  * Top-level router for the Monitoring side.
@@ -169,6 +170,16 @@ export default function App() {
     }
   }
 
+  // ---- Authenticated: admin defaults ----
+  if (view === 'admin') {
+    return (
+      <div>
+        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} />
+        <AdminSettings role={role} />
+      </div>
+    );
+  }
+
   // ---- Authenticated: sandbox (no client attached) ----
   if (view === 'sandbox') {
     return (
@@ -227,12 +238,27 @@ function NavBar({ view, setView, userEmail, onSignOut, role }) {
             >
               <FlaskConical size={15} /> Sandbox
             </button>
+            {role === 'admin' && (
+              <button
+                onClick={() => setView('admin')}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
+                  view === 'admin'
+                    ? 'bg-amber-400 text-[#0a1628]'
+                    : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
+                }`}
+              >
+                <SlidersHorizontal size={15} /> Defaults
+              </button>
+            )}
           </>
         ) : (
           <span className="text-amber-300 font-bold text-sm tracking-wide">Your Energy Best</span>
         )}
       </div>
       <div className="flex items-center gap-3">
+        <span className="text-[11px] text-slate-500 hidden sm:inline" title="Your resolved access level">
+          {role}
+        </span>
         <span className="text-xs text-slate-400 hidden sm:block">{userEmail}</span>
         <button onClick={onSignOut} className="px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-600 text-slate-300 text-sm hover:text-amber-300">
           Sign out

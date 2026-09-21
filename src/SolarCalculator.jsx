@@ -288,16 +288,6 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
             Battery Analysis
           </button>
           <button
-            onClick={() => setActiveTab('simulator')}
-            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
-              activeTab === 'simulator'
-                ? 'bg-amber-400 text-slate-900'
-                : 'text-slate-300 hover:bg-slate-800'
-            }`}
-          >
-            Load Simulator
-          </button>
-          <button
             onClick={() => setActiveTab('eligibility')}
             className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
               activeTab === 'eligibility'
@@ -317,6 +307,16 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
           >
             Tide
           </button>
+          <button
+            onClick={() => setActiveTab('simulator')}
+            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+              activeTab === 'simulator'
+                ? 'bg-amber-400 text-slate-900'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            Load Simulator
+          </button>
         </div>
 
         {/* BATTERY ANALYSIS TAB */}
@@ -329,7 +329,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         {/* ELIGIBILITY TAB — can they actually get the rebate? */}
         {activeTab === 'eligibility' && (
           <div className="print:hidden">
-            <EligibilityTab inputs={inputs} gbProfile={gbApplied ? gbProfile : null} />
+            <EligibilityTab inputs={inputs} gbProfile={gbApplied ? gbProfile : null} consumptionProfile={inputs.consumptionProfile} />
           </div>
         )}
 
@@ -347,7 +347,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
               baseUsage={inputs.currentAnnualUsage}
               production={inputs.annualProduction}
               utility={inputs.utility}
-              currentNemImpact={calculations.currentNEMImpact}
+              currentNemImpact={calculations.baseNEMImpact}
               ratePlan={ratePlan}
               onRatePlanChange={persistRatePlan}
               onExtraUsageChange={setExtraUsage}
@@ -520,6 +520,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
           nemExpiry={calculations.nemExpiry}
           cumulativeNEMCredits={calculations.cumulativeNEMCredits}
           cumulativeTrueUpCharges={calculations.cumulativeTrueUpCharges}
+          plannedLoadImpact={calculations.plannedLoadImpact}
         />
 
         {/* Equipment warranty / EOL — uses battery's own install date when present */}
