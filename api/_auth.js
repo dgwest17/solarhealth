@@ -64,10 +64,21 @@ export async function requireUser(req) {
     throw err;
   }
 
+  // The account owner is always an admin.
+  //
+  // Role otherwise resolves from ADMIN_EMAILS, and the fallback when nothing
+  // matches is 'client' — correct as least privilege, but a bad failure mode
+  // for the one person who owns the platform: an unset or mistyped env var
+  // would silently lock Dave out of his own defaults, and the symptom (no
+  // Defaults tab) looks nothing like the cause (a missing env var). Setting
+  // OWNER_EMAIL overrides this; it is a floor on access, never a ceiling.
+  const ownerEmail = (process.env.OWNER_EMAIL || 'davidgwest17@gmail.com').trim().toLowerCase();
+
   const adminEmails = (process.env.ADMIN_EMAILS || '')
     .split(',')
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
+  if (ownerEmail && !adminEmails.includes(ownerEmail)) adminEmails.push(ownerEmail);
 
   let role = 'client';
   if (adminEmails.includes(email)) {
