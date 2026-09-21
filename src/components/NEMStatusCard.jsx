@@ -1,10 +1,29 @@
 import React from 'react';
 import { DollarSign, AlertCircle, Clock } from 'lucide-react';
 
-const NEMStatusCard = ({ currentNEMImpact, nemVersion, nemExpiry = null, cumulativeNEMCredits, cumulativeTrueUpCharges }) => {
+const NEMStatusCard = ({ currentNEMImpact, nemVersion, nemExpiry = null, cumulativeNEMCredits,
+  cumulativeTrueUpCharges, plannedLoadImpact = null }) => {
   if (!currentNEMImpact) return null;
 
+  // TWO DIFFERENT QUESTIONS, TWO DIFFERENT ANSWERS.
+  //
+  // `type` is the DOLLAR position at true-up — it includes connection fees and
+  // the export/import rate spread. The kWh figure beside it is the ENERGY
+  // position: did the array out-produce the house or not.
+  //
+  // They disagree constantly, and they are supposed to. A NEM 2.0 house making
+  // 11,500 kWh against 10,500 is 1,000 kWh in SURPLUS while still writing the
+  // utility a cheque, because non-bypassable connection charges do not care
+  // how much sun you made. Keying the energy line off the dollar position made
+  // that house read "Energy Shortage: 0 kWh/yr" — the shortage field really is
+  // zero, it was simply the wrong field to be reading.
   const isCredit = currentNEMImpact.type === 'credit';
+
+  const netProductionKwh = Number.isFinite(Number(currentNEMImpact.netProduction))
+    ? Number(currentNEMImpact.netProduction)
+    : (Number(currentNEMImpact.surplus) || 0) - (Number(currentNEMImpact.shortage) || 0);
+  const hasSurplus = netProductionKwh > 0;
+  const energyBalanceKwh = Math.abs(netProductionKwh);
   
   return (
     <div className={`rounded-xl shadow-lg p-6 mb-6 ${
@@ -29,14 +48,42 @@ const NEMStatusCard = ({ currentNEMImpact, nemVersion, nemExpiry = null, cumulat
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <div className="text-sm text-gray-600">
-            {isCredit ? 'Net Production' : 'Energy Shortage'}
+            {energyBalanceKwh === 0 ? 'Energy Balance' : hasSurplus ? 'Energy Surplus' : 'Energy Shortage'}
           </div>
-          <div className="text-2xl font-bold text-gray-800">
-            {isCredit 
-              ? currentNEMImpact.netProduction.toLocaleString()
-              : currentNEMImpact.shortage.toLocaleString()
-            } kWh/yr
+          <div className={`text-2xl font-bold ${
+            energyBalanceKwh === 0 ? 'text-gray-800' : hasSurplus ? 'text-green-600' : 'text-red-600'
+          }`}>
+            {energyBalanceKwh === 0
+              ? 'Net zero'
+              : <>{hasSurplus ? '+' : '\u2212'}{energyBalanceKwh.toLocaleString()} kWh/yr</>}
           </div>
+          {/* Spelling out the disagreement rather than hiding it — this is the
+              single most confusing thing on the card when the two diverge. */}
+          {hasSurplus && !isCredit && (
+            <div className="text-[11px] text-gray-600 mt-0.5">
+              Producing more than you use, and still billed — connection charges
+              {nemVersion === 'NEM1' ? '' : ' are non-bypassable'}.
+            </div>
+          )}
+          {!hasSurplus && isCredit && energyBalanceKwh > 0 && (
+            <div className="text-[11px] text-gray-600 mt-0.5">
+              Using more than you produce, but ahead on dollars at true-up.
+            </div>
+          )}
+          {/* Planned load from the Load Simulator. Shown as its own line so the
+              headline stays the measured system and the addition is visibly a
+              projection, not a silent rewrite of their real numbers. */}
+          {plannedLoadImpact && plannedLoadImpact.addedKwh > 0 && (
+            <div className="text-[11px] text-blue-700 mt-1 border-t border-gray-300/70 pt-1">
+              Includes {plannedLoadImpact.addedKwh.toLocaleString()} kWh planned load
+              {plannedLoadImpact.absorbedBySurplusKwh > 0 && (
+                <> · <span className="text-green-700">{plannedLoadImpact.absorbedBySurplusKwh.toLocaleString()} kWh absorbed by surplus</span></>
+              )}
+              {plannedLoadImpact.billableKwh > 0 && (
+                <> · <span className="text-red-700">{plannedLoadImpact.billableKwh.toLocaleString()} kWh billable</span></>
+              )}
+            </div>
+          )}
         </div>
         
         <div>
@@ -83,6 +130,22 @@ const NEMStatusCard = ({ currentNEMImpact, nemVersion, nemExpiry = null, cumulat
               </div>
             </div>
           )}
+          {plannedLoadImpact && plannedLoadImpact.addedKwh > 0 && plannedLoadImpact.annualCostDelta !== 0 && (
+            <div className="mt-1.5 text-[11px] border-t border-gray-300/70 pt-1">
+              <div className="flex justify-between gap-3 text-blue-700">
+                <span>Of which planned load</span>
+                <span className="font-semibold">
+                  {plannedLoadImpact.annualCostDelta > 0 ? '+' : '\u2212'}$
+                  {Math.abs(plannedLoadImpact.annualCostDelta).toLocaleString()}/yr
+                </span>
+              </div>
+              {plannedLoadImpact.flipsToTrueUp && (
+                <div className="text-[10px] text-red-700 pt-0.5">
+                  This load is what moves you from a credit to owing at true-up.
+                </div>
+              )}
+            </div>
+          )}
           {isCredit && currentNEMImpact.connectionFeesAnnual === 0 && nemVersion === 'NEM1' && (
             <div className="mt-1.5 text-[10px] text-green-700">
               Your credits fully cover connection charges this year — a NEM 1.0 advantage.
@@ -103,8 +166,12 @@ const NEMStatusCard = ({ currentNEMImpact, nemVersion, nemExpiry = null, cumulat
           </p>
         ) : (
           <p>
-            You are under-producing by {currentNEMImpact.shortage.toLocaleString()} kWh annually. 
-            Your true-up bill will be approximately ${currentNEMImpact.amount.toLocaleString()} per year.
+            {hasSurplus
+              ? <>You produce {energyBalanceKwh.toLocaleString()} kWh more than you use each year, but still owe
+                  roughly ${currentNEMImpact.amount.toLocaleString()} at true-up — connection and minimum charges
+                  that production cannot offset.</>
+              : <>You are under-producing by {energyBalanceKwh.toLocaleString()} kWh annually.
+                  Your true-up bill will be approximately ${currentNEMImpact.amount.toLocaleString()} per year.</>}
           </p>
         )}
       </div>
