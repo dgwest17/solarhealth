@@ -190,7 +190,14 @@ const LoadSimulator = ({
 
   const money = (v) => `$${Math.round(Math.abs(v)).toLocaleString()}`;
 
-  // Current position (static — from the real audit, never altered here)
+  // Current position (static — from the real audit, never altered here).
+  //
+  // This is the BASE position: the client's year WITHOUT the loads being
+  // simulated here. That distinction is load-bearing. The audit recomputes
+  // itself with `plannedAddedKwh` fed from this very panel, so the audit's
+  // headline already contains this load's cost. Projecting from that number
+  // and then adding the extra cost on top counted the new EV twice — the
+  // projected year-end came out roughly double what the client would owe.
   const curIsCredit = currentNemImpact ? currentNemImpact.type === 'credit' : true;
   const curAmount0 = currentNemImpact ? Math.round(currentNemImpact.amount) : 0;
   // Surplus mechanics: added usage first consumes surplus production (shrinking
@@ -203,8 +210,13 @@ const LoadSimulator = ({
   const newCredit = Math.max(0, curAmount0 - creditReduction);
   const curAmount = currentNemImpact ? Math.round(currentNemImpact.amount) : 0;
 
-  // Projected = current position adjusted by the extra cost. If they had a
-  // credit, extra cost eats into it (and can flip to owing). Shown separately.
+  // Projected year-end = where they stand today, plus what the new load costs.
+  //   owing today   -> owed + extra true-up
+  //   in credit     -> credit, minus the credit the surplus stops earning,
+  //                    minus the cost of whatever the surplus could not absorb
+  // `effCost` prices only the BILLABLE kWh (surplus absorbs the rest first),
+  // and `creditReduction` prices the surplus half, so the two are disjoint
+  // slices of the same added load rather than overlapping figures.
   const projectedNet = (curIsCredit ? curAmount - creditReduction : -curAmount) - effCost;
   const projIsCredit = projectedNet >= 0;
 
