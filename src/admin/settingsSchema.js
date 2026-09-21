@@ -26,7 +26,9 @@
 
 import {
   DEALER_FEE, DEFAULT_CONTRACT_VALUE, LOAN_APR, LOAN_TERMS_YEARS,
-  FED_PCT_MIN, FED_PCT_MAX, FED_PCT_DEFAULT, LOCAL_REBATE_PER_KWH, ADDERS
+  FED_PCT_MIN, FED_PCT_MAX, FED_PCT_DEFAULT, LOCAL_REBATE_PER_KWH, ADDERS,
+  COMMISSION_FLOOR_STANDARD, COMMISSION_FLOOR_UNSUBSIDISED, UNSUBSIDISED_APR,
+  COMMISSION_FLOOR_PER_ADDED_PANEL
 } from '../pricing/loanPricing';
 import { BATTERY_MODELS, INCENTIVE_PROGRAMS, UTILITY_RATE_DEFAULTS } from '../incentives/programData';
 import { CONNECTION_FEE_SCHEDULE } from '../utils/rateData';
@@ -44,10 +46,18 @@ export const DEFAULT_LENDERS = [
     id: 'house',
     name: 'Standard (house paper)',
     dealerFee: DEALER_FEE,
-    terms: LOAN_TERMS_YEARS.map((years) => ({ years, apr: LOAN_APR })),
+    terms: [
+      ...LOAN_TERMS_YEARS.map((years) => ({
+        years, apr: LOAN_APR, minContractValue: COMMISSION_FLOOR_STANDARD
+      })),
+      // The unsubsidised product: a higher customer rate needs far less
+      // dealer-fee buy-down, so the deal can be written lower.
+      { years: 20, apr: UNSUBSIDISED_APR, minContractValue: COMMISSION_FLOOR_UNSUBSIDISED,
+        label: '20 years (no buy-down)' }
+    ],
     defaultTermYears: LOAN_TERMS_YEARS[0],
     prepaymentPenalty: false,
-    notes: 'Default rate card. 5.49% fixed across all terms.'
+    notes: 'Default rate card. 5.49% subsidised, 8.49% unsubsidised.'
   }
 ];
 
@@ -86,6 +96,12 @@ export const DEFAULT_ASSUMPTIONS = {
   fallbackDaytimeLoadShare: 0.42,
   defaultConsumptionProfile: 'evening_heavy',
   chargeEfficiency: 0.96,
+
+  // --- rep commission ---
+  commissionFloorStandard: COMMISSION_FLOOR_STANDARD,
+  commissionFloorUnsubsidised: COMMISSION_FLOOR_UNSUBSIDISED,
+  commissionUnsubsidisedApr: UNSUBSIDISED_APR,
+  commissionFloorPerAddedPanel: COMMISSION_FLOOR_PER_ADDED_PANEL,
 
   // --- tide ---
   sdcpFundsRunOutMonths: 2,
@@ -204,6 +220,15 @@ export const ASSUMPTION_FIELDS = [
     help: "The sizing workbook's haircut when testing whether surplus fills a pack." },
   { group: 'Sizing', key: 'fallbackDaytimeLoadShare', label: 'Fallback daytime load share', type: 'ratio', step: 0.01,
     help: 'Only used when no consumption profile is available. The estimator normally computes hour-by-hour overlap instead.' },
+
+  { group: 'Commission', key: 'commissionFloorStandard', label: 'Floor — subsidised rate', type: 'money', step: 250,
+    help: 'Lowest contract value on the 5.49% rate card. Everything above it is commission.' },
+  { group: 'Commission', key: 'commissionFloorUnsubsidised', label: 'Floor — cash / no buy-down', type: 'money', step: 250,
+    help: 'Applies to cash and to the unsubsidised rate card.' },
+  { group: 'Commission', key: 'commissionUnsubsidisedApr', label: 'Unsubsidised APR threshold', type: 'ratio', step: 0.0001,
+    help: 'At or above this rate, the lower floor applies.' },
+  { group: 'Commission', key: 'commissionFloorPerAddedPanel', label: 'Floor uplift per added panel', type: 'money', step: 25,
+    help: 'Raises the floor as solar is added, so panel cost is not paid out of commission. Zero until the real scale is set.' },
 
   { group: 'Tide', key: 'sdcpFundsRunOutMonths', label: 'Rebate funds run out in', type: 'int', suffix: 'mo' },
   { group: 'Tide', key: 'equipmentInflationPct', label: 'Equipment / labor inflation', type: 'pct', step: 0.5 },

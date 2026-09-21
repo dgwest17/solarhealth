@@ -109,6 +109,11 @@ const AdminSettings = ({ role = 'client' }) => {
           <p className="text-slate-400 text-sm mt-1">
             What every new audit starts with. Changing a value here changes it everywhere, for everyone.
           </p>
+          <p className="text-slate-500 text-[11.5px] mt-1">
+            Rate increase? <b className="text-slate-400">Utility rates</b> for the tariff tiers,
+            <b className="text-slate-400"> Assumptions</b> for escalation and the storage rebate,
+            <b className="text-slate-400"> Lenders &amp; terms</b> for rate cards and commission floors.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {dirty && <span className="text-[12px] text-amber-300">Unsaved changes</span>}
@@ -295,7 +300,7 @@ const Lenders = ({ draft, edit }) => (
             <div className="flex items-center justify-between mb-2">
               <span className="text-[12px] font-semibold text-slate-300">Terms</span>
               <button
-                onClick={() => edit((d) => d.lenders[i].terms.push({ years: 10, apr: 0.0549 }))}
+                onClick={() => edit((d) => d.lenders[i].terms.push({ years: 10, apr: 0.0549, minContractValue: 16500 }))}
                 className="text-[12px] text-cyan-300 hover:underline flex items-center gap-1"
               ><Plus size={12} /> Add term</button>
             </div>
@@ -309,7 +314,14 @@ const Lenders = ({ draft, edit }) => (
                   <input type="number" step={0.01} value={(t.apr * 100).toFixed(2)}
                     onChange={(e) => edit((d) => { d.lenders[i].terms[ti].apr = (Number(e.target.value) || 0) / 100; })}
                     className="w-[58px] bg-transparent text-slate-100 font-mono text-[12.5px] focus:outline-none" />
-                  <span className="text-[11px] text-slate-500">%</span>
+                  <span className="text-[11px] text-slate-500">% · floor</span>
+                  <input type="number" step={250} value={t.minContractValue ?? ''}
+                    placeholder="—"
+                    onChange={(e) => edit((d) => {
+                      const v = e.target.value;
+                      d.lenders[i].terms[ti].minContractValue = v === '' ? undefined : Number(v) || 0;
+                    })}
+                    className="w-[70px] bg-transparent text-slate-100 font-mono text-[12.5px] focus:outline-none" />
                   <button onClick={() => edit((d) => d.lenders[i].terms.splice(ti, 1))}
                     className="text-slate-500 hover:text-red-400 ml-1"><Trash2 size={12} /></button>
                 </div>
@@ -336,12 +348,12 @@ const Lenders = ({ draft, edit }) => (
 const Adders = ({ draft, edit }) => (
   <Panel
     title="Adder pricing"
-    note="Flat adders are on or off. Per-unit adders bill by quantity, with the first `free` units included in the base contract. Anything marked as blocking the rebate zeroes it everywhere downstream."
+    note="Flat adders are on or off. Per-unit adders bill by quantity, with the first `free` units included in the base contract. Solar-panel adders price at Amount per panel plus a Baseline that applies from Min units up to Baseline ≤, then drops away. Anything marked as blocking the rebate zeroes it everywhere downstream."
     onAdd={() => edit((d) => d.adders.push({
       id: 'adder_' + Date.now(), label: 'New adder', kind: 'flat', amount: 0
     }))}
   >
-    <Table head={['Label', 'Kind', 'Amount', 'Unit', 'Free units', 'Min units', 'Blocks rebate', '']}>
+    <Table head={['Label', 'Kind', 'Amount', 'Unit', 'Free units', 'Min units', 'Baseline $', 'Baseline ≤', 'Blocks rebate', '']}>
       {draft.adders.map((a, i) => (
         <tr key={a.id || i} className="border-b border-slate-800">
           <Td><Inp value={a.label} onChange={(v) => edit((d) => { d.adders[i].label = v; })} /></Td>
@@ -351,22 +363,31 @@ const Adders = ({ draft, edit }) => (
               className="w-full px-2 py-1.5 rounded bg-slate-900/70 border border-slate-600 text-slate-100 text-[12.5px]">
               <option value="flat">Flat</option>
               <option value="perUnit">Per unit</option>
+              <option value="solarPanels">Solar panels</option>
             </select>
           </Td>
           <Td><Inp type="number" step={50} value={a.amount}
                    onChange={(v) => edit((d) => { d.adders[i].amount = Number(v) || 0; })} /></Td>
-          <Td>{a.kind === 'perUnit'
+          <Td>{a.kind !== 'flat'
             ? <Inp value={a.unit || ''} placeholder="ft"
                    onChange={(v) => edit((d) => { d.adders[i].unit = v; })} />
-            : <span className="text-slate-600 text-[12px]">—</span>}</Td>
+            : <Dash />}</Td>
           <Td>{a.kind === 'perUnit'
             ? <Inp type="number" value={a.freeUnits ?? 0}
                    onChange={(v) => edit((d) => { d.adders[i].freeUnits = Number(v) || 0; })} />
-            : <span className="text-slate-600 text-[12px]">—</span>}</Td>
-          <Td>{a.kind === 'perUnit'
+            : <Dash />}</Td>
+          <Td>{a.kind !== 'flat'
             ? <Inp type="number" value={a.minUnits ?? 0}
                    onChange={(v) => edit((d) => { d.adders[i].minUnits = Number(v) || 0; })} />
-            : <span className="text-slate-600 text-[12px]">—</span>}</Td>
+            : <Dash />}</Td>
+          <Td>{a.kind === 'solarPanels'
+            ? <Inp type="number" step={100} value={a.baselineAmount ?? 0}
+                   onChange={(v) => edit((d) => { d.adders[i].baselineAmount = Number(v) || 0; })} />
+            : <Dash />}</Td>
+          <Td>{a.kind === 'solarPanels'
+            ? <Inp type="number" value={a.baselineMaxUnits ?? 0}
+                   onChange={(v) => edit((d) => { d.adders[i].baselineMaxUnits = Number(v) || 0; })} />
+            : <Dash />}</Td>
           <Td>
             <input type="checkbox" checked={!!a.blocksRebate}
               onChange={(e) => edit((d) => { d.adders[i].blocksRebate = e.target.checked; })}
@@ -565,6 +586,8 @@ const Labeled = ({ label, children }) => (
     {children}
   </div>
 );
+
+const Dash = () => <span className="text-slate-600 text-[12px]">—</span>;
 
 const Del = ({ onClick }) => (
   <button onClick={onClick} className="text-slate-500 hover:text-red-400 p-1.5" title="Remove">
