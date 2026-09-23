@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   PRINT STYLES — "Generate PDF" prints the live dashboard
+   ============================================================ */
+
+@media print {
+  @page {
+    size: letter;
+    margin: 0.45in;
+  }
+
+  /* White paper instead of the dark app background */
+  body,
+  .app-root {
+    background: #ffffff !important;
+    padding: 0 !important;
+  }
+
+  /* Keep card colors (KPI gradients, badges, charts) in the PDF */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Dark glass cards → white cards with dark text on paper */
+  [class*="bg-slate-8"],
+  [class*="bg-slate-9"],
+  [class*="from-slate-9"],
+  [class*="from-\[#0a1628\]"] {
+    background: #ffffff !important;
+    border-color: #e2e8f0 !important;
+    box-shadow: none !important;
+  }
+  [class*="text-slate-1"],
+  [class*="text-slate-2"],
+  [class*="text-slate-3"],
+  [class*="text-amber-1"],
+  [class*="text-cyan-2"],
+  [class*="text-cyan-3"] {
+    color: #1e293b !important;
+  }
+  [class*="text-amber-3"],
+  [class*="text-amber-4"] {
+    color: #92600a !important;
+  }
+  [class*="text-slate-4"] {
+    color: #475569 !important;
+  }
+
+  /* Page breaks for the client PDF — applied to natural source order,
+     so the on-screen layout is unaffected. */
+  .print-break-before {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  /* Priority charts (Cumulative Savings + Annual Cost Comparison): keep
+     both side-by-side on page 1, just under the KPI cards. Shorter in
+     print so they fit alongside the score/NEM/KPI content. */
+  .print-priority-charts {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.75rem !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .print-priority-charts .recharts-responsive-container {
+    height: 200px !important;
+  }
+
+  /* Secondary charts (rate history, usage growth, historical table):
+     start a fresh page. */
+  .print-secondary-charts {
+    break-before: page;
+    page-break-before: always;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.75rem !important;
+  }
+
+  /* Never split a card, chart, or table across a page boundary */
+  .rounded-xl,
+  .rounded-lg,
+  .recharts-responsive-container,
+  table {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Tighter spacing on paper */
+  .mb-6 {
+    margin-bottom: 0.75rem !important;
+  }
+}
+
+/* Locked system-of-record fields (client view): visibly greyed + non-interactive */
+[data-locked="true"] {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+  filter: grayscale(0.3);
+}
+[data-locked="true"]:hover {
+  opacity: 0.55;
+}
