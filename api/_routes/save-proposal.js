@@ -16,7 +16,7 @@
  * proposal behind it — a stage that lies is worse than a stage that lags.
  *
  * MISSING FIELDS ARE EXPECTED. The summary includes fields Dave may not have
- * created yet (Lead_Status, Net_Investment, the three step statuses). Zoho
+ * created yet (Sales_Stage, Net_Investment, the three step statuses). Zoho
  * rejects an unknown field for the whole record, so this retries without the
  * offending fields and reports exactly which ones are missing, rather than
  * failing the save and leaving the rep with nothing.
@@ -32,7 +32,7 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 /** Fields that may not exist in Zoho yet. Retried away one by one on failure. */
 const OPTIONAL_ZOHO_FIELDS = [
-  'Lead_Status', 'Proposal_Date', 'Net_Investment', 'Storage_Rebate',
+  'Sales_Stage', 'Proposal_Date', 'Net_Investment', 'Storage_Rebate',
   'Est_Monthly_Savings', 'Rep_Commission',
   'Bank_Qualification', 'Documents_Step', 'Intake_Step'
 ];

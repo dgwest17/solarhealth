@@ -9,14 +9,14 @@
  *
  * WHERE A DEAL'S TIDE COMES FROM, in priority order:
  *
- *   1. Lead_Status on the project, if Dave has created that field.
+ *   1. Sales_Stage on the project, if Dave has created that field.
  *   2. Project_Status — "Battery Installed" and "PTO-Approved" are installed
  *      whatever the sales stage says, because the install side is the truth
  *      once hardware is on a wall.
  *   3. The saved proposal's own stage, from Supabase.
  *
  * Falling through rather than depending on one field means The Beach works
- * today, before Lead_Status exists, and keeps working after.
+ * today, before Sales_Stage exists, and keeps working after.
  *
  * Commission comes from the saved proposal, never re-derived. See
  * src/beach/Treasure.jsx for why.
@@ -47,7 +47,7 @@ const tideFor = (project, proposal) => {
   const status = project && project.Project_Status;
   if (status && INSTALLED_STATUSES.has(status)) return 'installed';
 
-  const stage = (project && project.Lead_Status) || (proposal && proposal.stage) || null;
+  const stage = (project && project.Sales_Stage) || (proposal && proposal.stage) || null;
   if (stage === 'Installed') return 'installed';
   if (stage === 'Converted to Project') return 'project';
   if (stage === 'Met') return 'met';
@@ -128,7 +128,7 @@ export default async function handler(req, res) {
       // Ask for them, and fall back to the bare row if Zoho refuses, rather
       // than losing the whole query and blanking The Beach.
       const optional = [
-        'Lead_Status', 'Proposal_Purchase_Type', 'Proposal_Contract_Value',
+        'Sales_Stage', 'Proposal_Purchase_Type', 'Proposal_Contract_Value',
         'Proposal_Term', 'Proposal_Monthly_Payment', 'Proposal_Lender'
       ];
       for (const withStage of [true, false]) {

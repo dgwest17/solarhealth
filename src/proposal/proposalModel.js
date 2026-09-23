@@ -68,10 +68,12 @@ export const EMPTY_PARTY = {
 export const makeParty = (p = {}) => ({ ...EMPTY_PARTY, ...p });
 
 /**
- * Sales stage, mirroring the Lead_Status picklist already in Zoho so the two
- * pipelines speak the same language. Leads carries these for cold prospects;
- * the same words are used on a project so a report can union them without
- * translating.
+ * Sales stage. The VALUES mirror the Leads module's Lead_Status picklist word
+ * for word, so a report can union the two pipelines without translating. The
+ * FIELD is called Sales_Stage on Solar_Projects rather than Lead_Status:
+ * Zoho fields are per-module, so the two would be separate fields whatever
+ * they were named, and two different fields sharing one name is a coin flip
+ * every time someone picks one from a dropdown in a report builder.
  */
 export const SALES_STAGE = {
   NEW:        'Not Contacted/New',
@@ -413,7 +415,7 @@ export function toZohoSummary(proposal) {
     Proposal_Lender: f.lenderName || null,
 
     // --- new fields (see ZOHO_FIELDS) ---
-    Lead_Status: proposal.stage,
+    Sales_Stage: proposal.stage,
     Proposal_Date: proposal.createdAt ? proposal.createdAt.slice(0, 10) : null,
     Net_Investment: p.netInvestment ?? null,
     Storage_Rebate: p.storageRebate ?? null,
@@ -453,9 +455,9 @@ export const ZOHO_FIELDS = {
           + 'is why this is a separate field rather than a reused one.' },
     { api: 'Proposal_Lender', type: 'text' },
 
-    { api: 'Lead_Status', type: 'picklist',
+    { api: 'Sales_Stage', type: 'picklist',
       values: [SALES_STAGE.NEW, SALES_STAGE.MET, SALES_STAGE.CONVERTED, SALES_STAGE.INSTALLED],
-      note: 'Same wording as Lead_Status on Leads, so the two pipelines report together.' },
+      note: 'Same wording as Sales_Stage on Leads, so the two pipelines report together.' },
     { api: 'Proposal_Date', type: 'date' },
     { api: 'Net_Investment', type: 'currency' },
     { api: 'Storage_Rebate', type: 'currency' },
