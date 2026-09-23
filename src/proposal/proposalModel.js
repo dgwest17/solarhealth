@@ -68,18 +68,32 @@ export const EMPTY_PARTY = {
 export const makeParty = (p = {}) => ({ ...EMPTY_PARTY, ...p });
 
 /**
- * Sales stage. The VALUES mirror the Leads module's Lead_Status picklist word
- * for word, so a report can union the two pipelines without translating. The
- * FIELD is called Sales_Stage on Solar_Projects rather than Lead_Status:
- * Zoho fields are per-module, so the two would be separate fields whatever
- * they were named, and two different fields sharing one name is a coin flip
- * every time someone picks one from a dropdown in a report builder.
+ * Sales stage.
+ *
+ * THESE STRINGS MUST MATCH THE Sales_Stage PICKLIST ON Solar_Projects EXACTLY.
+ * Zoho rejects or drops a value that is not an option on the field, and it
+ * does so quietly — the rest of the record saves, so a stage that never lands
+ * looks like a deal sitting at the wrong step rather than like an error. They
+ * were verified against the live picklist rather than assumed, after an
+ * earlier version of this file carried longer wording ("Not Contacted/New",
+ * "Converted to Project") that matched nothing on the field.
+ *
+ * Every comparison against a stage reads from here. Two of them used to be
+ * bare string literals in the API handlers, which is the same class of bug as
+ * this one at a different distance: the constant changes, the literal does
+ * not, and the mismatch surfaces as a deal quietly stuck in the wrong tide.
+ *
+ * The FIELD is Sales_Stage rather than Lead_Status because Zoho fields are
+ * per-module: the two would be separate fields whatever they were named, and
+ * two different fields sharing one name is a coin flip every time someone
+ * picks one from a dropdown in a report builder.
  */
 export const SALES_STAGE = {
-  NEW:        'Not Contacted/New',
+  NEW:        'New',
   MET:        'Met',
-  CONVERTED:  'Converted to Project',
-  INSTALLED:  'Installed'
+  CONVERTED:  'Project',
+  INSTALLED:  'Installed',
+  LOST:       'Lost'
 };
 
 /**
@@ -421,7 +435,7 @@ export function toZohoSummary(proposal) {
     Storage_Rebate: p.storageRebate ?? null,
     Est_Monthly_Savings: s.estMonthlySavings ?? null,
     Rep_Commission: proposal.internal ? proposal.internal.commission : null,
-    Bank_Qualification: proposal.steps.qualification || null,
+    Lender_Qualification: proposal.steps.qualification || null,
     Documents_Step: proposal.steps.paperwork || null,
     Intake_Step: proposal.steps.site_inspection || null
   };
@@ -464,7 +478,7 @@ export const ZOHO_FIELDS = {
     { api: 'Est_Monthly_Savings', type: 'currency' },
     { api: 'Rep_Commission', type: 'currency',
       note: 'Rep-facing. Restrict field permissions if reps should not see each other’s.' },
-    { api: 'Bank_Qualification', type: 'picklist',
+    { api: 'Lender_Qualification', type: 'picklist',
       values: [STEP_STATUS.NOT_STARTED, STEP_STATUS.IN_PROGRESS, STEP_STATUS.COMPLETED] },
     { api: 'Documents_Step', type: 'picklist',
       values: [STEP_STATUS.NOT_STARTED, STEP_STATUS.IN_PROGRESS, STEP_STATUS.COMPLETED] },

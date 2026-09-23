@@ -23,6 +23,7 @@
  */
 import { zohoFetch } from '../_zoho.js';
 import { requireUser, sendError } from '../_auth.js';
+import { SALES_STAGE } from '../../src/proposal/proposalModel.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -47,10 +48,15 @@ const tideFor = (project, proposal) => {
   const status = project && project.Project_Status;
   if (status && INSTALLED_STATUSES.has(status)) return 'installed';
 
+  // Compared against the model's constants, not retyped strings: the Zoho
+  // picklist is editable, and a stale literal here would silently park a deal
+  // in the wrong tide rather than fail.
   const stage = (project && project.Sales_Stage) || (proposal && proposal.stage) || null;
-  if (stage === 'Installed') return 'installed';
-  if (stage === 'Converted to Project') return 'project';
-  if (stage === 'Met') return 'met';
+  if (stage === SALES_STAGE.INSTALLED) return 'installed';
+  if (stage === SALES_STAGE.CONVERTED) return 'project';
+  if (stage === SALES_STAGE.MET) return 'met';
+  // A lost deal is not in the water and never reached the sand.
+  if (stage === SALES_STAGE.LOST) return null;
 
   // A saved proposal with no stage anywhere still means somebody was priced.
   return proposal ? 'met' : null;

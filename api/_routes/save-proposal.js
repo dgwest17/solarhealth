@@ -34,7 +34,7 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const OPTIONAL_ZOHO_FIELDS = [
   'Sales_Stage', 'Proposal_Date', 'Net_Investment', 'Storage_Rebate',
   'Est_Monthly_Savings', 'Rep_Commission',
-  'Bank_Qualification', 'Documents_Step', 'Intake_Step'
+  'Lender_Qualification', 'Documents_Step', 'Intake_Step'
 ];
 
 async function sbFetch(path, options = {}) {

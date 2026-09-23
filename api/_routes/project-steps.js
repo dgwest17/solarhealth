@@ -22,6 +22,9 @@
  */
 import { zohoFetch } from '../_zoho.js';
 import { requireUser, sendError } from '../_auth.js';
+// Stage names come from the model, never retyped here. A literal copy drifts
+// the moment the Zoho picklist is edited, and the failure is silent.
+import { SALES_STAGE } from '../../src/proposal/proposalModel.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -37,7 +40,7 @@ const ACTIONABLE = {
 };
 
 const ZOHO_STEP_FIELD = {
-  qualification:   'Bank_Qualification',
+  qualification:   'Lender_Qualification',
   paperwork:       'Documents_Step',
   site_inspection: 'Intake_Step'
 };
@@ -117,7 +120,7 @@ export default async function handler(req, res) {
     steps[stepId] = status;
 
     const complete = required.every((id) => steps[id] === STEP_STATUS.COMPLETED);
-    const stage = complete ? 'Converted to Project' : 'Met';
+    const stage = complete ? SALES_STAGE.CONVERTED : SALES_STAGE.MET;
 
     const updated = {
       ...proposal,
