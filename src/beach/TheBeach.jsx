@@ -26,11 +26,12 @@
  */
 import React, { useState, useMemo, useEffect } from 'react';
 import { SURF, GRADIENTS, FACET_TEXTURE } from '../surf/theme';
-import { Beach as BeachIcon, Treasure as TreasureIcon, Swell as SwellIcon, Quiver as QuiverIcon } from '../surf/SurfIcons';
+import { Beach as BeachIcon, Treasure as TreasureIcon, Swell as SwellIcon, Quiver as QuiverIcon, Buoy as BuoyIcon } from '../surf/SurfIcons';
 import { apiFetch } from '../lib/supabaseClient';
 import TreasurePanel from './Treasure';
 import SwellPanel from './Swell';
 import QuiverPanel from './Quiver';
+import Pipeline from './Pipeline';
 
 const money = (v) => '$' + Math.round(Number(v) || 0).toLocaleString();
 
@@ -42,6 +43,7 @@ export const TIDES = [
 ];
 
 const PANELS = [
+  { id: 'pipeline', label: 'Pipeline', Icon: BuoyIcon,     blurb: 'Every deal, and who needs a call' },
   { id: 'treasure', label: 'Treasure', Icon: TreasureIcon, blurb: 'What you are owed' },
   { id: 'swell',    label: 'Swell',    Icon: SwellIcon,    blurb: 'How you are trending' },
   { id: 'quiver',   label: 'Quiver',   Icon: QuiverIcon,   blurb: 'Sharpen your tools' }
@@ -149,6 +151,7 @@ const TheBeach = ({ role = 'rep', userEmail = '', onOpenClient = null }) => {
         )}
 
         {/* the open panel */}
+        {!loading && panel === 'pipeline' && <Pipeline deals={deals} onOpenClient={onOpenClient} />}
         {!loading && panel === 'treasure' && <TreasurePanel deals={deals} byTide={byTide} />}
         {!loading && panel === 'swell'    && <SwellPanel deals={deals} byTide={byTide} />}
         {!loading && panel === 'quiver'   && <QuiverPanel userEmail={userEmail} role={role} />}

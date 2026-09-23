@@ -62,6 +62,24 @@ const tideFor = (project, proposal) => {
   return proposal ? 'met' : null;
 };
 
+/**
+ * What battery this deal is, in words.
+ *
+ * The saved proposal wins: it is what the customer agreed to buy. The Zoho
+ * record is the fallback, and is the only source for jobs that predate
+ * proposals being saved at all.
+ */
+const batteryLabel = (proposal, project) => {
+  const sys = proposal && proposal.system;
+  if (sys && (sys.make || sys.model)) {
+    const name = [sys.make, sys.model].filter(Boolean).join(' ');
+    const extra = (sys.units || []).reduce((a, u) => a + (Number(u.qty) || 0), 0);
+    return extra ? `${name} +${extra}` : name;
+  }
+  if (project && project.Battery_Manufacturer) return project.Battery_Manufacturer;
+  return null;
+};
+
 /** "Loan · 20 yr · $24,500 · $118/mo" without importing the client bundle. */
 const summarise = (proposal, project) => {
   const f = (proposal && proposal.financing) || {};
@@ -99,10 +117,10 @@ export default async function handler(req, res) {
     const scopeTo = user.role === 'admin' ? requested : me;
 
     // --- contacts in scope ---
-    let contactQuery = 'select id, Full_Name, Email, Created_By_Rep from Contacts where Last_Name is not null';
+    let contactQuery = 'select id, Full_Name, Email, Created_By_Rep, Last_Activity_Time from Contacts where Last_Name is not null';
     if (scopeTo) {
       const safe = scopeTo.replace(/'/g, '');
-      contactQuery = `select id, Full_Name, Email, Created_By_Rep from Contacts where Created_By_Rep = '${safe}'`;
+      contactQuery = `select id, Full_Name, Email, Created_By_Rep, Last_Activity_Time from Contacts where Created_By_Rep = '${safe}'`;
     }
     contactQuery += ' limit 200';
 
@@ -133,12 +151,29 @@ export default async function handler(req, res) {
       // None of the Proposal_* fields exist until they are created in Zoho.
       // Ask for them, and fall back to the bare row if Zoho refuses, rather
       // than losing the whole query and blanking The Beach.
-      const optional = [
+      // Optional because a field may not exist on this org's module yet. The
+      // Pipeline needs the dates and the equipment; the tides only need the
+      // first few.
+      let optional = [
         'Sales_Stage', 'Proposal_Purchase_Type', 'Proposal_Contract_Value',
-        'Proposal_Term', 'Proposal_Monthly_Payment', 'Proposal_Lender'
+        'Proposal_Term', 'Proposal_Monthly_Payment', 'Proposal_Lender',
+        'Proposal_Date', 'Install_Date', 'PTO_Date', 'Battery_Install_Date',
+        'System_Size_kW', 'Battery_Capacity_kWh', 'Battery_Manufacturer',
+        'Number_of_Modules', 'Panel_Model', 'Utility_Provider', 'NEM_Version'
       ];
-      for (const withStage of [true, false]) {
-        const sel = withStage ? [...fields, ...optional] : fields;
+
+      /**
+       * Drop failing fields ONE AT A TIME rather than abandoning the whole
+       * optional set.
+       *
+       * The previous version retried once without any optional field, so a
+       * single missing column cost every other one — the Pipeline would lose
+       * install dates and equipment because, say, Panel_Model happened not to
+       * exist. COQL names the offending field in its error, so the name is
+       * matched out and only that one is given up.
+       */
+      for (let attempt = 0; attempt <= optional.length; attempt++) {
+        const sel = [...fields, ...optional];
         try {
           const r = await zohoFetch('/crm/v2/coql', {
             method: 'POST',
@@ -149,8 +184,12 @@ export default async function handler(req, res) {
           projects = (r && r.data) || [];
           break;
         } catch (e) {
-          if (withStage) continue;
+          const msg = e.message || '';
+          const bad = optional.find((f) => msg.includes(f));
+          if (bad) { optional = optional.filter((f) => f !== bad); continue; }
+          // Not a field problem — stop rather than looping on a real failure.
           projects = [];
+          break;
         }
       }
     }
@@ -191,9 +230,30 @@ export default async function handler(req, res) {
         contractValue: (proposal && proposal.pricing && proposal.pricing.contractWithAdders)
           ?? project.Proposal_Contract_Value ?? 0,
         commission: (proposal && proposal.internal && proposal.internal.commission) || 0,
-        proposalDate: (proposal && proposal.createdAt) || null,
+        proposalDate: (proposal && proposal.createdAt) || project.Proposal_Date || null,
         projectStatus: project.Project_Status || null,
-        rep: (contact && contact.Created_By_Rep) || null
+        rep: (contact && contact.Created_By_Rep) || null,
+
+        // ---- Pipeline columns ----
+        // Sold is when a deal reached a signed stage, which the proposal knows
+        // and the project does not; the CRM's Proposal_Date is the fallback.
+        soldDate: (proposal && proposal.stepsUpdatedAt && proposal.stage === 'Project')
+          ? proposal.stepsUpdatedAt
+          : (project.Proposal_Date || null),
+        installDate: project.Battery_Install_Date || project.Install_Date || null,
+        ptoDate: project.PTO_Date || null,
+        lastContact: (contact && contact.Last_Activity_Time) || null,
+        // Equipment: the saved proposal is what was SOLD, the project is what
+        // is on the roof. For a pipeline row the sold system is the answer,
+        // with the installed record as fallback for older jobs.
+        battery: batteryLabel(proposal, project),
+        batteryKwh: (proposal && proposal.system && proposal.system.usableKwh)
+          || project.Battery_Capacity_kWh || 0,
+        solarKw: project.System_Size_kW || 0,
+        panels: project.Number_of_Modules || 0,
+        panelModel: project.Panel_Model || null,
+        utility: project.Utility_Provider || null,
+        nemVersion: project.NEM_Version || null
       });
     }
 
@@ -210,7 +270,18 @@ export default async function handler(req, res) {
         commission: (proposal.internal && proposal.internal.commission) || 0,
         proposalDate: proposal.createdAt || null,
         projectStatus: null,
-        rep: byId[contactId].Created_By_Rep || null
+        rep: byId[contactId].Created_By_Rep || null,
+        soldDate: null,
+        installDate: null,
+        ptoDate: null,
+        lastContact: byId[contactId].Last_Activity_Time || null,
+        battery: batteryLabel(proposal, null),
+        batteryKwh: (proposal.system && proposal.system.usableKwh) || 0,
+        solarKw: 0,
+        panels: (proposal.solar && proposal.solar.panels) || 0,
+        panelModel: (proposal.solar && proposal.solar.panelModel) || null,
+        utility: null,
+        nemVersion: null
       });
     }
 
