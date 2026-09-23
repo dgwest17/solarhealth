@@ -261,9 +261,20 @@ export function buildProposal({
 
     // ---- what they're buying ----
     system: {
-      batteryKwhEach: Number(battery.kwhPerBattery) || 0,
-      batteryCount: Number(battery.count) || 0,
+      // What the customer is actually getting, by name. "27 kWh" tells them
+      // nothing they can look up or compare; "Tesla Powerwall 3 + DC Expansion
+      // Pack" is the thing they will search for that evening.
+      make:  battery.make || '',
+      model: battery.model || '',
+      modelId: battery.modelId || '',
+      baseKwh: Number(battery.baseKwh) || Number(battery.totalKwh) || 0,
       usableKwh: Number(battery.totalKwh) || 0,
+      // Rebate-eligible capacity, which is lower than usable whenever a DC
+      // expansion is in the system. Carried so the proposal's rebate line can
+      // be reconciled against the kWh without looking like an error.
+      rebateKwh: battery.rebateKwh != null ? Number(battery.rebateKwh) : (Number(battery.totalKwh) || 0),
+      rebateEligible: battery.rebateEligible !== false,
+      units: Array.isArray(battery.units) ? battery.units : [],
       panelsAdded: price && price.commission ? price.commission.addedPanels : 0
     },
 

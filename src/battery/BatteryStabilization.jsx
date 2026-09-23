@@ -36,7 +36,8 @@ import {
   ChevronDown, ShieldCheck, Home, RefreshCw, Check, Wallet, TrendingUp, Waves
 } from 'lucide-react';
 import { estimateBackupHours } from './BatteryModel';
-import { priceBattery, projectTwentyYear, solarAddOnCost } from '../pricing/loanPricing';
+import { priceBattery, projectTwentyYear, solarAddOnCost, sizeBatterySystem, additionsFor } from '../pricing/loanPricing';
+import { BATTERY_MODELS } from '../incentives/programData';
 import { getConnectionFeeForYear } from '../utils/rateData';
 import { NEM3_EXPORT_MIDDAY } from './BatteryDispatch';
 import { useSettings } from '../admin/SettingsContext';
@@ -65,9 +66,45 @@ const BatteryStabilization = ({
   const [mode, setMode] = useState('loan'); // loan | cash | lease
 
   // ---- battery configuration ----
-  const [kwhPerBattery, setKwhPerBattery] = useState(13.5);
-  const [batteryCount, setBatteryCount] = useState(1);
-  const totalKwh = (Number(kwhPerBattery) || 0) * (Number(batteryCount) || 0);
+  /**
+   * The pack, and anything added to it.
+   *
+   * This replaced two loose number fields ("kWh per battery", "# of
+   * batteries"). Those could express a system nobody sells — 4 x 17.3 kWh —
+   * and, worse, they could not express the distinction that actually matters:
+   * a second Powerwall and a DC expansion pack add identical capacity for
+   * different money and different rebate. A number field has nowhere to put
+   * that, so the rebate was silently wrong for every expansion-pack deal.
+   */
+  const batteryCatalog = (settings.batteries && settings.batteries.length)
+    ? settings.batteries : BATTERY_MODELS;
+  const [batteryModelId, setBatteryModelId] = useState('tesla_pw3');
+  const batteryModel = batteryCatalog.find((b) => b.id === batteryModelId) || batteryCatalog[0] || null;
+  const [additions, setAdditions] = useState([]);   // [{ id, qty }]
+
+  const sizing = useMemo(
+    () => sizeBatterySystem({
+      base: batteryModel,
+      additions,
+      catalog: settings.batteryAdditions
+    }),
+    [batteryModel, additions, settings.batteryAdditions]
+  );
+  const totalKwh = sizing.totalKwh;
+
+  /**
+   * Rebate eligibility.
+   *
+   * `null` means "whatever the utility implies" — SDCP runs in SDG&E
+   * territory, so that is the default. A rep can override either way, because
+   * territory is not the only thing that disqualifies a customer and the rep
+   * on the call knows things this tool does not. The override is stored with
+   * the proposal so a re-opened quote does not quietly re-apply a rebate the
+   * rep had already ruled out.
+   */
+  const [rebateEligibleOverride, setRebateEligibleOverride] = useState(null);
+  const rebateByTerritory = (inputs.utility || 'SDGE') === 'SDGE';
+  const rebateEligible = rebateEligibleOverride === null ? rebateByTerritory : rebateEligibleOverride;
 
   // ---- lender & terms, from the editable rate cards ----
   const lenders = settings.lenders && settings.lenders.length ? settings.lenders : [];
@@ -109,6 +146,22 @@ const BatteryStabilization = ({
 
   const setAdder = (id, patch) =>
     setAdderSel((p) => ({ ...p, [id]: { ...(p[id] || { on: false }), ...patch } }));
+
+  /** Additions this pack's manufacturer actually offers. */
+  const availableAdditions = useMemo(
+    () => additionsFor(batteryModel, settings.batteryAdditions),
+    [batteryModel, settings.batteryAdditions]
+  );
+
+  /** Set a quantity, dropping the entry entirely at zero so the stored
+   *  proposal carries only what was actually selected. */
+  const setAddition = (id, qty) => {
+    const n = Math.max(0, Math.round(Number(qty) || 0));
+    setAdditions((prev) => {
+      const rest = prev.filter((a) => a.id !== id);
+      return n > 0 ? [...rest, { id, qty: n }] : rest;
+    });
+  };
 
   // A proposal already on file is the rep's memory of the appointment. Load it
   // so reopening the tool shows what was quoted rather than a fresh default.
@@ -181,7 +234,9 @@ const BatteryStabilization = ({
     adderCatalog: settings.adders,
     fedPct,
     usableKwh: totalKwh,
-    rebateEligible: (inputs.utility || 'SDGE') === 'SDGE',
+    rebateKwh: sizing.rebateKwh,
+    batteryAdditionsCost: sizing.addedCost,
+    rebateEligible,
     rebatePerKwh: A.localRebatePerKwh,
     termYears,
     apr: activeTermCard.apr,
@@ -194,7 +249,7 @@ const BatteryStabilization = ({
       unsubsidisedApr: A.commissionUnsubsidisedApr,
       perAddedPanel: A.commissionFloorPerAddedPanel
     }
-  }), [contractValue, adderSel, settings.adders, fedPct, totalKwh, termYears,
+  }), [contractValue, adderSel, settings.adders, fedPct, totalKwh, sizing, rebateEligible, termYears,
        activeTermCard, applyRebateToLoan, inputs.utility, A, mode]);
 
   const activePayment =
@@ -238,7 +293,16 @@ const BatteryStabilization = ({
     if (!contactId) return null;
     return buildProposal({
       price, projection: proj, inputs,
-      battery: { kwhPerBattery, count: batteryCount, totalKwh },
+      battery: {
+        modelId: batteryModelId,
+        make: batteryModel && batteryModel.make,
+        model: batteryModel && batteryModel.model,
+        baseKwh: sizing.baseKwh,
+        totalKwh: sizing.totalKwh,
+        rebateKwh: sizing.rebateKwh,
+        units: sizing.units.map((u) => ({ id: u.id, label: u.label, qty: u.qty, kwh: u.kwh, cost: u.cost })),
+        rebateEligible
+      },
       financing: {
         mode,
         lenderId: lender && lender.id,
@@ -256,7 +320,7 @@ const BatteryStabilization = ({
       }
     });
   }, [
-    clientContext, price, proj, inputs, kwhPerBattery, batteryCount, totalKwh,
+    clientContext, price, proj, inputs, batteryModelId, batteryModel, sizing, totalKwh, rebateEligible,
     mode, lender, termYears, activeTermCard, escalator, leasePayment,
     monthlyBill, connectionFee, monthlySavings, escalation, clientLabel, savedProposal
   ]);
@@ -397,23 +461,128 @@ const BatteryStabilization = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-5 border-t border-slate-700/60">
-          <Field label="kWh per battery" value={kwhPerBattery} onChange={setKwhPerBattery} />
-          <Field label="# of batteries" value={batteryCount} onChange={setBatteryCount} />
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Total storage</label>
-            <div className="px-3 py-2 rounded-lg bg-slate-900/60 border border-emerald-400/30 text-emerald-300 font-bold">
-              {totalKwh} kWh
+        <div className="mt-5 pt-5 border-t border-slate-700/60 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-2">
+              <label className="block text-xs text-slate-400 mb-1">Battery</label>
+              <select
+                value={batteryModelId}
+                onChange={(e) => { setBatteryModelId(e.target.value); setAdditions([]); }}
+                className="w-full px-3 py-2 rounded-lg bg-slate-900/60 border border-slate-600 text-slate-100 text-sm focus:border-emerald-400/60 focus:outline-none"
+              >
+                {batteryCatalog.map((b) => (
+                  <option key={b.id} value={b.id}>{b.make} {b.model} — {b.usableKwh} kWh</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Total storage</label>
+              <div className="px-3 py-2 rounded-lg bg-slate-900/60 border border-emerald-400/30 text-emerald-300 font-bold flex items-baseline gap-2">
+                {totalKwh} kWh
+                <span className="text-[11px] font-normal text-slate-400 flex items-center gap-1">
+                  <ShieldCheck size={12} className="text-emerald-400" />~{backupHours} hrs
+                </span>
+              </div>
             </div>
           </div>
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Essential backup</label>
-            <div className="px-3 py-2 rounded-lg bg-slate-900/60 border border-slate-600 text-slate-200 text-sm flex items-center gap-1.5">
-              <ShieldCheck size={14} className="text-emerald-400" />~{backupHours} hrs
+
+          {/* ---- additional packs ---- */}
+          {availableAdditions.length > 0 && (
+            <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-3">
+              <div className="text-[11px] uppercase tracking-widest text-slate-400 mb-2">Add storage</div>
+              <div className="space-y-2">
+                {availableAdditions.map((def) => {
+                  const qty = (additions.find((a) => a.id === def.id) || {}).qty || 0;
+                  return (
+                    <div key={def.id} className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[13px] text-slate-200">
+                          {def.label}
+                          <span className="text-slate-400 font-mono ml-2">
+                            +{money(def.cost)} · +{def.usableKwh} kWh
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          {def.note}
+                          {def.rebateFactor < 1 && (
+                            <span className="text-amber-300">
+                              {' '}Rebate on {def.usableKwh * def.rebateFactor} of the {def.usableKwh} kWh.
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => setAddition(def.id, qty - 1)}
+                          disabled={qty === 0}
+                          className="w-7 h-7 rounded-md bg-slate-800 border border-slate-600 text-slate-300 disabled:opacity-30"
+                        >−</button>
+                        <span className="w-7 text-center text-[13px] font-mono text-slate-100">{qty}</span>
+                        <button
+                          onClick={() => setAddition(def.id, qty + 1)}
+                          className="w-7 h-7 rounded-md bg-slate-800 border border-slate-600 text-slate-300 hover:border-emerald-400/50"
+                        >+</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* The comparison a rep would otherwise have to do in their head.
+                  Only worth showing once something partial is selected. */}
+              {sizing.hasPartialRebate && (
+                <p className="text-[11.5px] text-amber-300 mt-3 pt-2 border-t border-slate-700/60">
+                  {totalKwh} kWh installed, rebate paid on {sizing.rebateKwh} kWh. A DC expansion costs less
+                  up front but earns half the rebate on its capacity — check the net below before choosing it.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ---- rebate eligibility ---- */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900/40 px-3 py-2.5">
+            <div className="min-w-0">
+              <div className="text-[12.5px] text-slate-200">Eligible for the utility storage rebate</div>
+              <div className="text-[11px] text-slate-500">
+                {rebateEligibleOverride === null
+                  ? `Following the utility on file (${inputs.utility || 'SDGE'}) — ${rebateByTerritory ? 'eligible' : 'not eligible'}.`
+                  : 'Set by hand for this customer.'}
+              </div>
+            </div>
+            <div className="flex gap-1 bg-slate-900/70 rounded-lg p-1 border border-slate-600 shrink-0">
+              {[[null, 'Auto'], [true, 'Yes'], [false, 'No']].map(([v, label]) => (
+                <button
+                  key={label}
+                  onClick={() => setRebateEligibleOverride(v)}
+                  className={`px-3 py-1.5 rounded-md text-[12.5px] font-semibold transition-colors ${
+                    rebateEligibleOverride === v
+                      ? 'bg-amber-400 text-slate-900'
+                      : 'text-slate-300 hover:bg-slate-800'
+                  }`}
+                >{label}</button>
+              ))}
             </div>
           </div>
         </div>
       </div>
+
+      {/* The rebate, greyed out rather than hidden when the customer cannot
+          have it. Removing the panel entirely would leave a rep wondering
+          whether the tool had simply forgotten it. */}
+      {!price.rebateEligible && !price.rebateBlockedByAdder && (
+        <div className="rounded-2xl border border-slate-700 bg-slate-900/40 p-5 opacity-70">
+          <div className="text-[11px] uppercase tracking-widest text-slate-500 flex items-center gap-2">
+            <Wallet size={14} /> Cash in Your Pocket
+          </div>
+          <div className="text-4xl font-extrabold text-slate-600 mt-1 line-through">
+            {money(A.localRebatePerKwh * sizing.rebateKwh)}
+          </div>
+          <p className="text-[12px] text-slate-400 mt-1">
+            Not eligible for the storage rebate, so this is not in the figures below.
+            {rebateEligibleOverride === false && ' Set by hand — switch back to Auto or Yes to include it.'}
+          </p>
+        </div>
+      )}
 
       {/* ================= 2. CASH IN YOUR POCKET ================= */}
       {price.rebate > 0 && mode === 'loan' && (
@@ -425,7 +594,7 @@ const BatteryStabilization = ({
               </div>
               <div className="text-4xl font-extrabold text-amber-300 mt-1">{money(price.rebate)}</div>
               <p className="text-xs text-slate-400 mt-1">
-                {money(A.localRebatePerKwh)}/kWh × {totalKwh} kWh usable
+                {money(A.localRebatePerKwh)}/kWh × {sizing.rebateKwh} kWh eligible{sizing.hasPartialRebate ? ` of ${totalKwh} installed` : ""}
                 {price.rebateCapped ? ' · capped at program maximum' : ''}
               </p>
             </div>
@@ -450,7 +619,7 @@ const BatteryStabilization = ({
       {price.rebateBlockedByAdder && (
         <div className="rounded-xl border border-red-400/40 bg-red-900/15 p-4 text-[13px] text-red-200">
           A non-export system is not eligible for the storage rebate. Removing that adder restores{' '}
-          {money(A.localRebatePerKwh * totalKwh)}.
+          {money(A.localRebatePerKwh * sizing.rebateKwh)}.
         </div>
       )}
 

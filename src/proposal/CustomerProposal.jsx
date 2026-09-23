@@ -348,18 +348,35 @@ const CustomerProposal = ({
         <div className="mt-6 rounded-2xl p-6 flex flex-col sm:flex-row items-center gap-8"
              style={{ background: GRADIENTS.depth, border: `1px solid ${SURF.line}` }}>
           <BatteryGraphic
-            count={sys.batteryCount || 1}
+            count={1 + (sys.units || []).reduce((a, u) => a + (Number(u.qty) || 0), 0)}
             charge={0.84}
             size={230}
-            label={`${sys.batteryKwhEach} kWh`}
+            label={sys.baseKwh ? `${sys.baseKwh} kWh` : ''}
           />
           <div className="flex-1">
+            {/* The equipment by name. A customer who is going to spend twenty
+                thousand dollars will look it up, and a proposal that names only
+                a kWh figure reads as if it is avoiding the question. */}
+            {(sys.make || sys.model) && (
+              <div className="text-[12px] uppercase tracking-[0.16em] mb-1" style={{ color: SURF.sun }}>
+                {[sys.make, sys.model].filter(Boolean).join(' ')}
+              </div>
+            )}
             <div className="text-2xl font-bold" style={{ color: SURF.textBright }}>
               {sys.usableKwh} kWh of usable storage
             </div>
+            {(sys.units || []).length > 0 && (
+              <ul className="mt-2 space-y-0.5">
+                {sys.units.map((u, i) => (
+                  <li key={i} className="text-[13px]" style={{ color: SURF.text }}>
+                    + {u.qty > 1 ? `${u.qty} × ` : ''}{u.label}
+                  </li>
+                ))}
+              </ul>
+            )}
             <p className="text-[13.5px] mt-2 max-w-[46ch]" style={{ color: SURF.text }}>
-              {sys.batteryCount > 1
-                ? `${sys.batteryCount} units, working as one system.`
+              {(sys.units || []).length
+                ? 'The packs work as one system.'
                 : 'A single unit, wired into your main panel.'}{' '}
               It fills from your own sun during the day and runs your house through the evening — when
               power costs the most and, in an outage, when you need it.
@@ -369,7 +386,11 @@ const CustomerProposal = ({
 
         <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-px rounded-2xl overflow-hidden"
              style={{ background: SURF.line }}>
-          <Cell label="Storage" value={`${sys.usableKwh} kWh`} sub={`${sys.batteryCount} × ${sys.batteryKwhEach} kWh usable`} />
+          <Cell
+            label="Storage"
+            value={`${sys.usableKwh} kWh`}
+            sub={[sys.make, sys.model].filter(Boolean).join(' ') || 'usable'}
+          />
           <Cell label="Backup" value={`~${Math.round((sys.usableKwh || 0) / 0.75)} hrs`} sub="essential loads" />
           <Cell label="Your system" value={ctx.systemSizeKw ? `${ctx.systemSizeKw} kW` : '—'} sub={ctx.utility || ''} />
           <Cell label="Your plan" value={ctx.nemVersion || '—'} sub="net metering" />

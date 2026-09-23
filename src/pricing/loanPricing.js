@@ -54,6 +54,111 @@ export const FED_PCT_DEFAULT = 0.30;
 export const LOCAL_REBATE_PER_KWH = 250;
 
 /* ---------------------------------------------------------------------------
+ * ADDITIONAL BATTERY UNITS
+ *
+ * A second pack is not simply "more kWh". With Tesla there are two ways to add
+ * the same 13.5 kWh and the program treats them differently:
+ *
+ *   SECOND POWERWALL 3   a complete unit, its own inverter. Costs more, and
+ *                        earns the full rebate on its capacity:
+ *                        13.5 kWh x $250 = $3,375.
+ *
+ *   DC EXPANSION PACK    storage only, hanging off the first unit's inverter.
+ *                        Cheaper, but the program pays HALF the rebate on the
+ *                        same capacity — $1,687.50 for the same 13.5 kWh.
+ *
+ * So the cheaper option is not always the better one. $2,000 less on the
+ * contract against $1,687.50 less in rebate is a $312.50 difference, and which
+ * way it falls is worth a rep being able to show rather than guess. Modelling
+ * `rebateFactor` separately from `usableKwh` is what makes that visible: total
+ * capacity and rebate-eligible capacity are genuinely different numbers, and
+ * collapsing them into one would silently overpay the DC expansion by $1,687.
+ *
+ * `makes` scopes an option to the manufacturers that actually offer it —
+ * a DC expansion pack is a Tesla product and has no business appearing under
+ * a FranklinWH configuration.
+ *
+ * Prices are defaults; Admin → Platform Defaults overrides them, because these
+ * move and nobody should need a deploy to reprice a battery.
+ */
+export const BATTERY_ADDITIONS = [
+  {
+    id: 'tesla_pw3_second',
+    label: 'Second Powerwall 3',
+    makes: ['Tesla'],
+    cost: 11500,
+    usableKwh: 13.5,
+    rebateFactor: 1,
+    note: 'A complete second unit with its own inverter. Full rebate on its capacity.'
+  },
+  {
+    id: 'tesla_dc_expansion',
+    label: 'DC Expansion Pack',
+    makes: ['Tesla'],
+    cost: 9500,
+    usableKwh: 13.5,
+    rebateFactor: 0.5,
+    note: 'Storage only, running off the first unit’s inverter. The program pays half the rebate on its capacity.'
+  }
+];
+
+/**
+ * Size a battery system from a base pack plus any additional units.
+ *
+ * Returns total capacity and REBATE-ELIGIBLE capacity as separate figures,
+ * because a DC expansion adds the former without fully adding the latter.
+ * Everything downstream — rebate, proposal, pipeline — reads these rather than
+ * recomputing, so there is one answer to "how big is this system".
+ *
+ * @param {object} base        The catalogue pack (needs usableKwh).
+ * @param {Array}  additions   [{ id, qty }] chosen by the rep.
+ * @param {Array}  catalog     Addition definitions; defaults to BATTERY_ADDITIONS.
+ */
+export function sizeBatterySystem({ base = null, additions = [], catalog = null } = {}) {
+  const defs = catalog && catalog.length ? catalog : BATTERY_ADDITIONS;
+  const baseKwh = Number(base && base.usableKwh) || 0;
+
+  let addedKwh = 0;
+  let addedRebateKwh = 0;
+  let addedCost = 0;
+  const units = [];
+
+  for (const chosen of additions || []) {
+    const def = defs.find((d) => d.id === (chosen && chosen.id));
+    const qty = Math.max(0, Math.round(Number(chosen && chosen.qty) || 0));
+    if (!def || !qty) continue;
+    const kwh = (Number(def.usableKwh) || 0) * qty;
+    const cost = (Number(def.cost) || 0) * qty;
+    addedKwh += kwh;
+    addedRebateKwh += kwh * (Number(def.rebateFactor) ?? 1);
+    addedCost += cost;
+    units.push({ ...def, qty, kwh, cost, rebateKwh: kwh * (Number(def.rebateFactor) ?? 1) });
+  }
+
+  return {
+    baseKwh,
+    addedKwh,
+    addedCost,
+    // Total capacity the customer gets.
+    totalKwh: baseKwh + addedKwh,
+    // Capacity the rebate is actually paid on. Lower than totalKwh whenever a
+    // DC expansion is in the mix, and that gap is the whole point of this
+    // function existing.
+    rebateKwh: baseKwh + addedRebateKwh,
+    units,
+    /** True when some capacity earns less than the full rebate — the UI says so. */
+    hasPartialRebate: addedRebateKwh < addedKwh
+  };
+}
+
+/** Additions available for a given pack, by manufacturer. */
+export const additionsFor = (base, catalog = null) => {
+  const defs = catalog && catalog.length ? catalog : BATTERY_ADDITIONS;
+  const make = (base && base.make) || '';
+  return defs.filter((d) => !d.makes || !d.makes.length || d.makes.includes(make));
+};
+
+/* ---------------------------------------------------------------------------
  * REP COMMISSION
  *
  * The floor is the lowest contract value the battery can be written at. Every
@@ -270,6 +375,15 @@ export function priceBattery({
   adderCatalog = null,
   fedPct = FED_PCT_DEFAULT,
   usableKwh = 0,
+  /**
+   * Capacity the REBATE is paid on. Defaults to usableKwh, which is right for
+   * a single pack; a system with a DC expansion passes a lower figure from
+   * sizeBatterySystem(). Kept separate rather than derived here so this
+   * function never has to know what kind of units made up the total.
+   */
+  rebateKwh = null,
+  /** Cost of additional packs, added to the contract but not commissionable. */
+  batteryAdditionsCost = 0,
   rebateEligible = true,
   rebatePerKwh = LOCAL_REBATE_PER_KWH,
   rebateCap = 10000,
@@ -283,8 +397,12 @@ export function priceBattery({
   const base = Number(contractValue) || 0;
   const adders = sumAdders(adderSelections, adderCatalog);
 
-  // 1. Contract
-  const contract = base + adders.total;
+  // 1. Contract. Additional packs are equipment cost like an adder, so they
+  //    raise the contract and the federal deduction but are deliberately NOT
+  //    in the commission base below — a rep has not earned commission on a
+  //    second battery's hardware.
+  const additionsCost = Math.max(0, Number(batteryAdditionsCost) || 0);
+  const contract = base + adders.total + additionsCost;
 
   // 2. Federal
   const pct = Math.min(FED_PCT_MAX, Math.max(FED_PCT_MIN, Number(fedPct) || 0));
@@ -295,7 +413,8 @@ export function priceBattery({
 
   // 4. Local rebate. Non-export forfeits it outright.
   const eligible = !!rebateEligible && !adders.blocksRebate;
-  const rebateGross = eligible ? (Number(rebatePerKwh) || 0) * (Number(usableKwh) || 0) : 0;
+  const payableKwh = rebateKwh != null ? Number(rebateKwh) : Number(usableKwh);
+  const rebateGross = eligible ? (Number(rebatePerKwh) || 0) * (Number(payableKwh) || 0) : 0;
   const rebate = rebateCap ? Math.min(rebateCap, rebateGross) : rebateGross;
   const rebateCapped = !!rebateCap && rebateGross > rebateCap;
 
@@ -338,6 +457,11 @@ export function priceBattery({
     rebateCapped,
     rebateEligible: eligible,
     rebateBlockedByAdder: adders.blocksRebate,
+    /** Capacity the rebate was actually calculated on. Below total capacity
+     *  when a DC expansion is in the system — surfaced so the UI can say why
+     *  the rebate is smaller than the kWh would suggest. */
+    rebateKwh: payableKwh,
+    batteryAdditionsCost: additionsCost,
     net,
     financed,
     termYears,
