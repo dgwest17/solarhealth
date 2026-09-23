@@ -138,7 +138,7 @@ export default async function handler(req, res) {
     // --- Zoho, best effort ---
     let zoho = { ok: false, missing: [] };
     if (projectId) {
-      const payload = { Sales_Stage: stage };
+      const payload = { Lead_Status: stage };
       for (const [id, field] of Object.entries(ZOHO_STEP_FIELD)) {
         if (steps[id]) payload[field] = steps[id];
       }

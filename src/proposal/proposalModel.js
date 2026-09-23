@@ -413,7 +413,7 @@ export function toZohoSummary(proposal) {
     Proposal_Lender: f.lenderName || null,
 
     // --- new fields (see ZOHO_FIELDS) ---
-    Sales_Stage: proposal.stage,
+    Lead_Status: proposal.stage,
     Proposal_Date: proposal.createdAt ? proposal.createdAt.slice(0, 10) : null,
     Net_Investment: p.netInvestment ?? null,
     Storage_Rebate: p.storageRebate ?? null,
@@ -453,7 +453,7 @@ export const ZOHO_FIELDS = {
           + 'is why this is a separate field rather than a reused one.' },
     { api: 'Proposal_Lender', type: 'text' },
 
-    { api: 'Sales_Stage', type: 'picklist',
+    { api: 'Lead_Status', type: 'picklist',
       values: [SALES_STAGE.NEW, SALES_STAGE.MET, SALES_STAGE.CONVERTED, SALES_STAGE.INSTALLED],
       note: 'Same wording as Lead_Status on Leads, so the two pipelines report together.' },
     { api: 'Proposal_Date', type: 'date' },
