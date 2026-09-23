@@ -79,28 +79,54 @@ const ROUTES = {
   'upload-doc': uploadDoc
 };
 
+/**
+ * Work out which endpoint was asked for.
+ *
+ * THE URL IS THE SOURCE OF TRUTH, not req.query. The first version of this
+ * router read req.query.path and required exactly one segment, on the
+ * assumption that Vercel fills a [...path] catch-all with ['clients'] for
+ * /api/clients. That assumption was never verified against a real deployment,
+ * and every request 404'd — the shape differs from what the docs implied, and
+ * the strict length check turned the mismatch into a total outage rather than
+ * a degraded one.
+ *
+ * req.url is defined by HTTP rather than by a framework convention, so it
+ * cannot drift underneath us. The query fallback stays for any runtime that
+ * rewrites req.url before the handler sees it, but it is the backup now.
+ */
+const routeNameFrom = (req) => {
+  const url = (req && req.url) || '';
+  // Strip the query string, then the leading slash and the /api prefix.
+  const pathOnly = url.split('?')[0].split('#')[0];
+  const trimmed = pathOnly.replace(/^\/+/, '').replace(/^api\/?/, '').replace(/\/+$/, '');
+  if (trimmed) return trimmed;
+
+  // Fallback: the catch-all param, in whatever shape it arrives. Drop a
+  // leading 'api' segment if the runtime included it.
+  const raw = req && req.query && req.query.path;
+  const segments = (Array.isArray(raw) ? raw : (raw ? [raw] : []))
+    .filter((s) => s && s !== 'api');
+  return segments.join('/');
+};
+
 export default async function handler(req, res) {
-  // Vercel gives the catch-all as an array of segments; a bare string arrives
-  // when there is exactly one. Only the first segment is a route name — every
-  // endpoint here is flat, so a deeper path is a mistake rather than a nested
-  // route, and is refused instead of being silently truncated to its head.
-  const raw = req.query && req.query.path;
-  const segments = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+  const name = routeNameFrom(req);
 
-  if (segments.length !== 1) {
-    res.status(404).json({ error: 'Not found' });
-    return;
-  }
-
+  // Every endpoint is flat, so a name containing a slash is a nested path that
+  // does not exist here — refused rather than silently truncated to its head.
   // Object.prototype keys ('constructor', '__proto__', 'toString') would
   // otherwise resolve to inherited properties and be called as handlers.
-  const name = segments[0];
-  const route = Object.prototype.hasOwnProperty.call(ROUTES, name)
+  const route = name && !name.includes('/')
+      && Object.prototype.hasOwnProperty.call(ROUTES, name)
     ? ROUTES[name]
     : null;
 
   if (typeof route !== 'function') {
-    res.status(404).json({ error: 'Not found' });
+    // Name what was asked for. It is the caller's own URL, so it reveals
+    // nothing they did not send, and it turns "Not found" from a dead end
+    // into something diagnosable from the browser's network tab.
+    console.error(`[api] no route for ${JSON.stringify(name)} (url: ${req && req.url})`);
+    res.status(404).json({ error: `No such endpoint: ${name || '(none)'}` });
     return;
   }
 
