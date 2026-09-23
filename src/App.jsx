@@ -6,10 +6,10 @@ import ResetPasswordScreen from './components/ResetPasswordScreen';
 import ClientDashboard from './components/ClientDashboard';
 import AdminSettings from './admin/AdminSettings';
 import TheBeach from './beach/TheBeach';
-import ProjectSteps from './project/ProjectSteps';
+import BigWave from './proposal/BigWave';
 import SolarCalculator from './SolarCalculator';
 import { ArrowLeft, RefreshCw, AlertCircle, FlaskConical, SlidersHorizontal } from 'lucide-react';
-import { Beach as BeachIcon } from './surf/SurfIcons';
+import { Beach as BeachIcon, Swell as SwellIcon } from './surf/SurfIcons';
 
 /**
  * Top-level router for the Monitoring side.
@@ -29,10 +29,24 @@ export default function App() {
   const [loadingClient, setLoadingClient] = useState(false);
   const [clientError, setClientError] = useState('');
   const [role, setRole] = useState('client');
-  const [view, setView] = useState('clients'); // 'clients' | 'sandbox'
+  /**
+   * 'clients' | 'audit' | 'bigwave' | 'sandbox' | 'beach' | 'admin'
+   *
+   * The open client's audit is a VIEW, not a mode that pre-empts the others.
+   * It used to be the latter: `if (selectedId) return <audit>` sat above every
+   * view check, so with a client open no other view could render. That is why
+   * ProjectSteps was unreachable — its view existed, nothing navigated to it,
+   * and navigating to it would not have worked anyway.
+   *
+   * Selecting a client and looking at one of their screens are now separate
+   * pieces of state, which is what lets Big Wave read the same clientData the
+   * audit is using.
+   */
+  const [view, setView] = useState('clients');
 
   const openClient = useCallback(async (id) => {
     setSelectedId(id);
+    setView('audit');
     setLoadingClient(true);
     setClientError('');
     setClientData(null);
@@ -51,6 +65,7 @@ export default function App() {
     setSelectedId(null);
     setClientData(null);
     setClientError('');
+    setView('clients');
   };
 
   // A client owns exactly one record — open it directly instead of showing a
@@ -105,7 +120,7 @@ export default function App() {
   }
 
   // ---- Authenticated: client detail (audit) ----
-  if (selectedId) {
+  if (selectedId && view === 'audit') {
     if (loadingClient) {
       return (
         <div className="min-h-screen bg-[#0a1628] flex items-center justify-center text-slate-300">
@@ -165,7 +180,14 @@ export default function App() {
               viewerRole: role,
               name: clientData.contact.fullName || clientData.contact.email || '',
               contact: clientData.contact,
-              address: [clientData.contact.street, clientData.contact.city, clientData.contact.state, clientData.contact.zip].filter(Boolean).join(', ')
+              address: [clientData.contact.street, clientData.contact.city, clientData.contact.state, clientData.contact.zip].filter(Boolean).join(', '),
+              // "Open proposal" hands off to the Big Wave tab rather than
+              // stacking an overlay on the audit. Passed through clientContext
+              // because that object is already the carrier for everything
+              // client-scoped — threading a new prop down through
+              // SolarCalculator and BatteryAnalysis to reach one button would
+              // be three components' worth of plumbing for nothing.
+              onOpenProposal: () => setView('bigwave')
             } : null}
           />
         </div>
@@ -173,18 +195,16 @@ export default function App() {
     }
   }
 
-  // ---- Authenticated: getting-started steps for one client ----
-  if (view === 'project' && clientData) {
+  // ---- Authenticated: Big Wave (the deal — proposal, steps, client details) ----
+  if (view === 'bigwave') {
     return (
       <div>
-        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} />
-        <ProjectSteps
-          proposal={clientData.proposal || null}
-          contact={clientData.contact || null}
-          contactId={clientData.contact && clientData.contact.id}
-          projectId={clientData.project && clientData.project.id}
-          repName={user.email}
-          canEdit
+        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} hasClient={!!clientData} />
+        <BigWave
+          clientData={clientData}
+          role={role}
+          userEmail={user.email}
+          onBackToClients={backToDashboard}
         />
       </div>
     );
@@ -194,7 +214,7 @@ export default function App() {
   if (view === 'beach') {
     return (
       <div>
-        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} />
+        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} hasClient={!!clientData} />
         <TheBeach role={role} userEmail={user.email} onOpenClient={openClient} />
       </div>
     );
@@ -204,7 +224,7 @@ export default function App() {
   if (view === 'admin') {
     return (
       <div>
-        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} />
+        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} hasClient={!!clientData} />
         <AdminSettings role={role} />
       </div>
     );
@@ -214,7 +234,7 @@ export default function App() {
   if (view === 'sandbox') {
     return (
       <div>
-        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} />
+        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} hasClient={!!clientData} />
         <SolarCalculator onOpenClient={openClient} canSaveClient={role === 'admin' || role === 'rep'} />
       </div>
     );
@@ -223,7 +243,7 @@ export default function App() {
   // ---- Authenticated: dashboard ----
   return (
     <div>
-      <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} />
+      <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} hasClient={!!clientData} />
       <ClientDashboard
         onOpen={openClient}
         userEmail={user.email}
@@ -241,7 +261,7 @@ export default function App() {
  * Top navigation bar: switch between the Clients dashboard and the
  * standalone Sandbox (audit + battery tools with no client data).
  */
-function NavBar({ view, setView, userEmail, onSignOut, role }) {
+function NavBar({ view, setView, userEmail, onSignOut, role, hasClient = false }) {
   const isStaff = role === 'admin' || role === 'rep';
   return (
     <div className="bg-[#0a1628] border-b border-amber-400/20 px-6 py-3 flex items-center justify-between print:hidden">
@@ -268,6 +288,33 @@ function NavBar({ view, setView, userEmail, onSignOut, role }) {
             >
               <FlaskConical size={15} /> Sandbox
             </button>
+            {/* Big Wave sits next to the audit it follows from. Shown only
+                with a client open, because a proposal with no customer is not
+                a thing and a tab that is always dead is worse than no tab. */}
+            {hasClient && (
+              <>
+                <button
+                  onClick={() => setView('audit')}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    view === 'audit'
+                      ? 'bg-amber-400 text-[#0a1628]'
+                      : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
+                  }`}
+                >
+                  Audit
+                </button>
+                <button
+                  onClick={() => setView('bigwave')}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
+                    view === 'bigwave'
+                      ? 'bg-amber-400 text-[#0a1628]'
+                      : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
+                  }`}
+                >
+                  <SwellIcon size={15} /> Big Wave
+                </button>
+              </>
+            )}
             <button
               onClick={() => setView('beach')}
               className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${

@@ -98,8 +98,16 @@ const ProposalBar = ({
                 {editing ? 'Close details' : 'Edit details'}
               </button>
             )}
+            {/* Prefer handing off to the Big Wave tab when the app offers one:
+                edits there are made against the client record and every screen
+                sees them, where an overlay's are scoped to this component. The
+                overlay remains for anywhere without that tab — the sandbox,
+                and any future embed. */}
             <button
-              onClick={() => setShowProposal(true)}
+              onClick={() => {
+                if (clientContext && clientContext.onOpenProposal) clientContext.onOpenProposal();
+                else setShowProposal(true);
+              }}
               disabled={!shown}
               className={`px-3 py-2 rounded-lg text-[12.5px] font-semibold flex items-center gap-1.5 border ${
                 shown
