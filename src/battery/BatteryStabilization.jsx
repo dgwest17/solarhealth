@@ -414,16 +414,22 @@ const BatteryStabilization = ({
       {/* The proposal strip, at the top where a rep is already looking. The
           same component renders again inside Deep Seas with the full result
           detail; this one is the reachable version, not a second copy. */}
+      {/* Sticky, because "Stabilize Your Bill" is several screens long and the
+          moment a rep wants to open the proposal is whenever the customer
+          says yes — not whenever they happen to be scrolled to the top. */}
       {clientContext && clientContext.contactId && (
-        <ProposalBar
-          compact
-          liveProposal={liveProposal}
-          savedProposal={savedProposal}
-          saving={saving}
-          saveResult={saveResult}
-          onSave={saveProposal}
-          clientContext={clientContext}
-        />
+        <div className="sticky top-0 z-30 -mx-1 px-1 py-1 print:hidden"
+             style={{ background: 'rgba(10,22,40,.92)', backdropFilter: 'blur(6px)' }}>
+          <ProposalBar
+            compact
+            liveProposal={liveProposal}
+            savedProposal={savedProposal}
+            saving={saving}
+            saveResult={saveResult}
+            onSave={saveProposal}
+            clientContext={clientContext}
+          />
+        </div>
       )}
 
       {/* ================= 1. $0 DOWN + how it's bought ================= */}
