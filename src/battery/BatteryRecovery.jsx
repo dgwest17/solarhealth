@@ -33,6 +33,7 @@ import {
  */
 const BatteryRecovery = ({
   inputs, overlay, effExport, effImport,
+  effExportWithAdded = null, effImportWithAdded = null,
   annualTrueUp = 0, annualCheck = 0, owesUtility = false,
   avoidedTrueUp = 0, arbitrageRecovered = null, totalRecoveredPerYear = null,
   extraUsage = null
@@ -66,29 +67,36 @@ const BatteryRecovery = ({
     u
   );
 
-  // Cost of doing nothing, WITHOUT the planned load — the baseline curve.
-  const lossBase = projectCreditLoss(
-    touRates,
-    overlay.annualDaytimeOverproduction,
-    overlay.annualNighttimeImport,
-    8, // 8%/yr peak escalation
-    10,
-    u
-  );
+  // COST OF DOING NOTHING — two curves.
+  //
+  // `lossBase` is the house as it stands. `loss` adds the planned load, using
+  // the with-added figures computed upstream in BatteryAnalysis. Those must
+  // come in as props: an earlier version recomputed the "with" case from
+  // effExport/effImport, which are the BASE figures, so the two curves were
+  // identical and the delta was always zero.
+  //
+  // A planned load makes doing nothing dramatically more expensive, and in
+  // both directions at once: it eats exportable surplus AND adds night-time
+  // purchases, and both halves escalate at 8% a year. That compounding is the
+  // reason this belongs on the chart rather than in a footnote.
+  const lossBase = projectCreditLoss(touRates, expKwh, impKwh, 8, 10, u);
 
-  // And WITH it. A planned load makes doing nothing more expensive, not less:
-  // it eats exportable surplus and adds night-time purchases, and both halves
-  // escalate at the same 8% a year. `expKwh`/`impKwh` already carry the load
-  // when the overlay was built with it.
-  const loss = projectCreditLoss(
-    touRates,
-    expKwh,
-    impKwh,
-    8,
-    10,
-    u
-  );
-  const lossFromAddedLoad = Math.max(0, loss.totalLost - lossBase.totalLost);
+  const withExp = effExportWithAdded != null ? effExportWithAdded : expKwh;
+  const withImp = effImportWithAdded != null ? effImportWithAdded : impKwh;
+  const lossWithAdded = projectCreditLoss(touRates, withExp, withImp, 8, 10, u);
+
+  // The headline follows what the client is actually contemplating.
+  const loss = hasAdded ? lossWithAdded : lossBase;
+  const lossFromAddedLoad = Math.max(0, lossWithAdded.totalLost - lossBase.totalLost);
+  const lossMultiple = lossBase.totalLost > 0 ? lossWithAdded.totalLost / lossBase.totalLost : 0;
+
+  // Merged series so both curves share one x-axis and the gap between them is
+  // the thing the eye lands on.
+  const lossSeries = lossBase.rows.map((r, i) => ({
+    year: r.year,
+    base: r.cumulative,
+    withAdded: lossWithAdded.rows[i] ? lossWithAdded.rows[i].cumulative : r.cumulative
+  }));
 
   const money = (v) => `$${Math.round(v).toLocaleString()}`;
   const rate = (v) => `$${v.toFixed(3)}/kWh`;
@@ -259,16 +267,34 @@ const BatteryRecovery = ({
         <h3 className="text-red-300 font-bold flex items-center gap-2 mb-1">
           <AlertTriangle size={18} /> The Cost of Doing Nothing
         </h3>
-        <p className="text-slate-300 text-sm mb-4">
+        <p className="text-slate-300 text-sm mb-3">
           Hold today's setup steady while peak rates escalate {loss.peakEscalationPct}%/yr, and here's the credit
           value you stand to lose over the next 10 years.
+          {hasAdded && <> The planned load is on this chart — it is the gap between the two lines.</>}
         </p>
+
+        {hasAdded && (
+          <div className="flex flex-wrap gap-x-5 gap-y-1 mb-2 text-[11.5px]">
+            <span className="flex items-center gap-1.5 text-slate-400">
+              <span className="inline-block w-5 border-t-2 border-dashed" style={{ borderColor: '#94a3b8' }} />
+              Your system today
+            </span>
+            <span className="flex items-center gap-1.5 text-red-300">
+              <span className="inline-block w-5 border-t-2" style={{ borderColor: '#ef4444' }} />
+              With {addedKwh.toLocaleString()} kWh of new load
+            </span>
+          </div>
+        )}
         <ResponsiveContainer width="100%" height={220}>
-          <AreaChart data={loss.rows} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+          <AreaChart data={lossSeries} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="lossGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#ef4444" stopOpacity={0.7} />
                 <stop offset="95%" stopColor="#ef4444" stopOpacity={0.1} />
+              </linearGradient>
+              <linearGradient id="lossGradBase" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.45} />
+                <stop offset="95%" stopColor="#94a3b8" stopOpacity={0.08} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#ffffff15" />
@@ -276,30 +302,54 @@ const BatteryRecovery = ({
             <YAxis stroke="#94a3b8" fontSize={11} width={60} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
             <Tooltip
               contentStyle={{ background: '#0f1e36', border: '1px solid #ef444455', borderRadius: 8, color: '#e2e8f0' }}
-              formatter={(v, n) => [`$${Number(v).toLocaleString()}`, n === 'cumulative' ? 'Cumulative lost' : 'Annual gap']}
+              formatter={(v, n) => [`$${Number(v).toLocaleString()}`,
+                n === 'withAdded' ? 'With planned load' : 'Your system today']}
             />
-            <Area type="monotone" dataKey="cumulative" stroke="#ef4444" strokeWidth={2} fill="url(#lossGrad)" />
+            {/* The with-load area is drawn FIRST and the base sits on top of
+                it, so the exposed red band between them is exactly the cost
+                the new load adds. */}
+            {hasAdded && (
+              <Area type="monotone" dataKey="withAdded" stroke="#ef4444" strokeWidth={2.5} fill="url(#lossGrad)" />
+            )}
+            <Area
+              type="monotone" dataKey="base"
+              stroke={hasAdded ? '#94a3b8' : '#ef4444'}
+              strokeWidth={2}
+              strokeDasharray={hasAdded ? '5 4' : undefined}
+              fill={hasAdded ? 'url(#lossGradBase)' : 'url(#lossGrad)'}
+            />
           </AreaChart>
         </ResponsiveContainer>
         <div className="mt-3 text-center">
-          <span className="text-sm text-slate-300">Projected 10-year value lost: </span>
+          <span className="text-sm text-slate-300">
+            Projected 10-year value lost{hasAdded ? ', with the planned load' : ''}:{' '}
+          </span>
           <span className="text-2xl font-bold text-red-400">{money(loss.totalLost)}</span>
           <div className="text-xs text-slate-500 mt-1">
             Nighttime rate rising from {rate(touRates.peak)} to ~{rate(loss.finalYearRate)} by {loss.rows[loss.rows.length-1].year}
           </div>
           {hasAdded && lossFromAddedLoad > 0 && (
-            <div className="mt-2 inline-block text-left rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-[11.5px] text-sky-100">
-              <div className="flex justify-between gap-6">
-                <span>Without the planned load</span>
-                <span className="font-mono">{money(lossBase.totalLost)}</span>
+            <div className="mt-3 inline-block text-left rounded-xl border border-red-400/40 bg-red-900/20 px-4 py-3 text-[12px] text-slate-200">
+              <div className="flex justify-between gap-8 py-0.5">
+                <span className="text-slate-400">Your system today</span>
+                <span className="font-mono text-slate-300">{money(lossBase.totalLost)}</span>
               </div>
-              <div className="flex justify-between gap-6">
-                <span>Added by {addedKwh.toLocaleString()} kWh of new load</span>
-                <span className="font-mono text-red-300">+{money(lossFromAddedLoad)}</span>
+              <div className="flex justify-between gap-8 py-0.5 border-t border-red-400/20 mt-1 pt-1">
+                <span className="text-red-200">
+                  Added by {addedKwh.toLocaleString()} kWh of new load
+                </span>
+                <span className="font-mono text-red-300 font-bold">+{money(lossFromAddedLoad)}</span>
               </div>
-              <div className="text-[10.5px] text-sky-200/80 mt-1 max-w-[42ch]">
-                The new load costs more every year it runs, not a flat amount — it buys peak power at a rate
-                climbing 8% a year while eating surplus that used to be exported.
+              {lossMultiple >= 1.5 && (
+                <div className="text-[13px] text-red-200 font-semibold mt-2">
+                  {lossMultiple >= 2
+                    ? `This load multiplies the cost of doing nothing by ${lossMultiple.toFixed(1)}×.`
+                    : 'This load nearly doubles what doing nothing costs.'}
+                </div>
+              )}
+              <div className="text-[10.5px] text-slate-400 mt-1.5 max-w-[46ch]">
+                Not a flat addition. The new load buys peak power at a rate climbing 8% a year while eating the
+                surplus that used to be exported — so the gap between the two lines widens every year it runs.
               </div>
             </div>
           )}

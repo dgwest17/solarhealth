@@ -32,6 +32,8 @@ const money = (v) => '$' + Math.round(Number(v) || 0).toLocaleString();
 
 const SECTIONS = [
   { id: 'assumptions', label: 'Assumptions' },
+  { id: 'parties',     label: 'Your companies' },
+  { id: 'quiver',      label: 'Quiver' },
   { id: 'batteries',   label: 'Batteries' },
   { id: 'lenders',     label: 'Lenders & terms' },
   { id: 'adders',      label: 'Adders' },
@@ -170,6 +172,8 @@ const AdminSettings = ({ role = 'client' }) => {
       </div>
 
       {section === 'assumptions' && <Assumptions draft={draft} defaults={defaults} edit={edit} />}
+      {section === 'parties'     && <Parties     draft={draft} edit={edit} />}
+      {section === 'quiver'      && <Quiver      draft={draft} edit={edit} />}
       {section === 'batteries'   && <Batteries   draft={draft} edit={edit} />}
       {section === 'lenders'     && <Lenders     draft={draft} edit={edit} />}
       {section === 'adders'      && <Adders      draft={draft} edit={edit} />}
@@ -240,6 +244,132 @@ const Assumptions = ({ draft, defaults, edit }) => {
     </div>
   );
 };
+
+/* =============================================================== PARTIES */
+
+const PARTY_FIELDS = [
+  { key: 'name',    label: 'Company name',  placeholder: 'Shown as the proposal header' },
+  { key: 'tagline', label: 'Tagline',       placeholder: 'One short line under the name' },
+  { key: 'logoUrl', label: 'Logo URL',      placeholder: 'https://… — PNG or SVG, transparent' },
+  { key: 'license', label: 'Licence number', placeholder: 'CSLB #' },
+  { key: 'phone',   label: 'Phone' },
+  { key: 'email',   label: 'Email' },
+  { key: 'website', label: 'Website' },
+  { key: 'submitTo', label: 'Submission emails', contractorOnly: true,
+    placeholder: 'chelsie@…, gabe@…, pete@… — comma separated' }
+];
+
+const PARTY_ROLES = [
+  { id: 'seller', title: 'Seller — you',
+    note: 'The company whose name leads the proposal and whose relationship the customer thinks they have. Leave the name blank and the proposal shows a neutral placeholder rather than anyone else\u2019s brand.' },
+  { id: 'contractor', title: 'Contractor — who installs',
+    note: 'The licence holder who actually does the work. Appears in the proposal header and is stored ON each proposal, so an old one still reads correctly after you change installers.' }
+];
+
+const Parties = ({ draft, edit }) => (
+  <div className="space-y-4">
+    {PARTY_ROLES.map(({ id, title, note }) => {
+      const party = (draft.parties && draft.parties[id]) || {};
+      return (
+        <Panel key={id} title={title} note={note}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {PARTY_FIELDS.filter((f) => !f.contractorOnly || id === 'contractor').map((f) => (
+              <Labeled key={f.key} label={f.label}>
+                <Inp
+                  value={party[f.key] || ''} placeholder={f.placeholder}
+                  onChange={(v) => edit((d) => {
+                    d.parties = d.parties || {};
+                    d.parties[id] = { ...(d.parties[id] || {}), [f.key]: v };
+                  })}
+                />
+              </Labeled>
+            ))}
+          </div>
+          {party.logoUrl ? (
+            <div className="mt-4 flex items-center gap-3 p-3 rounded-lg bg-slate-900/60 border border-slate-700">
+              <img src={party.logoUrl} alt="" className="h-9 w-auto"
+                   onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+              <span className="text-[11.5px] text-slate-500">
+                Preview. If nothing shows, the URL isn&rsquo;t publicly reachable.
+              </span>
+            </div>
+          ) : (
+            <p className="text-[11.5px] text-slate-500 mt-3">
+              No logo yet — the proposal falls back to a plain mark.
+            </p>
+          )}
+        </Panel>
+      );
+    })}
+  </div>
+);
+
+/* ================================================================ QUIVER */
+
+const QUIVER_SECTION_IDS = ['fundamentals', 'objections', 'product', 'process', 'tools'];
+
+const Quiver = ({ draft, edit }) => (
+  <Panel
+    title="Quiver — the training rack"
+    note="What every rep sees under The Beach → Quiver. Progress is tracked per rep. Add a resource and it appears for everyone immediately; nothing here is per-person."
+    onAdd={() => edit((d) => {
+      d.quiver = d.quiver || [];
+      d.quiver.push({
+        id: 'q_' + Date.now(), title: 'New resource', section: 'fundamentals',
+        url: '', blurb: '', duration: '', required: false
+      });
+    })}
+  >
+    {(!draft.quiver || draft.quiver.length === 0) ? (
+      <p className="text-[13px] text-slate-500 py-6 text-center">
+        Empty rack. Add your first training and it shows up for every rep.
+      </p>
+    ) : (
+      <div className="space-y-3">
+        {draft.quiver.map((q, i) => (
+          <div key={q.id || i} className="rounded-xl border border-slate-700 bg-slate-900/40 p-4">
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_170px_120px_auto] gap-3 items-end">
+              <Labeled label="Title">
+                <Inp value={q.title} onChange={(v) => edit((d) => { d.quiver[i].title = v; })} />
+              </Labeled>
+              <Labeled label="Section">
+                <select
+                  value={q.section || 'fundamentals'}
+                  onChange={(e) => edit((d) => { d.quiver[i].section = e.target.value; })}
+                  className="w-full px-2 py-1.5 rounded bg-slate-900/70 border border-slate-600 text-slate-100 text-[12.5px]"
+                >
+                  {QUIVER_SECTION_IDS.map((sid) => (
+                    <option key={sid} value={sid}>{sid.charAt(0).toUpperCase() + sid.slice(1)}</option>
+                  ))}
+                </select>
+              </Labeled>
+              <Labeled label="Duration">
+                <Inp value={q.duration || ''} placeholder="12 min"
+                     onChange={(v) => edit((d) => { d.quiver[i].duration = v; })} />
+              </Labeled>
+              <Del onClick={() => edit((d) => d.quiver.splice(i, 1))} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              <Labeled label="Link">
+                <Inp value={q.url || ''} placeholder="https://yourenergybest.com/become/…"
+                     onChange={(v) => edit((d) => { d.quiver[i].url = v; })} />
+              </Labeled>
+              <Labeled label="One-line description">
+                <Inp value={q.blurb || ''} onChange={(v) => edit((d) => { d.quiver[i].blurb = v; })} />
+              </Labeled>
+            </div>
+            <label className="flex items-center gap-2 mt-3 cursor-pointer">
+              <input type="checkbox" checked={!!q.required}
+                     onChange={(e) => edit((d) => { d.quiver[i].required = e.target.checked; })}
+                     className="w-4 h-4 accent-amber-400" />
+              <span className="text-[12.5px] text-slate-300">Required for every rep</span>
+            </label>
+          </div>
+        ))}
+      </div>
+    )}
+  </Panel>
+);
 
 /* ============================================================= BATTERIES */
 

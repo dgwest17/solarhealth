@@ -62,6 +62,22 @@ export const DEFAULT_LENDERS = [
 ];
 
 /**
+ * The two companies whose names appear on a proposal. Shipped EMPTY — a
+ * default company name is exactly the thing that turns up on a white-labelled
+ * proposal nobody meant to send.
+ */
+export const DEFAULT_PARTIES = {
+  seller:     { name: '', logoUrl: '', license: '', phone: '', email: '', website: '', tagline: '' },
+  contractor: { name: '', logoUrl: '', license: '', phone: '', email: '', website: '', tagline: '', submitTo: '' }
+};
+
+/**
+ * The Quiver catalogue. Empty by design: a training centre listing modules
+ * that do not exist teaches reps to ignore it.
+ */
+export const DEFAULT_QUIVER = [];
+
+/**
  * Solar panel options for the per-panel add-on. Empty by design — Dave said
  * per-panel pricing comes later, and an invented price is worse than a blank
  * that the UI reports as "price not set".
@@ -122,6 +138,11 @@ export const buildDefaultSettings = () => ({
   lenders: DEFAULT_LENDERS.map((l) => ({ ...l, terms: l.terms.map((t) => ({ ...t })) })),
   adders: ADDERS.map((a) => ({ ...a })),
   panels: DEFAULT_PANEL_OPTIONS.map((p) => ({ ...p })),
+  quiver: DEFAULT_QUIVER.map((q) => ({ ...q })),
+  parties: {
+    seller: { ...DEFAULT_PARTIES.seller },
+    contractor: { ...DEFAULT_PARTIES.contractor }
+  },
   programs: Object.fromEntries(
     Object.entries(INCENTIVE_PROGRAMS).map(([k, v]) => [k, { ...v }])
   ),
@@ -131,8 +152,8 @@ export const buildDefaultSettings = () => ({
 });
 
 /** Lists are replaced wholesale; objects are merged key by key. */
-const LIST_KEYS = ['batteries', 'lenders', 'adders', 'panels'];
-const MAP_KEYS = ['programs', 'rates'];
+const LIST_KEYS = ['batteries', 'lenders', 'adders', 'panels', 'quiver'];
+const MAP_KEYS = ['programs', 'rates', 'parties'];
 
 /**
  * Apply a stored patch over the live defaults.

@@ -5,8 +5,11 @@ import LoginScreen from './components/LoginScreen';
 import ResetPasswordScreen from './components/ResetPasswordScreen';
 import ClientDashboard from './components/ClientDashboard';
 import AdminSettings from './admin/AdminSettings';
+import TheBeach from './beach/TheBeach';
+import ProjectSteps from './project/ProjectSteps';
 import SolarCalculator from './SolarCalculator';
 import { ArrowLeft, RefreshCw, AlertCircle, FlaskConical, SlidersHorizontal } from 'lucide-react';
+import { Beach as BeachIcon } from './surf/SurfIcons';
 
 /**
  * Top-level router for the Monitoring side.
@@ -170,6 +173,33 @@ export default function App() {
     }
   }
 
+  // ---- Authenticated: getting-started steps for one client ----
+  if (view === 'project' && clientData) {
+    return (
+      <div>
+        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} />
+        <ProjectSteps
+          proposal={clientData.proposal || null}
+          contact={clientData.contact || null}
+          contactId={clientData.contact && clientData.contact.id}
+          projectId={clientData.project && clientData.project.id}
+          repName={user.email}
+          canEdit
+        />
+      </div>
+    );
+  }
+
+  // ---- Authenticated: The Beach (rep centre) ----
+  if (view === 'beach') {
+    return (
+      <div>
+        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} />
+        <TheBeach role={role} userEmail={user.email} onOpenClient={openClient} />
+      </div>
+    );
+  }
+
   // ---- Authenticated: admin defaults ----
   if (view === 'admin') {
     return (
@@ -237,6 +267,16 @@ function NavBar({ view, setView, userEmail, onSignOut, role }) {
               }`}
             >
               <FlaskConical size={15} /> Sandbox
+            </button>
+            <button
+              onClick={() => setView('beach')}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
+                view === 'beach'
+                  ? 'bg-amber-400 text-[#0a1628]'
+                  : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
+              }`}
+            >
+              <BeachIcon size={15} /> The Beach
             </button>
             {role === 'admin' && (
               <button

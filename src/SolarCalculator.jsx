@@ -322,7 +322,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         {/* BATTERY ANALYSIS TAB */}
         {activeTab === 'battery' && (
           <div className="print:hidden">
-            <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} extraUsage={extraUsage} measured={gbApplied ? gbProfile : null} calculations={calculations} rateOverride={batteryRateOverride} onRateOverrideChange={persistBatteryRateOverride} />
+            <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} extraUsage={extraUsage} measured={gbApplied ? gbProfile : null} calculations={calculations} rateOverride={batteryRateOverride} onRateOverrideChange={persistBatteryRateOverride} clientContext={clientContext} clientLabel={clientLabel} />
           </div>
         )}
 

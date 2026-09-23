@@ -29,7 +29,7 @@ import Nem3ValuePanel from './Nem3ValuePanel';
  * The overlay (built from the selected profile + the client's system data)
  * is computed once here and shared, so every section stays in sync.
  */
-const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null , consumptionProfile = null, onConsumptionProfileChange = null, calculations = null, rateOverride = null, onRateOverrideChange = null }) => {
+const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null , consumptionProfile = null, onConsumptionProfileChange = null, calculations = null, rateOverride = null, onRateOverrideChange = null, clientContext = null, clientLabel = '' }) => {
   const [profileKeyInternal, setProfileKeyInternal] = useState('evening_heavy');
   const profileKey = consumptionProfile || profileKeyInternal;
   const setProfileKey = (k) => { setProfileKeyInternal(k); if (onConsumptionProfileChange) onConsumptionProfileChange(k); };
@@ -108,6 +108,25 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
 
   const effExport = manualMode ? (Number(exportKwh) || 0) : overlay.annualDaytimeOverproduction;
   const effImport = manualMode ? (Number(importKwh) || 0) : overlay.annualNighttimeImport;
+
+  // THE SAME TWO FIGURES, WITH THE PLANNED LOAD ON TOP.
+  //
+  // Derived as a DELTA rather than read from the overlay's own with-added
+  // fields, because those are only right in overlay mode. In manual mode the
+  // rep has typed the figures, and with a Green Button upload they are
+  // measured — in both cases they describe the house as it is TODAY, so a
+  // planned EV still has to be layered onto them. The delta (surplus the load
+  // eats, import it adds) is a property of the load's shape and applies to
+  // whichever baseline is in force.
+  //
+  // Computed once here and passed down, because the previous attempt let each
+  // section work it out for itself and one of them silently got the base
+  // figures back — the cost-of-doing-nothing delta came out as exactly zero
+  // on every client.
+  const addedImportKwh = overlay.importAddedByLoad || 0;
+  const addedSurplusLostKwh = overlay.surplusLostToAddedLoad || 0;
+  const effExportWithAdded = Math.max(0, effExport - addedSurplusLostKwh);
+  const effImportWithAdded = effImport + addedImportKwh;
 
   // Energy Credits Recovered / year — the overlay-driven time-shift value (the
   // rate-arbitrage spread a battery claws back). Kept exactly as designed.
@@ -210,6 +229,8 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
           overlay={overlay}
           effExport={effExport}
           effImport={effImport}
+          effExportWithAdded={effExportWithAdded}
+          effImportWithAdded={effImportWithAdded}
           annualTrueUp={annualTrueUp}
           annualCheck={annualCheck}
           owesUtility={owesUtility}
@@ -236,6 +257,8 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
           annualTrueUp={annualTrueUp}
           calculations={calculations}
           annualExportKwh={effExport}
+          clientContext={clientContext}
+          clientLabel={clientLabel}
         />
       </Accordion>
     </div>

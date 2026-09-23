@@ -17,6 +17,7 @@
  * Save as PDF); the email body is a clean, email-safe summary. Admin only.
  */
 import { zohoFetch } from './_zoho.js';
+import { sendMail, mailConfigured } from './_mail.js';
 import { requireUser, sendError, assertCanWriteContact } from './_auth.js';
 
 const esc = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -53,43 +54,6 @@ function emailBody({ firstName, summary = {}, company }) {
   </div></body></html>`;
 }
 
-async function sendViaZeptoMail({ token, from, toEmail, toName, subject, html, attachmentB64 }) {
-  const resp = await fetch('https://api.zeptomail.com/v1.1/email', {
-    method: 'POST',
-    headers: { Authorization: `Zoho-enczapikey ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from: { address: from.address, name: from.name },
-      to: [{ email_address: { address: toEmail, name: toName || '' } }],
-      subject,
-      htmlbody: html,
-      attachments: [{ name: 'Solar-System-Analysis.html', mime_type: 'text/html', content: attachmentB64 }]
-    })
-  });
-  const json = await resp.json().catch(() => ({}));
-  if (!resp.ok) {
-    const msg = (json.error && (json.error.details?.[0]?.message || json.error.message)) || `status ${resp.status}`;
-    throw new Error(`ZeptoMail rejected the email: ${msg}`);
-  }
-  return { provider: 'zeptomail', id: json.request_id || null };
-}
-
-async function sendViaResend({ apiKey, fromRaw, toEmail, subject, html, attachmentB64 }) {
-  const resp = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from: fromRaw || 'SolarHealth <onboarding@resend.dev>',
-      to: [toEmail],
-      subject,
-      html,
-      attachments: [{ filename: 'Solar-System-Analysis.html', content: attachmentB64 }]
-    })
-  });
-  const json = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(`Resend rejected the email: ${json.message || resp.status}`);
-  return { provider: 'resend', id: json.id || null };
-}
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
@@ -103,9 +67,7 @@ export default async function handler(req, res) {
     // A rep can email a report to their own client, but not to someone else's.
     await assertCanWriteContact(user, contactId, zohoFetch);
 
-    const zeptoToken = process.env.ZEPTOMAIL_TOKEN;
-    const resendKey = process.env.RESEND_API_KEY;
-    if (!zeptoToken && !resendKey) {
+    if (!mailConfigured()) {
       return res.status(500).json({ error: 'No email provider configured (ZEPTOMAIL_TOKEN) — see EMAIL-SETUP.md. Report was NOT emailed.' });
     }
 
@@ -120,13 +82,21 @@ export default async function handler(req, res) {
     const html = emailBody({ firstName: contact.First_Name, summary, company });
     const attachmentB64 = Buffer.from(reportHtml, 'utf8').toString('base64');
 
-    let sent;
-    if (zeptoToken) {
-      if (!from.address) return res.status(500).json({ error: 'EMAIL_FROM must be set to an address on your ZeptoMail-verified domain.' });
-      sent = await sendViaZeptoMail({ token: zeptoToken, from, toEmail: contact.Email, toName: contact.Full_Name, subject, html, attachmentB64 });
-    } else {
-      sent = await sendViaResend({ apiKey: resendKey, fromRaw: process.env.EMAIL_FROM, toEmail: contact.Email, subject, html, attachmentB64 });
+    if (process.env.ZEPTOMAIL_TOKEN && !from.address) {
+      return res.status(500).json({ error: 'EMAIL_FROM must be set to an address on your ZeptoMail-verified domain.' });
     }
+    const sent = await sendMail({
+      to: contact.Email,
+      toName: contact.Full_Name,
+      subject,
+      html,
+      from,
+      attachments: [{
+        filename: 'Solar-System-Analysis.html',
+        contentB64: attachmentB64,
+        mimeType: 'text/html'
+      }]
+    });
 
     const today = new Date().toISOString().slice(0, 10);
     const fields = { Last_Report_Sent: today };

@@ -31,15 +31,18 @@
  *
  * Rendered by: src/battery/BatteryAnalysis.jsx
  */
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
-  ChevronDown, ShieldCheck, Home, RefreshCw, Check, Wallet, TrendingUp, Waves, Lock
+  ChevronDown, ShieldCheck, Home, RefreshCw, Check, Wallet, TrendingUp, Waves
 } from 'lucide-react';
 import { estimateBackupHours } from './BatteryModel';
 import { priceBattery, projectTwentyYear, solarAddOnCost } from '../pricing/loanPricing';
 import { getConnectionFeeForYear } from '../utils/rateData';
 import { NEM3_EXPORT_MIDDAY } from './BatteryDispatch';
 import { useSettings } from '../admin/SettingsContext';
+import { DeepSeas, Shell } from '../surf/SurfIcons';
+import { buildProposal, toZohoSummary, proposalSummaryLine, ZOHO_FIELDS } from '../proposal/proposalModel';
+import { apiFetch } from '../lib/supabaseClient';
 
 const money = (v) => (v < 0 ? '−$' : '$') + Math.abs(Math.round(Number(v) || 0)).toLocaleString();
 const money2 = (v) => (v < 0 ? '−$' : '$') + Math.abs(Number(v) || 0).toFixed(2);
@@ -50,7 +53,9 @@ const BatteryStabilization = ({
   inputs = {},
   annualTrueUp = 0,
   calculations = null,
-  annualExportKwh = 0
+  annualExportKwh = 0,
+  clientContext = null,
+  clientLabel = ''
 }) => {
   const { settings } = useSettings();
   const A = settings.assumptions;
@@ -83,6 +88,11 @@ const BatteryStabilization = ({
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [showCommission, setShowCommission] = useState(false);
 
+  // ---- saved proposal ----
+  const [savedProposal, setSavedProposal] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saveResult, setSaveResult] = useState(null);
+
   // ---- graph controls ----
   const [showBattery, setShowBattery] = useState(false);
   // Starts at the beginning of the timescale — the customer should walk the
@@ -98,6 +108,21 @@ const BatteryStabilization = ({
 
   const setAdder = (id, patch) =>
     setAdderSel((p) => ({ ...p, [id]: { ...(p[id] || { on: false }), ...patch } }));
+
+  // A proposal already on file is the rep's memory of the appointment. Load it
+  // so reopening the tool shows what was quoted rather than a fresh default.
+  useEffect(() => {
+    const contactId = clientContext && clientContext.contactId;
+    if (!contactId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await apiFetch(`/api/save-proposal?contactId=${encodeURIComponent(contactId)}`);
+        if (!cancelled && r && r.proposal) setSavedProposal(r.proposal);
+      } catch { /* a missing proposal is the normal case, not an error */ }
+    })();
+    return () => { cancelled = true; };
+  }, [clientContext && clientContext.contactId]);
 
   // -------------------------------------------------------------------------
   // What the utility costs today. For a solar client the residual bill is the
@@ -190,6 +215,57 @@ const BatteryStabilization = ({
     nemCliffMonthlyAdder: cliff ? cliff.monthlyAdder : 0
   }), [monthlyBill, connectionFee, monthlySavings, activePayment, activeTerm, escalation,
        HORIZON, creditsOffsetFees, price.rebate, applyRebateToLoan, mode, seaLevel, cliff]);
+
+  // -------------------------------------------------------------------------
+  // SAVE PROPOSAL — the record of what this customer was actually quoted.
+  // Builds from the live state, so what is stored is literally what is on
+  // screen rather than a re-derivation that could drift from it.
+  // -------------------------------------------------------------------------
+  const saveProposal = async () => {
+    const contactId = clientContext && clientContext.contactId;
+    if (!contactId) {
+      setSaveResult({ ok: false, error: 'Open this from a client record to save a proposal.' });
+      return;
+    }
+    setSaving(true); setSaveResult(null);
+    try {
+      const proposal = buildProposal({
+        price, projection: proj, inputs,
+        battery: { kwhPerBattery, count: batteryCount, totalKwh },
+        financing: {
+          mode,
+          lenderId: lender && lender.id,
+          lenderName: lender && lender.name,
+          termYears, apr: activeTermCard.apr,
+          escalator, leasePayment,
+          prepaymentPenalty: lender ? !!lender.prepaymentPenalty : false
+        },
+        bill: { monthlyBill, connectionFee, monthlySavings, escalation },
+        meta: {
+          contactId,
+          projectId: clientContext.projectId || null,
+          clientName: clientLabel || null,
+          supersedes: savedProposal ? savedProposal.id : null
+        }
+      });
+
+      const r = await apiFetch('/api/save-proposal', {
+        method: 'POST',
+        body: JSON.stringify({
+          contactId,
+          projectId: clientContext.projectId || null,
+          proposal,
+          zohoSummary: toZohoSummary(proposal)
+        })
+      });
+      setSavedProposal(proposal);
+      setSaveResult(r);
+    } catch (e) {
+      setSaveResult({ ok: false, error: e.message });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const rows = proj.rows;
   const at = rows[Math.min(rows.length, Math.max(1, sliderYear)) - 1];
@@ -845,7 +921,7 @@ const BatteryStabilization = ({
               </div>
             </div>
 
-            {/* ---- REP CONFIGURATION: commission ----
+            {/* ---- DEEP SEAS: rep-only commission ----
                 Nested one level deeper than Breakdown and closed by default,
                 because Breakdown itself gets opened in front of customers to
                 justify the price stack. This must not be one click away from
@@ -856,12 +932,77 @@ const BatteryStabilization = ({
                 className="w-full flex items-center justify-between py-2 text-left hover:bg-white/5 rounded-lg px-2 transition-colors"
               >
                 <span className="text-[13px] font-semibold text-slate-400 flex items-center gap-2">
-                  <Lock size={13} /> Configuration
+                  <DeepSeas size={13} /> Deep Seas
                 </span>
                 <ChevronDown size={16} className={`text-slate-500 transition-transform ${showCommission ? 'rotate-180' : ''}`} />
               </button>
 
               {showCommission && (
+                <>
+                {/* ---- Save Proposal: the thing a rep comes back for ---- */}
+                <div className="mt-3 rounded-xl border border-cyan-400/30 bg-cyan-500/5 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <div className="text-[11px] uppercase tracking-widest text-cyan-300 flex items-center gap-1.5">
+                        <Shell size={13} /> Proposal
+                      </div>
+                      {savedProposal ? (
+                        <>
+                          <div className="text-[13px] text-slate-200 mt-1 font-mono">
+                            {proposalSummaryLine(savedProposal)}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            Saved {new Date(savedProposal.createdAt).toLocaleString()} · stage {savedProposal.stage}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-[12.5px] text-slate-400 mt-1 max-w-[44ch]">
+                          Save what you quoted so you — and they — can come back to it.
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={saveProposal}
+                      disabled={saving}
+                      className={`px-5 py-2.5 rounded-lg text-[13px] font-bold flex items-center gap-2 ${
+                        saving ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                               : 'bg-cyan-500 text-slate-900 hover:bg-cyan-400'
+                      }`}
+                    >
+                      <Shell size={15} />
+                      {saving ? 'Saving…' : savedProposal ? 'Save new version' : 'Save Proposal Configuration'}
+                    </button>
+                  </div>
+
+                  {saveResult && (
+                    <div className="mt-3 text-[12px]">
+                      {saveResult.ok ? (
+                        <div className="text-emerald-300">
+                          Saved{saveResult.zoho && saveResult.zoho.ok ? ' · moved to Met in the CRM' : ''}.
+                          {saveResult.missingZohoFields && saveResult.missingZohoFields.length > 0 && (
+                            <div className="text-amber-300 mt-1">
+                              These Zoho fields don&rsquo;t exist yet, so they weren&rsquo;t written:{' '}
+                              <span className="font-mono">{saveResult.missingZohoFields.join(', ')}</span>.
+                              The full proposal is saved either way.
+                            </div>
+                          )}
+                          {saveResult.supabaseError && (
+                            <div className="text-amber-300 mt-1">{saveResult.supabaseError}</div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-red-300">{saveResult.error || 'Could not save.'}</div>
+                      )}
+                    </div>
+                  )}
+
+                  {!clientContext && (
+                    <p className="text-[11px] text-slate-500 mt-2">
+                      Sandbox mode — open a client to save a proposal against their record.
+                    </p>
+                  )}
+                </div>
+
                 <div className="mt-3 rounded-xl border border-violet-400/30 bg-violet-500/5 p-4">
                   <div className="flex flex-wrap items-baseline justify-between gap-4 mb-3">
                     <div>
@@ -925,6 +1066,7 @@ const BatteryStabilization = ({
                     </p>
                   </div>
                 </div>
+                </>
               )}
             </div>
 

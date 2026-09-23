@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { SettingsProvider } from './admin/SettingsContext';
 import './index.css';
 
 // Error Boundary that displays errors on screen (perfect for iPad!)
@@ -189,7 +190,9 @@ window.addEventListener('unhandledrejection', (event) => {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <SettingsProvider>
+        <App />
+      </SettingsProvider>
     </ErrorBoundary>
   </React.StrictMode>,
 );
