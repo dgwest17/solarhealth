@@ -8,8 +8,8 @@
  *
  * Read-only.
  */
-import { zohoFetch } from './_zoho.js';
-import { requireUser, sendError } from './_auth.js';
+import { zohoFetch } from '../_zoho.js';
+import { requireUser, sendError } from '../_auth.js';
 
 // Map Zoho Utility_Provider picklist -> audit engine utility keys
 const UTILITY_MAP = {

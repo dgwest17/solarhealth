@@ -16,9 +16,9 @@
  * The full report travels as an .html attachment (opens in any browser →
  * Save as PDF); the email body is a clean, email-safe summary. Admin only.
  */
-import { zohoFetch } from './_zoho.js';
-import { sendMail, mailConfigured } from './_mail.js';
-import { requireUser, sendError, assertCanWriteContact } from './_auth.js';
+import { zohoFetch } from '../_zoho.js';
+import { sendMail, mailConfigured } from '../_mail.js';
+import { requireUser, sendError, assertCanWriteContact } from '../_auth.js';
 
 const esc = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const money = (v) => '$' + Math.round(Math.abs(Number(v) || 0)).toLocaleString();

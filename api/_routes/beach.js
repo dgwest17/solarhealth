@@ -21,8 +21,8 @@
  * Commission comes from the saved proposal, never re-derived. See
  * src/beach/Treasure.jsx for why.
  */
-import { zohoFetch } from './_zoho.js';
-import { requireUser, sendError } from './_auth.js';
+import { zohoFetch } from '../_zoho.js';
+import { requireUser, sendError } from '../_auth.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;

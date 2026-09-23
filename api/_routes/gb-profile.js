@@ -12,8 +12,8 @@
  *   - client: only the contact whose Zoho Email matches their login email
  *   - rep: their test client, or contacts they created (Created_By_Rep)
  */
-import { zohoFetch } from './_zoho.js';
-import { requireUser, sendError } from './_auth.js';
+import { zohoFetch } from '../_zoho.js';
+import { requireUser, sendError } from '../_auth.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;

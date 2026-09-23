@@ -22,14 +22,14 @@
  * Submission addresses live on the contractor party in settings, so a change
  * of installer is a settings edit rather than a deploy.
  */
-import { zohoFetch } from './_zoho.js';
-import { requireUser, sendError } from './_auth.js';
-import { sendMail, tableEmail, mailConfigured } from './_mail.js';
-import { buildIntakeWorkbook } from './_intakeWorkbook.js';
+import { zohoFetch } from '../_zoho.js';
+import { requireUser, sendError } from '../_auth.js';
+import { sendMail, tableEmail, mailConfigured } from '../_mail.js';
+import { buildIntakeWorkbook } from '../_intakeWorkbook.js';
 import { readObject } from './upload-doc.js';
 import {
   SERVICE_LINES, REQUIRED_DOCUMENTS, computeIntakeCosts, validateIntake
-} from '../src/project/intakeSchema.js';
+} from '../../src/project/intakeSchema.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;

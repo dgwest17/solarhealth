@@ -24,8 +24,8 @@
  * Writes are rep/admin only, through the shared assertCanWriteContact guard —
  * the same one every other write endpoint uses, so permissions cannot drift.
  */
-import { zohoFetch } from './_zoho.js';
-import { requireUser, sendError, assertCanWriteContact } from './_auth.js';
+import { zohoFetch } from '../_zoho.js';
+import { requireUser, sendError, assertCanWriteContact } from '../_auth.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;

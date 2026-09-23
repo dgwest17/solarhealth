@@ -19,8 +19,8 @@
  * ONE-TIME SETUP, in the Supabase dashboard:
  *   Storage → New bucket → name: project-docs → Public: OFF
  */
-import { zohoFetch } from './_zoho.js';
-import { requireUser, sendError } from './_auth.js';
+import { zohoFetch } from '../_zoho.js';
+import { requireUser, sendError } from '../_auth.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;

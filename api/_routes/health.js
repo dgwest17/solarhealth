@@ -6,8 +6,8 @@
  * NEVER returns secret values — only booleans and error messages. This is the
  * fast way to find a 500 cause (missing var, wrong data center, bad token).
  */
-import { getZohoAccessToken, zohoFetch } from './_zoho.js';
-import { requireUser, sendError } from './_auth.js';
+import { getZohoAccessToken, zohoFetch } from '../_zoho.js';
+import { requireUser, sendError } from '../_auth.js';
 
 export default async function handler(req, res) {
   try {

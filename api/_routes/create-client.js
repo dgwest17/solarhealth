@@ -3,8 +3,8 @@
  * Creates a new Contact + linked Solar_Project from the sandbox audit.
  * Admin only in v1 (reps gain this with ownership stamping in write-back B).
  */
-import { zohoFetch } from './_zoho.js';
-import { requireUser, sendError } from './_auth.js';
+import { zohoFetch } from '../_zoho.js';
+import { requireUser, sendError } from '../_auth.js';
 
 const UTILITY_TO_ZOHO = { SDGE: 'SDG&E', PGE: 'PG&E', SCE: 'SCE', SMUD: 'SMUD' };
 const NEM_TO_ZOHO = { NEM1: 'NEM 1.0', NEM2: 'NEM 2.0', NEM3: 'NEM 3.0' };

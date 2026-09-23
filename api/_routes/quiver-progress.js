@@ -13,7 +13,7 @@
  * write on their behalf, because ticking someone else's box is a lie about
  * what they know.
  */
-import { requireUser, sendError } from './_auth.js';
+import { requireUser, sendError } from '../_auth.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;

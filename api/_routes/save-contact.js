@@ -2,8 +2,8 @@
  * POST /api/save-contact — update a Contact's basic info in Zoho.
  * Admin only. Whitelisted fields only (name / contact info / address / newsletter).
  */
-import { zohoFetch } from './_zoho.js';
-import { requireUser, sendError, assertCanWriteContact } from './_auth.js';
+import { zohoFetch } from '../_zoho.js';
+import { requireUser, sendError, assertCanWriteContact } from '../_auth.js';
 
 function mapContact(c) {
   const out = {};

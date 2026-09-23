@@ -16,8 +16,8 @@
  * (Battery_Manufacturer, Inverter_Type) are matched against Zoho's accepted
  * values before writing so an unknown value never errors the whole update.
  */
-import { zohoFetch } from './_zoho.js';
-import { requireUser, sendError, assertCanWriteContact } from './_auth.js';
+import { zohoFetch } from '../_zoho.js';
+import { requireUser, sendError, assertCanWriteContact } from '../_auth.js';
 
 const UTILITY_TO_ZOHO = { SDGE: 'SDG&E', PGE: 'PG&E', SCE: 'SCE', SMUD: 'SMUD' };
 const NEM_TO_ZOHO = { NEM1: 'NEM 1.0', NEM2: 'NEM 2.0', NEM3: 'NEM 3.0' };

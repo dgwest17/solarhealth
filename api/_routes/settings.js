@@ -22,7 +22,7 @@
  * returns an empty patch and the app runs on its shipped defaults. Only a
  * write surfaces the problem, because only a write is actually blocked by it.
  */
-import { requireUser, sendError } from './_auth.js';
+import { requireUser, sendError } from '../_auth.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;

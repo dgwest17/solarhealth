@@ -4,8 +4,8 @@
  * Solar_Project joined and financial sort fields computed server-side.
  * Read-only.
  */
-import { zohoFetch } from './_zoho.js';
-import { requireUser, sendError } from './_auth.js';
+import { zohoFetch } from '../_zoho.js';
+import { requireUser, sendError } from '../_auth.js';
 
 const CONTACT_FIELDS = [
   'id', 'First_Name', 'Last_Name', 'Full_Name', 'Email', 'Phone',
