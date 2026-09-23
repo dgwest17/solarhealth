@@ -362,10 +362,29 @@ export function buildProposal({
 /**
  * The subset written to Zoho — the figures worth sorting and reporting on.
  *
- * Deliberately small. Six of these already have fields on Solar_Projects;
- * the rest are the new ones Dave needs to create, listed in ZOHO_FIELDS below
- * so the requirement is readable in one place rather than scattered through
- * the API handler.
+ * TWO SETS OF FINANCE FIELDS, AND WHY THIS PAYLOAD TOUCHES ONLY ONE.
+ *
+ * A Solar_Project carries two completely different deals:
+ *
+ *   THE AUDIT    what the customer already has. Purchase_Type, Contract_Value,
+ *                Term, Escalator_or_Interest, Monthly_Payment,
+ *                Finance_Provider. This is the existing system's paperwork —
+ *                the loan they signed years ago, the lender they pay every
+ *                month. It is the entire basis of the audit: every "here is
+ *                what you are on now" figure reads from it.
+ *
+ *   THE PROPOSAL what we are selling them. Same six concepts, different deal,
+ *                stored in the Proposal_* fields below.
+ *
+ * An earlier version of this function wrote the proposal into the audit's six
+ * fields. Saving a proposal therefore destroyed the record of the customer's
+ * existing loan — silently, unrecoverably, and precisely for the customers
+ * furthest along the pipeline. Nothing downstream could detect it, because the
+ * overwritten values were perfectly plausible.
+ *
+ * So: this payload never writes the audit six. They are read-only to the
+ * proposal path. If the existing-system figures need correcting, that is an
+ * audit edit and belongs on its own path, where it is visible as one.
  */
 export function toZohoSummary(proposal) {
   if (!proposal) return null;
@@ -374,17 +393,24 @@ export function toZohoSummary(proposal) {
   const s = proposal.savings || {};
 
   return {
-    // --- existing fields ---
-    Purchase_Type: f.purchaseType === 'loan' ? 'Loan'
+    // --- the proposal's own finance terms ---
+    // Never Purchase_Type / Contract_Value / Term / Escalator_or_Interest /
+    // Monthly_Payment / Finance_Provider: those six are the existing system.
+    Proposal_Purchase_Type: f.purchaseType === 'loan' ? 'Loan'
       : f.purchaseType === 'cash' ? 'Cash'
       : f.purchaseType === 'lease' ? 'Lease' : 'Other',
-    Contract_Value: p.contractWithAdders ?? null,
-    Term: f.termYears || null,
-    Escalator_or_Interest: f.purchaseType === 'lease'
+    Proposal_Contract_Value: p.contractWithAdders ?? null,
+    Proposal_Term: f.termYears || null,
+    Proposal_Rate: f.purchaseType === 'lease'
       ? (f.escalatorPct ?? null)
       : (f.apr != null ? Number((f.apr * 100).toFixed(2)) : null),
-    Monthly_Payment: f.monthlyPayment ? Math.round(f.monthlyPayment) : null,
-    Finance_Provider: f.lenderName || null,
+    // Currency with decimals, not the audit field's integer: a $98.63 payment
+    // rounded to $99 is wrong on every statement the customer ever compares
+    // it against.
+    Proposal_Monthly_Payment: f.monthlyPayment != null
+      ? Number(Number(f.monthlyPayment).toFixed(2))
+      : null,
+    Proposal_Lender: f.lenderName || null,
 
     // --- new fields (see ZOHO_FIELDS) ---
     Sales_Stage: proposal.stage,
@@ -405,11 +431,28 @@ export function toZohoSummary(proposal) {
  * field is missing when a save partially fails, instead of a generic error.
  */
 export const ZOHO_FIELDS = {
-  existing: [
+  /**
+   * The existing system's finance terms. READ ONLY from the proposal path —
+   * these describe the loan the customer already has, and the audit is built
+   * entirely on them. Nothing in this app writes to them.
+   */
+  existingSystemReadOnly: [
     'Purchase_Type', 'Contract_Value', 'Term',
     'Escalator_or_Interest', 'Monthly_Payment', 'Finance_Provider'
   ],
   toCreate: [
+    // --- the proposal's finance terms, parallel to the audit six above ---
+    { api: 'Proposal_Purchase_Type', type: 'picklist',
+      values: ['Loan', 'Cash', 'Lease', 'Other'] },
+    { api: 'Proposal_Contract_Value', type: 'currency' },
+    { api: 'Proposal_Term', type: 'integer', note: 'Years: 20, 15, 12 or 8.' },
+    { api: 'Proposal_Rate', type: 'percent',
+      note: 'APR for a loan; annual escalator for a lease.' },
+    { api: 'Proposal_Monthly_Payment', type: 'currency', decimals: 2,
+      note: 'Two decimals. The audit’s Monthly_Payment is an integer, which '
+          + 'is why this is a separate field rather than a reused one.' },
+    { api: 'Proposal_Lender', type: 'text' },
+
     { api: 'Sales_Stage', type: 'picklist',
       values: [SALES_STAGE.NEW, SALES_STAGE.MET, SALES_STAGE.CONVERTED, SALES_STAGE.INSTALLED],
       note: 'Same wording as Lead_Status on Leads, so the two pipelines report together.' },

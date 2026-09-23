@@ -62,13 +62,18 @@ const summarise = (proposal, project) => {
   const p = (proposal && proposal.pricing) || {};
   const money = (v) => '$' + Math.round(Number(v) || 0).toLocaleString();
   const parts = [];
-  const type = f.purchaseType || (project && project.Purchase_Type) || null;
+  // Fall back to the Proposal_* fields, never to Purchase_Type / Term /
+  // Contract_Value / Monthly_Payment. Those six describe the system the
+  // customer ALREADY has; reading them here would print their existing loan
+  // on a row labelled as this deal, which is the most believable kind of
+  // wrong number — nobody checks a figure that looks right.
+  const type = f.purchaseType || (project && project.Proposal_Purchase_Type) || null;
   if (type) parts.push(type.charAt(0).toUpperCase() + type.slice(1));
-  const term = f.termYears || (project && project.Term);
+  const term = f.termYears || (project && project.Proposal_Term);
   if (term) parts.push(`${term} yr`);
-  const cv = p.contractWithAdders ?? (project && project.Contract_Value);
+  const cv = p.contractWithAdders ?? (project && project.Proposal_Contract_Value);
   if (cv) parts.push(money(cv));
-  const pay = f.monthlyPayment ?? (project && project.Monthly_Payment);
+  const pay = f.monthlyPayment ?? (project && project.Proposal_Monthly_Payment);
   if (pay) parts.push(`${money(pay)}/mo`);
   return parts.join(' · ');
 };
@@ -115,14 +120,19 @@ export default async function handler(req, res) {
     let projects = [];
     if (ids.length) {
       const inList = ids.map((i) => `'${i}'`).join(',');
-      const fields = [
-        'id', 'Contact', 'Project_Status', 'Purchase_Type', 'Contract_Value',
-        'Term', 'Monthly_Payment', 'Finance_Provider'
+      // The Beach shows the DEAL, so it selects the Proposal_* fields. The
+      // audit's Purchase_Type / Contract_Value / Term / Monthly_Payment are
+      // the customer's existing system and have no business on a pipeline row.
+      const fields = ['id', 'Contact', 'Project_Status'];
+      // None of the Proposal_* fields exist until they are created in Zoho.
+      // Ask for them, and fall back to the bare row if Zoho refuses, rather
+      // than losing the whole query and blanking The Beach.
+      const optional = [
+        'Sales_Stage', 'Proposal_Purchase_Type', 'Proposal_Contract_Value',
+        'Proposal_Term', 'Proposal_Monthly_Payment', 'Proposal_Lender'
       ];
-      // Sales_Stage may not exist yet. Ask for it, and drop it if Zoho
-      // refuses rather than losing the whole query.
       for (const withStage of [true, false]) {
-        const sel = withStage ? [...fields, 'Sales_Stage'] : fields;
+        const sel = withStage ? [...fields, ...optional] : fields;
         try {
           const r = await zohoFetch('/crm/v2/coql', {
             method: 'POST',
