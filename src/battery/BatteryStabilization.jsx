@@ -31,7 +31,7 @@
  *
  * Rendered by: src/battery/BatteryAnalysis.jsx
  */
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   ChevronDown, ShieldCheck, Home, RefreshCw, Check, Wallet, TrendingUp, Waves
 } from 'lucide-react';
@@ -43,6 +43,7 @@ import { useSettings } from '../admin/SettingsContext';
 import { DeepSeas, Shell } from '../surf/SurfIcons';
 import { buildProposal, toZohoSummary, proposalSummaryLine, ZOHO_FIELDS } from '../proposal/proposalModel';
 import { apiFetch } from '../lib/supabaseClient';
+import ProposalBar from '../proposal/ProposalBar';
 
 const money = (v) => (v < 0 ? '−$' : '$') + Math.abs(Math.round(Number(v) || 0)).toLocaleString();
 const money2 = (v) => (v < 0 ? '−$' : '$') + Math.abs(Number(v) || 0).toFixed(2);
@@ -221,6 +222,45 @@ const BatteryStabilization = ({
   // Builds from the live state, so what is stored is literally what is on
   // screen rather than a re-derivation that could drift from it.
   // -------------------------------------------------------------------------
+  /**
+   * Build a proposal from whatever is on screen right now.
+   *
+   * ONE BUILDER, two consumers: the save path and the "Open proposal" preview.
+   * Two builders would let a rep preview one thing and save another, which is
+   * the worst possible version of this feature — the divergence would only
+   * show up after the customer had already seen the wrong page.
+   *
+   * Returns null without a client, because a proposal with no contact has
+   * nowhere to be saved and nobody to be addressed to.
+   */
+  const buildCurrentProposal = useCallback(() => {
+    const contactId = clientContext && clientContext.contactId;
+    if (!contactId) return null;
+    return buildProposal({
+      price, projection: proj, inputs,
+      battery: { kwhPerBattery, count: batteryCount, totalKwh },
+      financing: {
+        mode,
+        lenderId: lender && lender.id,
+        lenderName: lender && lender.name,
+        termYears, apr: activeTermCard.apr,
+        escalator, leasePayment,
+        prepaymentPenalty: lender ? !!lender.prepaymentPenalty : false
+      },
+      bill: { monthlyBill, connectionFee, monthlySavings, escalation },
+      meta: {
+        contactId,
+        projectId: clientContext.projectId || null,
+        clientName: clientLabel || null,
+        supersedes: savedProposal ? savedProposal.id : null
+      }
+    });
+  }, [
+    clientContext, price, proj, inputs, kwhPerBattery, batteryCount, totalKwh,
+    mode, lender, termYears, activeTermCard, escalator, leasePayment,
+    monthlyBill, connectionFee, monthlySavings, escalation, clientLabel, savedProposal
+  ]);
+
   const saveProposal = async () => {
     const contactId = clientContext && clientContext.contactId;
     if (!contactId) {
@@ -229,25 +269,7 @@ const BatteryStabilization = ({
     }
     setSaving(true); setSaveResult(null);
     try {
-      const proposal = buildProposal({
-        price, projection: proj, inputs,
-        battery: { kwhPerBattery, count: batteryCount, totalKwh },
-        financing: {
-          mode,
-          lenderId: lender && lender.id,
-          lenderName: lender && lender.name,
-          termYears, apr: activeTermCard.apr,
-          escalator, leasePayment,
-          prepaymentPenalty: lender ? !!lender.prepaymentPenalty : false
-        },
-        bill: { monthlyBill, connectionFee, monthlySavings, escalation },
-        meta: {
-          contactId,
-          projectId: clientContext.projectId || null,
-          clientName: clientLabel || null,
-          supersedes: savedProposal ? savedProposal.id : null
-        }
-      });
+      const proposal = buildCurrentProposal();
 
       const r = await apiFetch('/api/save-proposal', {
         method: 'POST',
@@ -319,8 +341,28 @@ const BatteryStabilization = ({
       valueAt: (r) => toView(r.loanMonthly) }
   ];
 
+  const liveProposal = useMemo(
+    () => (clientContext && clientContext.contactId ? buildCurrentProposal() : null),
+    [buildCurrentProposal, clientContext]
+  );
+
   return (
     <div className="space-y-5">
+      {/* The proposal strip, at the top where a rep is already looking. The
+          same component renders again inside Deep Seas with the full result
+          detail; this one is the reachable version, not a second copy. */}
+      {clientContext && clientContext.contactId && (
+        <ProposalBar
+          compact
+          liveProposal={liveProposal}
+          savedProposal={savedProposal}
+          saving={saving}
+          saveResult={saveResult}
+          onSave={saveProposal}
+          clientContext={clientContext}
+        />
+      )}
+
       {/* ================= 1. $0 DOWN + how it's bought ================= */}
       <div className="rounded-2xl border border-emerald-400/40 bg-gradient-to-br from-emerald-900/20 to-slate-900/60 p-6">
         <div className="flex flex-wrap items-end justify-between gap-6">
@@ -939,68 +981,20 @@ const BatteryStabilization = ({
 
               {showCommission && (
                 <>
-                {/* ---- Save Proposal: the thing a rep comes back for ---- */}
-                <div className="mt-3 rounded-xl border border-cyan-400/30 bg-cyan-500/5 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div>
-                      <div className="text-[11px] uppercase tracking-widest text-cyan-300 flex items-center gap-1.5">
-                        <Shell size={13} /> Proposal
-                      </div>
-                      {savedProposal ? (
-                        <>
-                          <div className="text-[13px] text-slate-200 mt-1 font-mono">
-                            {proposalSummaryLine(savedProposal)}
-                          </div>
-                          <div className="text-[11px] text-slate-500 mt-0.5">
-                            Saved {new Date(savedProposal.createdAt).toLocaleString()} · stage {savedProposal.stage}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="text-[12.5px] text-slate-400 mt-1 max-w-[44ch]">
-                          Save what you quoted so you — and they — can come back to it.
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={saveProposal}
-                      disabled={saving}
-                      className={`px-5 py-2.5 rounded-lg text-[13px] font-bold flex items-center gap-2 ${
-                        saving ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                               : 'bg-cyan-500 text-slate-900 hover:bg-cyan-400'
-                      }`}
-                    >
-                      <Shell size={15} />
-                      {saving ? 'Saving…' : savedProposal ? 'Save new version' : 'Save Proposal Configuration'}
-                    </button>
-                  </div>
-
-                  {saveResult && (
-                    <div className="mt-3 text-[12px]">
-                      {saveResult.ok ? (
-                        <div className="text-emerald-300">
-                          Saved{saveResult.zoho && saveResult.zoho.ok ? ' · moved to Met in the CRM' : ''}.
-                          {saveResult.missingZohoFields && saveResult.missingZohoFields.length > 0 && (
-                            <div className="text-amber-300 mt-1">
-                              These Zoho fields don&rsquo;t exist yet, so they weren&rsquo;t written:{' '}
-                              <span className="font-mono">{saveResult.missingZohoFields.join(', ')}</span>.
-                              The full proposal is saved either way.
-                            </div>
-                          )}
-                          {saveResult.supabaseError && (
-                            <div className="text-amber-300 mt-1">{saveResult.supabaseError}</div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-red-300">{saveResult.error || 'Could not save.'}</div>
-                      )}
-                    </div>
-                  )}
-
-                  {!clientContext && (
-                    <p className="text-[11px] text-slate-500 mt-2">
-                      Sandbox mode — open a client to save a proposal against their record.
-                    </p>
-                  )}
+                {/* ---- The proposal, again. Same component as the strip at
+                     the top of this section: one save path, one set of result
+                     messages, no chance of the two blocks disagreeing about
+                     what happened. This one is not compact, so it carries the
+                     Zoho warnings and the sandbox note. ---- */}
+                <div className="mt-3">
+                  <ProposalBar
+                    liveProposal={liveProposal}
+                    savedProposal={savedProposal}
+                    saving={saving}
+                    saveResult={saveResult}
+                    onSave={saveProposal}
+                    clientContext={clientContext}
+                  />
                 </div>
 
                 <div className="mt-3 rounded-xl border border-violet-400/30 bg-violet-500/5 p-4">

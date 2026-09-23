@@ -1,6 +1,12 @@
 /**
  * POST /api/save-contact — update a Contact's basic info in Zoho.
- * Admin only. Whitelisted fields only (name / contact info / address / newsletter).
+ * Whitelisted fields only (name / contact info / address / newsletter).
+ *
+ * NOT admin-only, despite what this header said until now: the handler calls
+ * assertCanWriteContact, which lets a rep edit a client they own. The comment
+ * was left over from an earlier version and described a restriction the code
+ * had already stopped enforcing — which is worse than no comment, because it
+ * is the kind of thing someone trusts instead of reading the code.
  */
 import { zohoFetch } from '../_zoho.js';
 import { requireUser, sendError, assertCanWriteContact } from '../_auth.js';
