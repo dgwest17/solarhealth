@@ -6,10 +6,9 @@ import ResetPasswordScreen from './components/ResetPasswordScreen';
 import ClientDashboard from './components/ClientDashboard';
 import AdminSettings from './admin/AdminSettings';
 import TheBeach from './beach/TheBeach';
-import BigWave from './proposal/BigWave';
 import SolarCalculator from './SolarCalculator';
 import { ArrowLeft, RefreshCw, AlertCircle, FlaskConical, SlidersHorizontal } from 'lucide-react';
-import { Beach as BeachIcon, Swell as SwellIcon } from './surf/SurfIcons';
+import { Beach as BeachIcon } from './surf/SurfIcons';
 
 /**
  * Top-level router for the Monitoring side.
@@ -30,7 +29,7 @@ export default function App() {
   const [clientError, setClientError] = useState('');
   const [role, setRole] = useState('client');
   /**
-   * 'clients' | 'audit' | 'bigwave' | 'sandbox' | 'beach' | 'admin'
+   * 'clients' | 'audit' | 'sandbox' | 'beach' | 'admin'
    *
    * The open client's audit is a VIEW, not a mode that pre-empts the others.
    * It used to be the latter: `if (selectedId) return <audit>` sat above every
@@ -38,9 +37,10 @@ export default function App() {
    * ProjectSteps was unreachable — its view existed, nothing navigated to it,
    * and navigating to it would not have worked anyway.
    *
-   * Selecting a client and looking at one of their screens are now separate
-   * pieces of state, which is what lets Big Wave read the same clientData the
-   * audit is using.
+   * Big Wave is a TAB inside the audit rather than a view here, because it is
+   * about one client like every other tab in there, and a top-level tab that
+   * only works when a client happens to be open reads as broken the first
+   * time somebody clicks it from the dashboard.
    */
   const [view, setView] = useState('clients');
 
@@ -181,13 +181,11 @@ export default function App() {
               name: clientData.contact.fullName || clientData.contact.email || '',
               contact: clientData.contact,
               address: [clientData.contact.street, clientData.contact.city, clientData.contact.state, clientData.contact.zip].filter(Boolean).join(', '),
-              // "Open proposal" hands off to the Big Wave tab rather than
-              // stacking an overlay on the audit. Passed through clientContext
-              // because that object is already the carrier for everything
-              // client-scoped — threading a new prop down through
-              // SolarCalculator and BatteryAnalysis to reach one button would
-              // be three components' worth of plumbing for nothing.
-              onOpenProposal: () => setView('bigwave')
+              // Big Wave is a tab inside the audit now, so "Open proposal"
+              // is handled by SolarCalculator switching its own tab. Nothing
+              // to route at this level.
+              project: clientData.project || null,
+              repEmail: user.email
             } : null}
           />
         </div>
@@ -195,20 +193,6 @@ export default function App() {
     }
   }
 
-  // ---- Authenticated: Big Wave (the deal — proposal, steps, client details) ----
-  if (view === 'bigwave') {
-    return (
-      <div>
-        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} hasClient={!!clientData} />
-        <BigWave
-          clientData={clientData}
-          role={role}
-          userEmail={user.email}
-          onBackToClients={backToDashboard}
-        />
-      </div>
-    );
-  }
 
   // ---- Authenticated: The Beach (rep centre) ----
   if (view === 'beach') {
@@ -288,32 +272,21 @@ function NavBar({ view, setView, userEmail, onSignOut, role, hasClient = false }
             >
               <FlaskConical size={15} /> Sandbox
             </button>
-            {/* Big Wave sits next to the audit it follows from. Shown only
-                with a client open, because a proposal with no customer is not
-                a thing and a tab that is always dead is worse than no tab. */}
+            {/* Back to the open client's audit. Big Wave is a tab in there
+                rather than a top-level view: it is about one client, and a
+                nav tab that only works when a client happens to be open reads
+                as broken the first time it is clicked from the dashboard. */}
             {hasClient && (
-              <>
-                <button
-                  onClick={() => setView('audit')}
-                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                    view === 'audit'
-                      ? 'bg-amber-400 text-[#0a1628]'
-                      : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
-                  }`}
-                >
-                  Audit
-                </button>
-                <button
-                  onClick={() => setView('bigwave')}
-                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
-                    view === 'bigwave'
-                      ? 'bg-amber-400 text-[#0a1628]'
-                      : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
-                  }`}
-                >
-                  <SwellIcon size={15} /> Big Wave
-                </button>
-              </>
+              <button
+                onClick={() => setView('audit')}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                  view === 'audit'
+                    ? 'bg-amber-400 text-[#0a1628]'
+                    : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
+                }`}
+              >
+                Audit
+              </button>
             )}
             <button
               onClick={() => setView('beach')}

@@ -294,8 +294,12 @@ export function buildProposal({
     // ---- the price stack, in the order it is presented ----
     pricing: price ? {
       contractValue: price.base,
+      // `cost` stays in the stored proposal — the rep's Breakdown needs it and
+      // so does the contractor handoff. The CUSTOMER page renders these as an
+      // included-items list without money; see CustomerProposal.
       adders: price.adders.lines.map((l) => ({
-        id: l.id, label: l.label, cost: l.cost, units: l.units
+        id: l.id, label: l.label, cost: l.cost, units: l.units,
+        kind: l.kind || null, addedKwh: l.addedKwh || null
       })),
       addersTotal: price.adders.total,
       contractWithAdders: price.contract,

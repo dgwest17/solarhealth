@@ -36,7 +36,7 @@ import {
   ChevronDown, ShieldCheck, Home, RefreshCw, Check, Wallet, TrendingUp, Waves
 } from 'lucide-react';
 import { estimateBackupHours } from './BatteryModel';
-import { priceBattery, projectTwentyYear, solarAddOnCost, sizeBatterySystem, additionsFor } from '../pricing/loanPricing';
+import { priceBattery, projectTwentyYear, solarAddOnCost, batteryAddersFor } from '../pricing/loanPricing';
 import { BATTERY_MODELS } from '../incentives/programData';
 import { getConnectionFeeForYear } from '../utils/rateData';
 import { NEM3_EXPORT_MIDDAY } from './BatteryDispatch';
@@ -80,17 +80,7 @@ const BatteryStabilization = ({
     ? settings.batteries : BATTERY_MODELS;
   const [batteryModelId, setBatteryModelId] = useState('tesla_pw3');
   const batteryModel = batteryCatalog.find((b) => b.id === batteryModelId) || batteryCatalog[0] || null;
-  const [additions, setAdditions] = useState([]);   // [{ id, qty }]
-
-  const sizing = useMemo(
-    () => sizeBatterySystem({
-      base: batteryModel,
-      additions,
-      catalog: settings.batteryAdditions
-    }),
-    [batteryModel, additions, settings.batteryAdditions]
-  );
-  const totalKwh = sizing.totalKwh;
+  const baseKwh = Number(batteryModel && batteryModel.usableKwh) || 0;
 
   /**
    * Rebate eligibility.
@@ -147,21 +137,27 @@ const BatteryStabilization = ({
   const setAdder = (id, patch) =>
     setAdderSel((p) => ({ ...p, [id]: { ...(p[id] || { on: false }), ...patch } }));
 
-  /** Additions this pack's manufacturer actually offers. */
-  const availableAdditions = useMemo(
-    () => additionsFor(batteryModel, settings.batteryAdditions),
-    [batteryModel, settings.batteryAdditions]
+  /**
+   * Battery adders this pack's manufacturer offers.
+   *
+   * Scoped by make so a Tesla DC expansion cannot be ticked under a FranklinWH
+   * system. Changing the pack clears them, because a selection that no longer
+   * applies would keep billing silently.
+   */
+  const batteryAdders = useMemo(
+    () => batteryAddersFor(batteryModel, settings.adders),
+    [batteryModel, settings.adders]
   );
 
-  /** Set a quantity, dropping the entry entirely at zero so the stored
-   *  proposal carries only what was actually selected. */
-  const setAddition = (id, qty) => {
-    const n = Math.max(0, Math.round(Number(qty) || 0));
-    setAdditions((prev) => {
-      const rest = prev.filter((a) => a.id !== id);
-      return n > 0 ? [...rest, { id, qty: n }] : rest;
-    });
-  };
+  /** Untick every battery adder — called when the pack changes, so a Tesla
+   *  expansion cannot survive a switch to a FranklinWH system. */
+  const clearBatteryAdders = () => setAdderSel((prev) => {
+    const next = { ...prev };
+    for (const a of (settings.adders || [])) {
+      if (a.kind === 'battery' && next[a.id]) next[a.id] = { ...next[a.id], on: false };
+    }
+    return next;
+  });
 
   // A proposal already on file is the rep's memory of the appointment. Load it
   // so reopening the tool shows what was quoted rather than a fresh default.
@@ -233,9 +229,7 @@ const BatteryStabilization = ({
     adderSelections: adderSel,
     adderCatalog: settings.adders,
     fedPct,
-    usableKwh: totalKwh,
-    rebateKwh: sizing.rebateKwh,
-    batteryAdditionsCost: sizing.addedCost,
+    usableKwh: baseKwh,
     rebateEligible,
     rebatePerKwh: A.localRebatePerKwh,
     termYears,
@@ -249,7 +243,7 @@ const BatteryStabilization = ({
       unsubsidisedApr: A.commissionUnsubsidisedApr,
       perAddedPanel: A.commissionFloorPerAddedPanel
     }
-  }), [contractValue, adderSel, settings.adders, fedPct, totalKwh, sizing, rebateEligible, termYears,
+  }), [contractValue, adderSel, settings.adders, fedPct, baseKwh, rebateEligible, termYears,
        activeTermCard, applyRebateToLoan, inputs.utility, A, mode]);
 
   const activePayment =
@@ -297,10 +291,11 @@ const BatteryStabilization = ({
         modelId: batteryModelId,
         make: batteryModel && batteryModel.make,
         model: batteryModel && batteryModel.model,
-        baseKwh: sizing.baseKwh,
-        totalKwh: sizing.totalKwh,
-        rebateKwh: sizing.rebateKwh,
-        units: sizing.units.map((u) => ({ id: u.id, label: u.label, qty: u.qty, kwh: u.kwh, cost: u.cost })),
+        baseKwh,
+        totalKwh: price.totalKwh,
+        rebateKwh: price.rebateKwh,
+        units: price.adders.lines.filter((l) => l.kind === 'battery')
+          .map((l) => ({ id: l.id, label: l.label, qty: l.units, kwh: l.addedKwh, cost: l.cost })),
         rebateEligible
       },
       financing: {
@@ -320,7 +315,7 @@ const BatteryStabilization = ({
       }
     });
   }, [
-    clientContext, price, proj, inputs, batteryModelId, batteryModel, sizing, totalKwh, rebateEligible,
+    clientContext, price, proj, inputs, batteryModelId, batteryModel, baseKwh, rebateEligible,
     mode, lender, termYears, activeTermCard, escalator, leasePayment,
     monthlyBill, connectionFee, monthlySavings, escalation, clientLabel, savedProposal
   ]);
@@ -371,6 +366,10 @@ const BatteryStabilization = ({
 
   const y1 = rows[0];
   const dailyDelta = (y1.batteryMonthly - y1.utilityMonthly) * 12 / 365;
+  // Capacity, rebate capacity and the partial-rebate flag all come off the
+  // price object now — one derivation, in loanPricing, rather than a second
+  // copy in this component that could drift from it.
+  const totalKwh = price.totalKwh;
   const backupHours = estimateBackupHours(totalKwh, 0.75);
 
   // ---- chart geometry ----
@@ -467,7 +466,7 @@ const BatteryStabilization = ({
               <label className="block text-xs text-slate-400 mb-1">Battery</label>
               <select
                 value={batteryModelId}
-                onChange={(e) => { setBatteryModelId(e.target.value); setAdditions([]); }}
+                onChange={(e) => { setBatteryModelId(e.target.value); clearBatteryAdders(); }}
                 className="w-full px-3 py-2 rounded-lg bg-slate-900/60 border border-slate-600 text-slate-100 text-sm focus:border-emerald-400/60 focus:outline-none"
               >
                 {batteryCatalog.map((b) => (
@@ -486,54 +485,25 @@ const BatteryStabilization = ({
             </div>
           </div>
 
-          {/* ---- additional packs ---- */}
-          {availableAdditions.length > 0 && (
+          {/* What was added, read-only. Extra packs are ADDERS now, selected
+             in Deep Seas with everything else that changes the price. This is
+             the customer-facing side of the same data: what they are getting,
+             never what it cost. */}
+          {price.adders.lines.some((l) => l.kind === 'battery') && (
             <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-3">
-              <div className="text-[11px] uppercase tracking-widest text-slate-400 mb-2">Add storage</div>
-              <div className="space-y-2">
-                {availableAdditions.map((def) => {
-                  const qty = (additions.find((a) => a.id === def.id) || {}).qty || 0;
-                  return (
-                    <div key={def.id} className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-[13px] text-slate-200">
-                          {def.label}
-                          <span className="text-slate-400 font-mono ml-2">
-                            +{money(def.cost)} · +{def.usableKwh} kWh
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-500">
-                          {def.note}
-                          {def.rebateFactor < 1 && (
-                            <span className="text-amber-300">
-                              {' '}Rebate on {def.usableKwh * def.rebateFactor} of the {def.usableKwh} kWh.
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          onClick={() => setAddition(def.id, qty - 1)}
-                          disabled={qty === 0}
-                          className="w-7 h-7 rounded-md bg-slate-800 border border-slate-600 text-slate-300 disabled:opacity-30"
-                        >−</button>
-                        <span className="w-7 text-center text-[13px] font-mono text-slate-100">{qty}</span>
-                        <button
-                          onClick={() => setAddition(def.id, qty + 1)}
-                          className="w-7 h-7 rounded-md bg-slate-800 border border-slate-600 text-slate-300 hover:border-emerald-400/50"
-                        >+</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* The comparison a rep would otherwise have to do in their head.
-                  Only worth showing once something partial is selected. */}
-              {sizing.hasPartialRebate && (
-                <p className="text-[11.5px] text-amber-300 mt-3 pt-2 border-t border-slate-700/60">
-                  {totalKwh} kWh installed, rebate paid on {sizing.rebateKwh} kWh. A DC expansion costs less
-                  up front but earns half the rebate on its capacity — check the net below before choosing it.
+              <div className="text-[11px] uppercase tracking-widest text-slate-400 mb-1.5">Included</div>
+              <ul className="space-y-1">
+                {price.adders.lines.filter((l) => l.kind === 'battery').map((l) => (
+                  <li key={l.id} className="text-[13px] text-slate-200">
+                    {l.units > 1 ? `${l.units} × ` : ""}{l.label}
+                    <span className="text-slate-500 font-mono ml-2">+{l.addedKwh} kWh</span>
+                  </li>
+                ))}
+              </ul>
+              {price.hasPartialRebate && (
+                <p className="text-[11.5px] text-amber-300 mt-2 pt-2 border-t border-slate-700/60">
+                  {totalKwh} kWh installed, rebate paid on {price.rebateKwh} kWh — a DC expansion earns
+                  half the rebate on its capacity.
                 </p>
               )}
             </div>
@@ -575,7 +545,7 @@ const BatteryStabilization = ({
             <Wallet size={14} /> Cash in Your Pocket
           </div>
           <div className="text-4xl font-extrabold text-slate-600 mt-1 line-through">
-            {money(A.localRebatePerKwh * sizing.rebateKwh)}
+            {money(A.localRebatePerKwh * price.rebateKwh)}
           </div>
           <p className="text-[12px] text-slate-400 mt-1">
             Not eligible for the storage rebate, so this is not in the figures below.
@@ -594,7 +564,7 @@ const BatteryStabilization = ({
               </div>
               <div className="text-4xl font-extrabold text-amber-300 mt-1">{money(price.rebate)}</div>
               <p className="text-xs text-slate-400 mt-1">
-                {money(A.localRebatePerKwh)}/kWh × {sizing.rebateKwh} kWh eligible{sizing.hasPartialRebate ? ` of ${totalKwh} installed` : ""}
+                {money(A.localRebatePerKwh)}/kWh × {price.rebateKwh} kWh eligible{price.hasPartialRebate ? ` of ${totalKwh} installed` : ""}
                 {price.rebateCapped ? ' · capped at program maximum' : ''}
               </p>
             </div>
@@ -619,7 +589,7 @@ const BatteryStabilization = ({
       {price.rebateBlockedByAdder && (
         <div className="rounded-xl border border-red-400/40 bg-red-900/15 p-4 text-[13px] text-red-200">
           A non-export system is not eligible for the storage rebate. Removing that adder restores{' '}
-          {money(A.localRebatePerKwh * sizing.rebateKwh)}.
+          {money(A.localRebatePerKwh * price.rebateKwh)}.
         </div>
       )}
 
@@ -1031,10 +1001,55 @@ const BatteryStabilization = ({
                     className="w-full accent-emerald-400" />
                 </div>
 
+              </div>
+            </div>
+
+            {/* ---- DEEP SEAS: rep-only commission ----
+                Nested one level deeper than Breakdown and closed by default,
+                because Breakdown itself gets opened in front of customers to
+                justify the price stack. This must not be one click away from
+                that conversation. */}
+            <div className="border-t border-slate-700 pt-4">
+              <button
+                onClick={() => setShowCommission((v) => !v)}
+                className="w-full flex items-center justify-between py-2 text-left hover:bg-white/5 rounded-lg px-2 transition-colors"
+              >
+                <span className="text-[13px] font-semibold text-slate-400 flex items-center gap-2">
+                  <DeepSeas size={13} /> Deep Seas
+                </span>
+                <ChevronDown size={16} className={`text-slate-500 transition-transform ${showCommission ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showCommission && (
+                <>
+                {/* ---- The proposal, again. Same component as the strip at
+                     the top of this section: one save path, one set of result
+                     messages, no chance of the two blocks disagreeing about
+                     what happened. This one is not compact, so it carries the
+                     Zoho warnings and the sandbox note. ---- */}
+                <div className="mt-3">
+                  <ProposalBar
+                    liveProposal={liveProposal}
+                    savedProposal={savedProposal}
+                    saving={saving}
+                    saveResult={saveResult}
+                    onSave={saveProposal}
+                    clientContext={clientContext}
+                  />
+                </div>
+
+                {/* ---- Adders, including extra battery packs ----
+                     Moved here from Breakdown. Breakdown gets opened in front
+                     of a customer to justify the price stack, and a row of
+                     tick-boxes that change the price is not something to be
+                     fiddling with while they watch. Selecting is rep-only;
+                     what was selected still shows in Breakdown and on the
+                     proposal. ---- */}
                 <div>
                   <h5 className="text-[13px] font-semibold text-slate-300 mb-2">Adders</h5>
                   <div className="space-y-2">
-                    {settings.adders.map((a) => {
+                    {settings.adders.filter((a) => a.kind !== 'battery'
+                        || batteryAdders.some((b) => b.id === a.id)).map((a) => {
                       const sel = adderSel[a.id] || { on: false };
                       const panelPriced = a.id === 'solar_add' && settings.panels.some((p) => p.active !== false && p.pricePerPanel > 0);
                       return (
@@ -1105,6 +1120,23 @@ const BatteryStabilization = ({
                               </div>
                             );
                           })()}
+                          {sel.on && a.kind === 'battery' && (
+                            <div className="mt-2 pl-6">
+                              <div className="flex items-center gap-2">
+                                <input type="number" min="1" placeholder={a.unit} value={sel.units ?? ''}
+                                  onChange={(e) => setAdder(a.id, { units: e.target.value })}
+                                  className="w-[86px] px-2 py-1 rounded bg-slate-900/70 border border-slate-600 text-slate-100 font-mono text-[12px]" />
+                                <span className="text-[11.5px] text-slate-400 font-mono">
+                                  +{(Number(sel.units) || 0) * (Number(a.addsKwh) || 0)} kWh
+                                  {a.rebateFactor < 1 && (
+                                    <span className="text-amber-300">
+                                      {' '}· rebate on {((Number(sel.units) || 0) * (Number(a.addsKwh) || 0) * a.rebateFactor).toFixed(2).replace(/\.00$/, '')} kWh
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          )}
                           {sel.on && a.kind === 'perUnit' && (
                             <div className="flex flex-wrap gap-2 mt-2 pl-6">
                               <input type="number" placeholder={a.unit} value={sel.units ?? ''}
@@ -1128,42 +1160,6 @@ const BatteryStabilization = ({
                   <p className="text-[10.5px] text-slate-500 mt-2">
                     Adder prices, lenders and panel pricing are editable in Admin → Platform Defaults.
                   </p>
-                </div>
-              </div>
-            </div>
-
-            {/* ---- DEEP SEAS: rep-only commission ----
-                Nested one level deeper than Breakdown and closed by default,
-                because Breakdown itself gets opened in front of customers to
-                justify the price stack. This must not be one click away from
-                that conversation. */}
-            <div className="border-t border-slate-700 pt-4">
-              <button
-                onClick={() => setShowCommission((v) => !v)}
-                className="w-full flex items-center justify-between py-2 text-left hover:bg-white/5 rounded-lg px-2 transition-colors"
-              >
-                <span className="text-[13px] font-semibold text-slate-400 flex items-center gap-2">
-                  <DeepSeas size={13} /> Deep Seas
-                </span>
-                <ChevronDown size={16} className={`text-slate-500 transition-transform ${showCommission ? 'rotate-180' : ''}`} />
-              </button>
-
-              {showCommission && (
-                <>
-                {/* ---- The proposal, again. Same component as the strip at
-                     the top of this section: one save path, one set of result
-                     messages, no chance of the two blocks disagreeing about
-                     what happened. This one is not compact, so it carries the
-                     Zoho warnings and the sandbox note. ---- */}
-                <div className="mt-3">
-                  <ProposalBar
-                    liveProposal={liveProposal}
-                    savedProposal={savedProposal}
-                    saving={saving}
-                    saveResult={saveResult}
-                    onSave={saveProposal}
-                    clientContext={clientContext}
-                  />
                 </div>
 
                 <div className="mt-3 rounded-xl border border-violet-400/30 bg-violet-500/5 p-4">

@@ -511,15 +511,38 @@ const CustomerProposal = ({
           <h4 className="text-[13px] uppercase tracking-widest mb-4" style={{ color: SURF.textMuted }}>
             How the price works
           </h4>
-          <Line label="Installed price" value={money(p.contractValue)} />
-          {(p.adders || []).map((a) => (
-            <Line key={a.id} label={a.label + (a.units ? ` (${a.units})` : '')} value={'+ ' + money(a.cost)} />
-          ))}
+          {/* ONE installed price, with everything in it.
+              The adders are listed below as inclusions rather than as priced
+              line items: a customer reading "+ $4,000 main panel upgrade"
+              starts negotiating the line rather than reading the total, and
+              the line is not separable anyway — the job needs it or it does
+              not happen. The arithmetic still reconciles, because this figure
+              is the contract WITH adders. */}
+          <Line label="Installed price" value={money(p.contractWithAdders ?? p.contractValue)} />
           <Line label={`Federal tax credit (${Math.round((p.federalPct || 0) * 100)}%)`}
                 value={'− ' + money(p.federalAmount)} tone="good" />
           {p.storageRebate > 0 && (
             <Line label="Storage rebate, paid to you" value={'− ' + money(p.storageRebate)} tone="sun" />
           )}
+          {(p.adders || []).length > 0 && (
+            <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${SURF.line}` }}>
+              <div className="text-[11px] uppercase tracking-widest mb-2" style={{ color: SURF.textMuted }}>
+                Included in that price
+              </div>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+                {p.adders.map((a) => (
+                  <li key={a.id} className="text-[13px] flex items-baseline gap-2" style={{ color: SURF.text }}>
+                    <span style={{ color: SURF.seaBright }}>·</span>
+                    <span>
+                      {a.units > 1 ? `${a.units} × ` : ''}{a.label}
+                      {a.addedKwh ? <span style={{ color: SURF.textFaint }}> ({a.addedKwh} kWh)</span> : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="flex justify-between items-baseline mt-4 pt-4" style={{ borderTop: `1px solid ${SURF.lineStrong}` }}>
             <span style={{ color: SURF.textBright }}>Your net investment</span>
             <span className="text-2xl font-bold" style={{ color: SURF.seaBright }}>{money(p.netInvestment)}</span>

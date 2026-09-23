@@ -23,6 +23,8 @@ import EligibilityTab from './incentives/EligibilityTab';
 import TideTab from './incentives/TideTab';
 import LoadSimulator from './simulator/LoadSimulator';
 import GreenButtonUpload from './greenbutton/GreenButtonUpload';
+import BigWave from './proposal/BigWave';
+import { Swell as SwellIcon } from './surf/SurfIcons';
 
 const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = null, clientContext = null, canSaveClient = false, onOpenClient = null }) => {
   // Merge Zoho data over defaults, but keep explicit nulls as EMPTY so the UI
@@ -317,12 +319,52 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
           >
             Load Simulator
           </button>
+          {/* Big Wave belongs beside the audit rather than in the top nav: it
+              is about ONE client, as every other tab here is, and a top-level
+              tab that only works when a client happens to be open reads as
+              broken the first time someone clicks it from the dashboard. */}
+          {clientContext && clientContext.contactId && (
+            <button
+              onClick={() => setActiveTab('bigwave')}
+              className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all flex items-center gap-1.5 ${
+                activeTab === 'bigwave'
+                  ? 'bg-amber-400 text-slate-900'
+                  : 'text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              <SwellIcon size={15} /> Big Wave
+            </button>
+          )}
         </div>
+
+        {/* BIG WAVE TAB — the deal: proposal, next steps, client details */}
+        {activeTab === 'bigwave' && (
+          <div className="print:hidden">
+            <BigWave
+              clientData={{
+                contact: clientContext && clientContext.contact,
+                project: clientContext && clientContext.projectId
+                  ? { id: clientContext.projectId, ...(clientContext.project || {}) }
+                  : null
+              }}
+              role={(clientContext && clientContext.viewerRole) || 'client'}
+              userEmail={(clientContext && clientContext.repEmail) || ''}
+            />
+          </div>
+        )}
 
         {/* BATTERY ANALYSIS TAB */}
         {activeTab === 'battery' && (
           <div className="print:hidden">
-            <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} extraUsage={extraUsage} measured={gbApplied ? gbProfile : null} calculations={calculations} rateOverride={batteryRateOverride} onRateOverrideChange={persistBatteryRateOverride} clientContext={clientContext} clientLabel={clientLabel} />
+            <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} extraUsage={extraUsage} measured={gbApplied ? gbProfile : null} calculations={calculations} rateOverride={batteryRateOverride} onRateOverrideChange={persistBatteryRateOverride} clientLabel={clientLabel}
+              clientContext={clientContext ? {
+                ...clientContext,
+                // "Open proposal" switches to the Big Wave tab. Carried on
+                // clientContext because that object already travels down to
+                // the pricing panel; a dedicated prop would mean editing two
+                // intermediate components to deliver one callback.
+                onOpenProposal: () => setActiveTab('bigwave')
+              } : null} />
           </div>
         )}
 

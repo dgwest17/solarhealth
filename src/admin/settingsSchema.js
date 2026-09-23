@@ -28,7 +28,7 @@ import {
   DEALER_FEE, DEFAULT_CONTRACT_VALUE, LOAN_APR, LOAN_TERMS_YEARS,
   FED_PCT_MIN, FED_PCT_MAX, FED_PCT_DEFAULT, LOCAL_REBATE_PER_KWH, ADDERS,
   COMMISSION_FLOOR_STANDARD, COMMISSION_FLOOR_UNSUBSIDISED, UNSUBSIDISED_APR,
-  COMMISSION_FLOOR_PER_ADDED_PANEL, BATTERY_ADDITIONS
+  COMMISSION_FLOOR_PER_ADDED_PANEL
 } from '../pricing/loanPricing';
 import { BATTERY_MODELS, INCENTIVE_PROGRAMS, UTILITY_RATE_DEFAULTS } from '../incentives/programData';
 import { CONNECTION_FEE_SCHEDULE } from '../utils/rateData';
@@ -137,10 +137,6 @@ export const buildDefaultSettings = () => ({
   batteries: BATTERY_MODELS.map((b) => ({ ...b })),
   lenders: DEFAULT_LENDERS.map((l) => ({ ...l, terms: l.terms.map((t) => ({ ...t })) })),
   adders: ADDERS.map((a) => ({ ...a })),
-  // Additional battery packs. Editable because a second Powerwall and a DC
-  // expansion are repriced by the supplier, not by a deploy — and because the
-  // rebateFactor is program policy, which changes on its own schedule.
-  batteryAdditions: BATTERY_ADDITIONS.map((b) => ({ ...b })),
   panels: DEFAULT_PANEL_OPTIONS.map((p) => ({ ...p })),
   quiver: DEFAULT_QUIVER.map((q) => ({ ...q })),
   parties: {
@@ -156,7 +152,7 @@ export const buildDefaultSettings = () => ({
 });
 
 /** Lists are replaced wholesale; objects are merged key by key. */
-const LIST_KEYS = ['batteries', 'lenders', 'adders', 'panels', 'quiver', 'batteryAdditions'];
+const LIST_KEYS = ['batteries', 'lenders', 'adders', 'panels', 'quiver'];
 const MAP_KEYS = ['programs', 'rates', 'parties'];
 
 /**
