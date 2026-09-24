@@ -49,15 +49,19 @@
  * costs the customer more.
  *
  * ---------------------------------------------------------------------------
- * SOLAR IS MODELLED BUT NOT YET LIVE
+ * TWO DEAL SHAPES, ONE TAIL
  *
- * calcSolarCommission() implements the stated formula, and the price-per-watt
- * tiers are in DEFAULTS so they can be edited rather than redeployed. It is
- * not wired into the pricing screen yet, and it carries one open question —
- * the solar formula carves out $13,000 for the first battery where a
- * battery-only deal redlines at $14,500. Those may both be right for their own
- * deal shapes, or one may be stale. Until that is settled, solar commission is
- * computed on request and labelled provisional rather than quietly shown.
+ * A battery-only deal redlines at a flat $14,500 per pack. A solar deal builds
+ * its redline up: basePPW x watts, plus $13,000 for the first battery, plus
+ * adders. Both then behave identically — net sale minus redline is the pool,
+ * the dealer fee grosses the contract up on financed paper, and the same four
+ * seats split it.
+ *
+ * The battery figure differs between the two ($13,000 against $14,500) because
+ * the deal shapes differ: a battery going in alongside panels shares a truck
+ * roll, a permit and a crew day, and a standalone battery carries all of that
+ * by itself. They are two separate settings so that moving one never silently
+ * moves the other.
  *
  * Used by: src/battery/BatteryStabilization.jsx, src/beach/Forecast.jsx,
  *          src/beach/Treasure.jsx, api/_routes/beach.js
@@ -232,7 +236,7 @@ export const netSaleForCommission = (total, { batteryCount = 1, redlinePerUnit =
   (Number(total) || 0) + (Number(redlinePerUnit) || 0) * Math.max(1, Math.round(Number(batteryCount) || 1));
 
 /* ---------------------------------------------------------------------------
- * SOLAR — implemented, not yet wired. See the header.
+ * SOLAR
  * ------------------------------------------------------------------------- */
 
 /** The PPW tier a panel count falls in. */
@@ -243,47 +247,94 @@ export const solarTierFor = (panels, tiers = null) => {
 };
 
 /**
- * Solar commission:
+ * THE REDLINE FOR A SOLAR DEAL, built up rather than a flat figure.
  *
- *   total = contract − firstBatteryCarveOut − adders − (basePPW × watts)
+ *   redline = basePPW x watts  +  first battery  +  adders
  *
- * Returns `provisional: true` because the carve-out figure is unsettled. A
- * caller that displays this should say so rather than presenting it as final.
+ * Same shape as a battery deal — a non-commissionable base the rep sells above
+ * — but the base is computed from the system rather than being one number. That
+ * is why this is a build-up and not a constant: a 20-panel system and a
+ * 6-panel system have nothing in common except the arithmetic.
+ *
+ * THE BATTERY CARVE-OUT IS $13,000 HERE, NOT THE $14,500 A BATTERY-ONLY DEAL
+ * REDLINES AT. Both figures are as stated. They differ because the deal shapes
+ * differ — a battery attached to a solar install shares a truck roll, a permit
+ * and a crew day with the panels, and a standalone battery carries all of that
+ * alone. Kept as two separate settings so that if one is ever meant to move,
+ * moving it does not silently move the other.
+ */
+export function solarRedline({
+  panels = 0,
+  panelWatts = PANEL_WATTS,
+  includesBattery = true,
+  firstBatteryCarveOut = SOLAR_FIRST_BATTERY_CARVE_OUT,
+  addersCost = 0,
+  tiers = null
+} = {}) {
+  const n = Math.max(0, Math.round(Number(panels) || 0));
+  const tier = solarTierFor(n, tiers);
+  const watts = n * (Number(panelWatts) || PANEL_WATTS);
+  const basePPW = tier ? Number(tier.basePPW) || 0 : 0;
+  const baseCost = basePPW * watts;
+  // The small-system adder is part of the base, not commissionable margin.
+  const tierAdder = tier ? Number(tier.extraAdder) || 0 : 0;
+  const battery = includesBattery ? Math.max(0, Number(firstBatteryCarveOut) || 0) : 0;
+  const adders = Math.max(0, Number(addersCost) || 0);
+
+  return {
+    panels: n, watts, tier, basePPW, baseCost, tierAdder,
+    batteryCarveOut: battery,
+    addersCost: adders,
+    redline: baseCost + tierAdder + battery + adders
+  };
+}
+
+/**
+ * Commission and customer contract for a SOLAR deal.
+ *
+ * Identical downstream of the redline to a battery deal: net sale minus
+ * redline is the pool, the dealer fee grosses the contract up on financed
+ * paper, and the split is the same table. Sharing that tail is deliberate —
+ * two implementations of "sale minus base, split four ways" would eventually
+ * disagree about a rounding or a fee direction.
  */
 export function calcSolarCommission({
-  contractValue = 0,
+  netSale = 0,
   panels = 0,
   panelWatts = PANEL_WATTS,
   includesBattery = true,
   firstBatteryCarveOut = SOLAR_FIRST_BATTERY_CARVE_OUT,
   addersCost = 0,
   tiers = null,
+  mode = 'loan',
+  dealerFeePct = DEALER_FEE_PCT,
   selfGen = false,
   roles = null,
   selfGenPct = null
 } = {}) {
-  const contract = Math.max(0, Number(contractValue) || 0);
-  const n = Math.max(0, Math.round(Number(panels) || 0));
-  const tier = solarTierFor(n, tiers);
-  const watts = n * (Number(panelWatts) || PANEL_WATTS);
-  const basePPW = tier ? Number(tier.basePPW) || 0 : 0;
-  const baseCost = basePPW * watts;
-  const tierAdder = tier ? Number(tier.extraAdder) || 0 : 0;
-  const battery = includesBattery ? Math.max(0, Number(firstBatteryCarveOut) || 0) : 0;
-  const adders = Math.max(0, Number(addersCost) || 0) + tierAdder;
+  const base = solarRedline({
+    panels, panelWatts, includesBattery, firstBatteryCarveOut, addersCost, tiers
+  });
+  const sale = Math.max(0, Number(netSale) || 0);
+  const total = Math.max(0, sale - base.redline);
 
-  const total = Math.max(0, contract - battery - adders - baseCost);
+  const feePct = mode === 'loan' ? Math.max(0, Math.min(0.9, Number(dealerFeePct) || 0)) : 0;
+  const grossedSale = feePct > 0 ? sale / (1 - feePct) : sale;
 
   return {
-    contractValue: contract,
-    panels: n, watts, tier, basePPW, baseCost, tierAdder,
-    batteryCarveOut: battery,
-    addersCost: adders,
+    ...base,
+    netSale: sale,
     total,
-    provisional: true,
+    belowRedline: sale < base.redline,
+    shortfall: sale < base.redline ? base.redline - sale : 0,
+    feePct,
+    dealerFee: grossedSale - sale,
+    grossedSale,
+    customerContract: grossedSale,
     rows: splitRows({ selfGen, roles, selfGenPct }).map((r) => ({
       ...r, amount: total * r.pct / 100
-    }))
+    })),
+    selfGen: !!selfGen
   };
 }
 
