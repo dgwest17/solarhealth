@@ -54,6 +54,9 @@ import saveProposal from './_routes/save-proposal.js';
 import sendAudit from './_routes/send-audit.js';
 import settings from './_routes/settings.js';
 import updateDeal from './_routes/update-deal.js';
+import reps from './_routes/reps.js';
+import shareProposal from './_routes/share-proposal.js';
+import sharedProposal from './_routes/shared-proposal.js';
 import uploadDoc from './_routes/upload-doc.js';
 
 /**
@@ -78,6 +81,9 @@ const ROUTES = {
   'send-audit': sendAudit,
   'settings': settings,
   'update-deal': updateDeal,
+  'reps': reps,
+  'share-proposal': shareProposal,
+  'shared-proposal': sharedProposal,
   'upload-doc': uploadDoc
 };
 

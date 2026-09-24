@@ -164,7 +164,7 @@ const ProjectSteps = ({
               const status = steps[step.id] || STEP_STATUS.NOT_STARTED;
               const done = status === STEP_STATUS.COMPLETED;
               const href = STEP_LINKS[step.id];
-              const isIntake = step.id === 'site_inspection';
+              const isIntake = step.id === 'intake';
 
               return (
                 <div
@@ -314,7 +314,10 @@ const ProjectSteps = ({
           projectId={projectId}
           repName={repName}
           onClose={() => setOpenIntake(false)}
-          onSubmitted={() => { setOpenIntake(false); setStep('site_inspection', STEP_STATUS.COMPLETED); }}
+          // Completes INTAKE, not the site inspection. Submitting a handoff
+          // packet is not a technician standing on the roof, and marking the
+          // visit done would tell the customer somebody had been.
+          onSubmitted={() => { setOpenIntake(false); setStep('intake', STEP_STATUS.COMPLETED); }}
         />
       )}
     </div>

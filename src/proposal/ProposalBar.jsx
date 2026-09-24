@@ -53,6 +53,37 @@ const ProposalBar = ({
 }) => {
   const [showProposal, setShowProposal] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [share, setShare] = useState(null);      // { url } once minted
+  const [sharing, setSharing] = useState(false);
+  const [shareErr, setShareErr] = useState(null);
+
+  /**
+   * Mint the customer's link, or hand back the one that already exists.
+   *
+   * Idempotent on the server, so pressing this twice does not quietly kill the
+   * link already sitting in the customer's inbox.
+   */
+  const makeShareLink = async () => {
+    if (!clientContext || !clientContext.contactId) return;
+    setSharing(true); setShareErr(null);
+    try {
+      const r = await apiFetch('/api/share-proposal', {
+        method: 'POST',
+        body: JSON.stringify({ contactId: clientContext.contactId })
+      });
+      if (r && r.path) {
+        const url = window.location.origin + r.path;
+        setShare({ url });
+        try { await navigator.clipboard.writeText(url); } catch { /* shown below regardless */ }
+      } else {
+        setShareErr('Could not create a link.');
+      }
+    } catch (e) {
+      setShareErr(e.message);
+    } finally {
+      setSharing(false);
+    }
+  };
 
   const canSave = !!(clientContext && clientContext.contactId);
   const canEdit = !!(clientContext && clientContext.canWrite);
@@ -117,6 +148,18 @@ const ProposalBar = ({
             >
               <Heading size={14} /> Open proposal
             </button>
+            {/* Only once something is SAVED. A link to a proposal that exists
+                only in this component's state would 404 the moment the customer
+                opened it, which is the worst possible first impression. */}
+            {savedProposal && (
+              <button
+                onClick={makeShareLink}
+                disabled={sharing}
+                className="px-3 py-2 rounded-lg text-[12.5px] font-semibold border border-slate-600 text-slate-300 hover:text-cyan-300 hover:border-cyan-400/50"
+              >
+                {sharing ? 'Creating…' : share ? 'Link copied' : 'Share link'}
+              </button>
+            )}
             <button
               onClick={onSave}
               disabled={saving || !onSave}
@@ -130,6 +173,21 @@ const ProposalBar = ({
             </button>
           </div>
         </div>
+
+        {share && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <input
+              readOnly
+              value={share.url}
+              onClick={(e) => e.target.select()}
+              className="flex-1 min-w-[220px] px-2.5 py-1.5 rounded-lg bg-slate-900/70 border border-cyan-400/40 text-cyan-200 font-mono text-[11.5px]"
+            />
+            <span className="text-[11px] text-slate-500">
+              Opens the same proposal, no login. Nothing rep-facing is on it.
+            </span>
+          </div>
+        )}
+        {shareErr && <p className="mt-2 text-[12px] text-red-300">{shareErr}</p>}
 
         {stale && (
           <p className="mt-2 text-[11.5px] text-amber-300">

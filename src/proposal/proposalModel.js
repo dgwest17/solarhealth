@@ -129,10 +129,32 @@ export const PROJECT_STEPS = [
     id: 'paperwork',
     label: 'Paperwork',
     blurb: 'Your agreement and disclosures, signed electronically.',
-    duration: '1–2 days',
+    duration: 'Same day',
     appliesTo: ['loan', 'cash', 'lease'],
     actionable: true,
     kind: 'sign'
+  },
+  /**
+   * INTAKE IS NOT THE SITE INSPECTION, and conflating them was wrong.
+   *
+   * Intake is the packet a rep sends the installer to get the job built — it is
+   * finished at the kitchen table. The site inspection is a technician standing
+   * on the roof, days later. Submitting the intake used to mark Site Inspection
+   * complete, which told the customer somebody had visited their house when
+   * nobody had, and told the installer a measurement existed that did not.
+   *
+   * So intake is its own step, it is what a rep actually completes, and it is
+   * what gates the move to Project. The site inspection follows, is not
+   * actionable from a proposal page, and is ticked when the visit happens.
+   */
+  {
+    id: 'intake',
+    label: 'Project Intake',
+    blurb: 'Your details go to the installer so they can schedule and build.',
+    duration: 'Same day',
+    appliesTo: ['loan', 'cash', 'lease'],
+    actionable: true,
+    kind: 'form'
   },
   {
     id: 'site_inspection',
@@ -140,9 +162,7 @@ export const PROJECT_STEPS = [
     blurb: 'A technician measures your roof, panel and electrical service.',
     duration: '2–3 days',
     appliesTo: ['loan', 'cash', 'lease'],
-    actionable: true,
-    customerPresent: true,
-    kind: 'form'
+    customerPresent: true
   },
   {
     id: 'design',

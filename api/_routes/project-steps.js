@@ -33,16 +33,24 @@ const STEP_STATUS = { NOT_STARTED: 'Not Started', IN_PROGRESS: 'In Progress', CO
 const VALID_STATUS = new Set(Object.values(STEP_STATUS));
 
 /** Mirrors proposalModel — actionable steps by purchase type. */
+/**
+ * Mirrors proposalModel's actionable steps by purchase type.
+ *
+ * INTAKE, NOT SITE INSPECTION. Intake is what the rep finishes at the kitchen
+ * table; the site inspection is a technician on the roof days later. Gating the
+ * stage on a visit nobody has scheduled yet would leave every signed, paid,
+ * handed-off deal sitting at Met.
+ */
 const ACTIONABLE = {
-  loan:  ['qualification', 'paperwork', 'site_inspection'],
-  lease: ['qualification', 'paperwork', 'site_inspection'],
-  cash:  ['paperwork', 'site_inspection']
+  loan:  ['qualification', 'paperwork', 'intake'],
+  lease: ['qualification', 'paperwork', 'intake'],
+  cash:  ['paperwork', 'intake']
 };
 
 const ZOHO_STEP_FIELD = {
   qualification:   'Lender_Qualification',
   paperwork:       'Documents_Step',
-  site_inspection: 'Intake_Step'
+  intake:          'Intake_Step'
 };
 
 async function sbFetch(path, options = {}) {

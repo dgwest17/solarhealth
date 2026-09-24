@@ -35,6 +35,7 @@ import { SURF } from '../surf/theme';
 import { Swell as SwellIcon } from '../surf/SurfIcons';
 import { SALES_STAGE } from '../proposal/proposalModel';
 import { apiFetch } from '../lib/supabaseClient';
+import RepPicker from '../proposal/RepPicker';
 
 const money = (v) => '$' + Math.round(Number(v) || 0).toLocaleString();
 
@@ -73,6 +74,16 @@ const staleness = (days) => {
 
 const TIDE_LABEL = { met: 'Met', project: 'Project', installed: 'Installed' };
 
+/**
+ * Where a one-click advance sends a deal. Met -> Project -> Installed, which is
+ * the only direction a deal travels on its own; anything else is a correction
+ * and belongs in the editor where it has to be chosen deliberately.
+ */
+const NEXT_STAGE = {
+  met:     { stage: SALES_STAGE.CONVERTED, tide: 'project',   label: 'Project' },
+  project: { stage: SALES_STAGE.INSTALLED, tide: 'installed', label: 'Installed' }
+};
+
 const COLUMNS = [
   { id: 'name',        label: 'Client',       sort: (d) => (d.name || '').toLowerCase() },
   { id: 'tide',        label: 'Stage',        sort: (d) => ['met', 'project', 'installed'].indexOf(d.tide) },
@@ -92,6 +103,36 @@ const Pipeline = ({ deals = [], onOpenClient = null, role = 'rep' }) => {
   /** Local overlay of saved edits, so a row updates without refetching the
    *  whole book. Keyed by deal id. */
   const [patches, setPatches] = useState({});
+  const [advancing, setAdvancing] = useState(null);
+
+  /**
+   * Push a deal to the next stage in one click.
+   *
+   * Optimistic only after the server agrees. Showing a deal as Installed and
+   * then discovering the write failed is worse than a half-second wait — a
+   * manager would go and tell somebody.
+   */
+  const advance = async (d) => {
+    const next = NEXT_STAGE[d.tide];
+    if (!next) return;
+    setAdvancing(d.id);
+    try {
+      await apiFetch('/api/update-deal', {
+        method: 'POST',
+        body: JSON.stringify({
+          contactId: d.contactId,
+          projectId: String(d.id).startsWith('prop_') ? null : d.id,
+          stage: next.stage
+        })
+      });
+      setPatches((p) => ({ ...p, [d.id]: { ...(p[d.id] || {}), tide: next.tide } }));
+    } catch (e) {
+      // eslint-disable-next-line no-alert
+      alert(`Could not move that deal: ${e.message}`);
+    } finally {
+      setAdvancing(null);
+    }
+  };
   const [sortBy, setSortBy] = useState('lastContact');
   const [asc, setAsc] = useState(false);
   const [tideFilter, setTideFilter] = useState('all');
@@ -226,6 +267,27 @@ const Pipeline = ({ deals = [], onOpenClient = null, role = 'rep' }) => {
                     {TIDE_LABEL[d.tide] || '—'}
                     {d.projectStatus && (
                       <div className="text-[10.5px]" style={{ color: SURF.textFaint }}>{d.projectStatus}</div>
+                    )}
+                    {/* ONE-CLICK ADVANCE, admin only.
+                        The stage normally moves when the actionable steps
+                        complete, computed server-side from the stored proposal
+                        so a customer cannot promote their own deal. That is
+                        right for the customer path and useless for a manager
+                        who knows a job installed and needs the board to say so.
+                        This is that override, and it is the reason it exists. */}
+                    {isAdmin && NEXT_STAGE[d.tide] && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); advance(d); }}
+                        disabled={advancing === d.id}
+                        className="mt-1 px-2 py-0.5 rounded text-[10.5px] font-semibold"
+                        style={{
+                          background: 'transparent',
+                          border: `1px solid ${SURF.sun}66`,
+                          color: advancing === d.id ? SURF.textFaint : SURF.sun
+                        }}
+                      >
+                        {advancing === d.id ? '…' : `→ ${NEXT_STAGE[d.tide].label}`}
+                      </button>
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-[12.5px]" style={{ color: SURF.textBright }}>
@@ -372,17 +434,15 @@ const EditRow = ({ deal, isAdmin, onSaved, onCancel, onOpenClient }) => {
                  className="w-full px-2.5 py-2 rounded-lg text-[13px] focus:outline-none"
                  style={{ background: SURF.surface, border: `1px solid ${SURF.line}`, color: SURF.textBright }} />
         </Field>
-        <Field label="Set by (name)">
-          <input value={setByRep} onChange={(e) => setSetByRep(e.target.value)}
-                 placeholder="blank = self-gen"
-                 className="w-full px-2.5 py-2 rounded-lg text-[13px] focus:outline-none"
-                 style={{ background: SURF.surface, border: `1px solid ${SURF.line}`, color: SURF.textBright }} />
-        </Field>
-        <Field label="Set by (email)">
-          <input value={setByRepEmail} onChange={(e) => setSetByRepEmail(e.target.value)}
-                 placeholder="routes their half to them"
-                 className="w-full px-2.5 py-2 rounded-lg text-[13px] focus:outline-none"
-                 style={{ background: SURF.surface, border: `1px solid ${SURF.line}`, color: SURF.textBright }} />
+        <Field label="Set by">
+          {/* One control, not two. Selecting the person carries their email, so
+              a name and an email can never disagree about who gets paid. */}
+          <RepPicker
+            value={setByRepEmail}
+            onChange={({ name, email }) => { setSetByRep(name); setSetByRepEmail(email); }}
+            className="w-full px-2.5 py-2 rounded-lg text-[13px] focus:outline-none"
+            style={{ background: SURF.surface, border: `1px solid ${SURF.line}`, color: SURF.textBright }}
+          />
         </Field>
         {isAdmin && (
           <Field label="Total commission">

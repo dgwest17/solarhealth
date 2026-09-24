@@ -50,6 +50,7 @@ import { DeepSeas, Shell } from '../surf/SurfIcons';
 import { buildProposal, toZohoSummary, proposalSummaryLine, ZOHO_FIELDS } from '../proposal/proposalModel';
 import { apiFetch } from '../lib/supabaseClient';
 import ProposalBar from '../proposal/ProposalBar';
+import RepPicker from '../proposal/RepPicker';
 
 /** Seat names as a rep says them, with the alternative wording in brackets. */
 const SEAT_LABEL = {
@@ -1479,37 +1480,25 @@ const BatteryStabilization = ({
                     </p>
 
                     {hasBuilder && (
-                      <div className="grid grid-cols-2 gap-2 mt-3 ml-6">
-                        <label className="block">
-                          <span className="block text-[10.5px] uppercase tracking-wider text-slate-500 mb-1">
-                            Builder name
-                          </span>
-                          <input
-                            value={builderName}
-                            onChange={(e) => setBuilderName(e.target.value)}
-                            placeholder="Kenson Manassero"
-                            className="w-full px-2 py-1.5 rounded bg-slate-900/70 border border-slate-600 text-slate-100 text-[12.5px]"
-                          />
-                        </label>
-                        <label className="block">
-                          <span className="block text-[10.5px] uppercase tracking-wider text-slate-500 mb-1">
-                            Builder email
-                          </span>
-                          <input
-                            value={builderEmail}
-                            onChange={(e) => setBuilderEmail(e.target.value)}
-                            placeholder="their login email"
-                            className={`w-full px-2 py-1.5 rounded bg-slate-900/70 border text-slate-100 text-[12.5px] ${
-                              builderEmail ? 'border-slate-600' : 'border-amber-500/50'
-                            }`}
-                          />
-                        </label>
+                      <div className="mt-3 ml-6">
+                        <span className="block text-[10.5px] uppercase tracking-wider text-slate-500 mb-1">
+                          Who set it
+                        </span>
+                        {/* Picked from Recruits, so the email comes with the
+                            person. Typed names were the first version: a
+                            misspelling makes them unfindable in a report, and a
+                            mistyped email means their half never reaches them. */}
+                        <RepPicker
+                          value={builderEmail}
+                          allowNone={false}
+                          onChange={({ name, email }) => { setBuilderName(name); setBuilderEmail(email); }}
+                          className="w-full max-w-sm px-2 py-1.5 rounded bg-slate-900/70 border border-slate-600 text-slate-100 text-[12.5px]"
+                        />
                       </div>
                     )}
                     {hasBuilder && !builderEmail && (
                       <p className="text-[11px] text-amber-300 mt-2 ml-6">
-                        Without their email this split will not reach their Beach — they will not see the
-                        {' '}{money(comm.total * 0.42)} they earned.
+                        Pick who set it, or their {money(comm.total * 0.42)} has nowhere to go.
                       </p>
                     )}
 

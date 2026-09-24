@@ -7,6 +7,7 @@ import ClientDashboard from './components/ClientDashboard';
 import AdminSettings from './admin/AdminSettings';
 import TheBeach from './beach/TheBeach';
 import SolarCalculator from './SolarCalculator';
+import SharedProposalView from './proposal/SharedProposalView';
 import { ArrowLeft, RefreshCw, AlertCircle, FlaskConical, SlidersHorizontal } from 'lucide-react';
 import { Beach as BeachIcon } from './surf/SurfIcons';
 
@@ -20,6 +21,20 @@ import { Beach as BeachIcon } from './surf/SurfIcons';
  * The plain audit tool (standalone calculator) is still available to admins
  * via the dashboard, but the default authenticated view is the client list.
  */
+/**
+ * A shared proposal link (?proposal=<token>) renders BEFORE any auth gate.
+ *
+ * The customer has no login and never will — the link is the credential. Read
+ * once at module scope so a re-render cannot lose it, and so the rest of App
+ * never has to think about it.
+ */
+const SHARE_TOKEN = (() => {
+  try {
+    const t = new URLSearchParams(window.location.search).get('proposal');
+    return t && /^[a-f0-9]{64}$/i.test(t) ? t : null;
+  } catch { return null; }
+})();
+
 export default function App() {
   const { user, loading, configured, passwordRecovery, clearPasswordRecovery } = useAuth();
 
@@ -83,6 +98,13 @@ export default function App() {
     if (supabase) await supabase.auth.signOut();
     backToDashboard();
   };
+
+  // A shared proposal takes over the screen entirely, and comes before the
+  // auth gates: the customer holding this link has no account. After the hooks,
+  // for the same reason as password recovery below.
+  if (SHARE_TOKEN) {
+    return <SharedProposalView token={SHARE_TOKEN} />;
+  }
 
   // Password-recovery link takes over the screen. Must come AFTER all hooks —
   // an early return above hooks changes hook order between renders (React #300).
