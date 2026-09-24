@@ -35,14 +35,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, ArrowLeft } from 'lucide-react';
 import { SURF } from '../surf/theme';
-import { Swell, Shell, Heading } from '../surf/SurfIcons';
+import { Swell, Shell, Heading, Treasure } from '../surf/SurfIcons';
 import CustomerProposal from './CustomerProposal';
+import DropIn from './DropIn';
 import ProjectSteps from '../project/ProjectSteps';
 import { proposalSummaryLine } from './proposalModel';
 import { apiFetch } from '../lib/supabaseClient';
 
 const TABS = [
   { id: 'proposal', label: 'The proposal', icon: Shell },
+  { id: 'dropin',   label: 'Drop In', icon: Treasure },
   { id: 'steps',    label: 'What happens next', icon: Heading },
   { id: 'details',  label: 'Client details', icon: Swell }
 ];
@@ -190,6 +192,12 @@ const BigWave = ({ clientData = null, role = 'client', userEmail = '', onBackToC
         ) : (
           <Empty text="No proposal saved for this client yet." />
         )
+      )}
+
+      {tab === 'dropin' && (
+        proposal
+          ? <DropIn proposal={proposal} />
+          : <Empty text="Drop In needs a saved proposal — it compares paying cash against financing and keeping the cash invested." />
       )}
 
       {tab === 'steps' && (
