@@ -63,6 +63,62 @@ const tideFor = (project, proposal) => {
 };
 
 /**
+ * WHAT THIS VIEWER EARNED ON THIS DEAL — not what the deal paid out.
+ *
+ * The saved proposal carries the whole pool and a snapshot of the split. A rep
+ * looking at Treasure needs their own share; a manager needs every share. So
+ * this returns both, and Treasure decides which to show.
+ *
+ * MATCHING IS BY SEAT, FROM THE SNAPSHOT. The percentages are read off the
+ * stored proposal rather than the current rate card, because a comp change
+ * would otherwise retroactively rewrite what past deals paid — a rep's banked
+ * total moving overnight is the fastest way to lose their trust in the number.
+ *
+ * A proposal saved before the split model has no rows. Its total is attributed
+ * to the rep who saved it, which is what the old single-figure field meant.
+ */
+const commissionFor = (proposal, viewerEmail, isManager) => {
+  const int = (proposal && proposal.internal) || null;
+  if (!int) return { total: 0, mine: 0, rows: [], legacy: false };
+
+  const total = Number(int.total ?? int.commission) || 0;
+  const rows = Array.isArray(int.rows) ? int.rows : [];
+
+  if (!rows.length) {
+    // Legacy proposal: one figure, no seats. Treat it as the saver's.
+    return { total, mine: total, rows: [], legacy: true, seat: null, selfGen: false };
+  }
+
+  const me = (viewerEmail || '').toLowerCase();
+  const builderEmail = (int.builderEmail || '').toLowerCase();
+
+  // WHICH SEAT IS THIS VIEWER IN? The builder sees the builder's half; anyone
+  // else looking at their own book is the engineer who closed it. Decided by
+  // email rather than by who saved the proposal, because the builder did not
+  // save it and would otherwise see nothing.
+  const seat = (builderEmail && me && builderEmail === me)
+    ? 'builder'
+    : (int.selfGen ? 'self' : 'engineer');
+
+  const seatRow = rows.find((r) => r.key === seat);
+  const mine = seatRow ? Number(seatRow.amount) || 0 : 0;
+
+  return {
+    total,
+    mine: isManager ? total : mine,
+    rows,
+    legacy: false,
+    seat,
+    selfGen: !!int.selfGen,
+    builderName: int.builderName || null,
+    builderEmail: int.builderEmail || null,
+    // Manager buckets: what the override seats earned across the book.
+    captain: (rows.find((r) => r.key === 'captain') || {}).amount || 0,
+    recruiter: (rows.find((r) => r.key === 'recruiter') || {}).amount || 0
+  };
+};
+
+/**
  * What battery this deal is, in words.
  *
  * The saved proposal wins: it is what the customer agreed to buy. The Zoho
@@ -115,6 +171,9 @@ export default async function handler(req, res) {
     // request is almost certainly a stale URL, not an attack, and an error
     // page helps nobody.
     const scopeTo = user.role === 'admin' ? requested : me;
+    // An admin looking at the whole book is a manager view: they see the pool
+    // and the override buckets, not one seat's share.
+    const isManager = user.role === 'admin' && !requested;
 
     // --- contacts in scope ---
     let contactQuery = 'select id, Full_Name, Email, Created_By_Rep, Last_Activity_Time from Contacts where Last_Name is not null';
@@ -206,6 +265,50 @@ export default async function handler(req, res) {
       } catch { /* proposals are an enrichment, not a requirement */ }
     }
 
+    /**
+     * DEALS THIS REP SET BUT DOES NOT OWN.
+     *
+     * A builder does not own the contact — the engineer who closed it does, and
+     * Created_By_Rep points at them. Scoping on ownership alone therefore hides
+     * a builder's own deals from their own Beach, which is precisely the money
+     * they most want to see.
+     *
+     * So a second pass: proposals whose stored split names this viewer as the
+     * builder. Filtered inside the jsonb, so it stays one query rather than a
+     * scan. An admin looking at the whole book already has everything and skips
+     * it; a rep looking at somebody else's book is not entitled to this.
+     */
+    if (SUPABASE_URL && SERVICE_KEY && me && !isManager && (!requested || requested === me)) {
+      try {
+        const asBuilder = await sbFetch(
+          `/client_data?proposal->internal->>builderEmail=eq.${encodeURIComponent(me)}` +
+          `&select=contact_id,proposal`
+        );
+        const extraIds = [];
+        for (const row of asBuilder || []) {
+          if (!row.proposal || proposals[row.contact_id]) continue;
+          proposals[row.contact_id] = row.proposal;
+          extraIds.push(row.contact_id);
+        }
+        // Their names come from Zoho; without this the rows render as "Unnamed".
+        if (extraIds.length) {
+          const inList = extraIds.map((i) => `'${String(i).replace(/'/g, '')}'`).join(',');
+          try {
+            const r = await zohoFetch('/crm/v2/coql', {
+              method: 'POST',
+              body: JSON.stringify({
+                select_query: `select id, Full_Name, Email, Created_By_Rep, Last_Activity_Time ` +
+                  `from Contacts where id in (${inList}) limit 200`
+              })
+            });
+            for (const c of (r && r.data) || []) {
+              if (!byId[c.id]) { byId[c.id] = c; contacts.push(c); }
+            }
+          } catch { /* a missing name is survivable; a missing deal is not */ }
+        }
+      } catch { /* older proposals have no builder field — nothing to add */ }
+    }
+
     // --- assemble ---
     const deals = [];
     const seen = new Set();
@@ -217,6 +320,7 @@ export default async function handler(req, res) {
       const tide = tideFor(project, proposal);
       if (!tide) continue;
       seen.add(contactId);
+      const comm = commissionFor(proposal, me, isManager);
       deals.push({
         id: project.id,
         contactId,
@@ -229,7 +333,13 @@ export default async function handler(req, res) {
         // money they are about to earn on a deal that does not exist.
         contractValue: (proposal && proposal.pricing && proposal.pricing.contractWithAdders)
           ?? project.Proposal_Contract_Value ?? 0,
-        commission: (proposal && proposal.internal && proposal.internal.commission) || 0,
+        // `commission` is the viewer's own share; `commissionTotal` is the
+        // pool. Treasure sums the first, a manager's view sums the second.
+        commission: comm.mine,
+        commissionTotal: comm.total,
+        commissionRows: comm.rows,
+        commissionSeat: comm.seat,
+        selfGen: comm.selfGen,
         proposalDate: (proposal && proposal.createdAt) || project.Proposal_Date || null,
         projectStatus: project.Project_Status || null,
         rep: (contact && contact.Created_By_Rep) || null,
@@ -260,6 +370,7 @@ export default async function handler(req, res) {
     // A proposal saved against a contact with no project row still counts.
     for (const [contactId, proposal] of Object.entries(proposals)) {
       if (seen.has(contactId) || !byId[contactId]) continue;
+      const comm = commissionFor(proposal, me, isManager);
       deals.push({
         id: `prop_${contactId}`,
         contactId,
@@ -267,7 +378,11 @@ export default async function handler(req, res) {
         tide: tideFor(null, proposal) || 'met',
         summary: summarise(proposal, null),
         contractValue: (proposal.pricing && proposal.pricing.contractWithAdders) || 0,
-        commission: (proposal.internal && proposal.internal.commission) || 0,
+        commission: comm.mine,
+        commissionTotal: comm.total,
+        commissionRows: comm.rows,
+        commissionSeat: comm.seat,
+        selfGen: comm.selfGen,
         proposalDate: proposal.createdAt || null,
         projectStatus: null,
         rep: byId[contactId].Created_By_Rep || null,

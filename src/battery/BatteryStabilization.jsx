@@ -37,6 +37,10 @@ import {
 } from 'lucide-react';
 import { estimateBackupHours } from './BatteryModel';
 import { priceBattery, projectTwentyYear, solarAddOnCost, batteryAddersFor } from '../pricing/loanPricing';
+import {
+  calcBatteryCommission, shareFor, COMMISSION_ROLES, SELF_GEN_PCT,
+  BATTERY_REDLINE, DEALER_FEE_PCT
+} from '../pricing/commission';
 import { BATTERY_MODELS } from '../incentives/programData';
 import { getConnectionFeeForYear } from '../utils/rateData';
 import { NEM3_EXPORT_MIDDAY } from './BatteryDispatch';
@@ -45,6 +49,14 @@ import { DeepSeas, Shell } from '../surf/SurfIcons';
 import { buildProposal, toZohoSummary, proposalSummaryLine, ZOHO_FIELDS } from '../proposal/proposalModel';
 import { apiFetch } from '../lib/supabaseClient';
 import ProposalBar from '../proposal/ProposalBar';
+
+/** Seat names as a rep says them, with the alternative wording in brackets. */
+const SEAT_LABEL = {
+  engineer:  'Engineer (closer)',
+  builder:   'Builder (setter)',
+  captain:   'Captain (manager)',
+  recruiter: 'Recruiter'
+};
 
 const money = (v) => (v < 0 ? '−$' : '$') + Math.abs(Math.round(Number(v) || 0)).toLocaleString();
 const money2 = (v) => (v < 0 ? '−$' : '$') + Math.abs(Number(v) || 0).toFixed(2);
@@ -115,6 +127,37 @@ const BatteryStabilization = ({
   const [adderSel, setAdderSel] = useState({});
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [showCommission, setShowCommission] = useState(false);
+
+  /**
+   * WHO IS ON THIS DEAL — one question, not four.
+   *
+   * The rep using this screen is the engineer; that is what closing a deal
+   * means. The only thing they have to say is whether somebody SET it:
+   *
+   *   a builder is named  ->  engineer 42%, builder 42%
+   *   no builder named    ->  self-gen, engineer takes the combined 84%
+   *
+   * Self-gen is therefore DERIVED, not a second checkbox. Two controls that
+   * encode the same fact is how a deal ends up marked self-gen with a builder
+   * on it, and then nobody can say who should have been paid.
+   *
+   * Captain and Recruiter are never chosen here. They are overrides on
+   * production, they do not change with the deal, and a rep has no business
+   * setting them.
+   *
+   * The email is what makes the split reachable: it is how the deal finds its
+   * way into the builder's own Beach. A name alone cannot do that reliably.
+   */
+  const [hasBuilder, setHasBuilder] = useState(false);
+  const [builderName, setBuilderName] = useState('');
+  const [builderEmail, setBuilderEmail] = useState('');
+  const selfGen = !hasBuilder;
+  const seat = 'engineer';
+
+  const commissionCfg = settings.commission || {};
+  const commRoles = (commissionCfg.roles && commissionCfg.roles.length)
+    ? commissionCfg.roles : COMMISSION_ROLES;
+  const commSelfGenPct = commissionCfg.selfGenPct != null ? commissionCfg.selfGenPct : SELF_GEN_PCT;
 
   // ---- saved proposal ----
   const [savedProposal, setSavedProposal] = useState(null);
@@ -312,6 +355,21 @@ const BatteryStabilization = ({
         projectId: clientContext.projectId || null,
         clientName: clientLabel || null,
         supersedes: savedProposal ? savedProposal.id : null
+      },
+      // The split, snapshotted. Percentages travel WITH the deal so a comp
+      // change next quarter cannot rewrite what this one paid.
+      commission: {
+        total: comm.total,
+        redline: comm.redline,
+        netSale: comm.netSale,
+        dealerFeePct: comm.feePct,
+        dealerFee: comm.dealerFee,
+        customerContract: comm.customerContract,
+        selfGen,
+        seat,
+        builderName: hasBuilder ? (builderName || null) : null,
+        builderEmail: hasBuilder ? (builderEmail || '').trim().toLowerCase() || null : null,
+        rows: comm.rows.map((r) => ({ key: r.key, label: r.label, pct: r.pct, amount: r.amount }))
       }
     });
   }, [
@@ -370,6 +428,27 @@ const BatteryStabilization = ({
   // price object now — one derivation, in loanPricing, rather than a second
   // copy in this component that could drift from it.
   const totalKwh = price.totalKwh;
+
+  /**
+   * Commission, from the shared model. `contractValue` is the NET SALE now —
+   * what the rep writes the deal at before any dealer fee — and the customer's
+   * contract is derived from it rather than the reverse.
+   */
+  const comm = useMemo(() => calcBatteryCommission({
+    netSale: Number(contractValue) || 0,
+    batteryCount: 1 + price.adders.lines
+      .filter((l) => l.kind === 'battery')
+      .reduce((a, l) => a + (Number(l.units) || 0), 0),
+    redlinePerUnit: commissionCfg.batteryRedline != null ? commissionCfg.batteryRedline : BATTERY_REDLINE,
+    mode,
+    dealerFeePct: commissionCfg.dealerFeePct != null ? commissionCfg.dealerFeePct : DEALER_FEE_PCT,
+    addersCost: price.adders.total,
+    selfGen, roles: commRoles, selfGenPct: commSelfGenPct
+  }), [contractValue, price.adders, commissionCfg, mode, selfGen, commRoles, commSelfGenPct]);
+
+  const mySplit = shareFor(seat, {
+    total: comm.total, selfGen, roles: commRoles, selfGenPct: commSelfGenPct
+  });
   const backupHours = estimateBackupHours(totalKwh, 0.75);
 
   // ---- chart geometry ----
@@ -1171,63 +1250,134 @@ const BatteryStabilization = ({
                 <div className="mt-3 rounded-xl border border-violet-400/30 bg-violet-500/5 p-4">
                   <div className="flex flex-wrap items-baseline justify-between gap-4 mb-3">
                     <div>
-                      <div className="text-[11px] uppercase tracking-widest text-violet-300">Your commission</div>
+                      <div className="text-[11px] uppercase tracking-widest text-violet-300">
+                        Total commission on this deal
+                      </div>
                       <div className={`text-4xl font-extrabold mt-1 ${
-                        price.commission.belowFloor ? 'text-red-400' : 'text-violet-200'
-                      }`}>{money(price.commission.amount)}</div>
+                        comm.belowRedline ? 'text-red-400' : 'text-violet-200'
+                      }`}>{money(comm.total)}</div>
+                      <div className="text-[11.5px] text-slate-400 mt-0.5">
+                        Your share as {SEAT_LABEL[seat] || seat}: <b className="text-violet-200">{money(mySplit.amount)}</b>
+                        {' '}({mySplit.pct}%)
+                      </div>
                     </div>
                     <div className="text-right text-[12px] font-mono text-slate-400">
-                      <div>Contract {money(price.commission.contractValue)}</div>
-                      <div>Floor {money(price.commission.floor)}</div>
-                      <div className="text-[10.5px] text-slate-500">{price.commission.reason}</div>
+                      <div>Net sale {money(comm.netSale)}</div>
+                      <div>Redline {money(comm.redline)}</div>
+                      {comm.feePct > 0 && <div>Dealer fee {money(comm.dealerFee)}</div>}
+                      <div className="text-cyan-300">Contract {money(comm.customerContract)}</div>
                     </div>
                   </div>
 
+                  {/* The slider sets the NET SALE — what the deal is written at
+                      before any dealer fee. The customer's contract is derived
+                      from it, not the other way round, because the rep controls
+                      the net and the lender's fee is a consequence of it. */}
                   <input
                     type="range"
-                    min={price.commission.floor}
-                    max={price.commission.floor + 12000}
+                    min={comm.redline}
+                    max={comm.redline + 20000}
                     step={250}
-                    value={Math.max(price.commission.floor, Number(contractValue) || 0)}
+                    value={Math.max(comm.redline, Math.min(comm.redline + 20000, Number(contractValue) || 0))}
                     onChange={(e) => setContractValue(Number(e.target.value))}
                     className="w-full accent-violet-400"
                   />
                   <div className="flex justify-between text-[10.5px] text-slate-500">
-                    <span>{money(price.commission.floor)} · no commission</span>
-                    <span>{money(price.commission.floor + 12000)}</span>
+                    <span>{money(comm.redline)} · redline, pays nobody</span>
+                    <span>{money(comm.redline + 20000)}</span>
                   </div>
 
-                  {price.commission.belowFloor && (
+                  {comm.belowRedline && (
                     <p className="text-[11.5px] text-red-300 mt-2">
-                      Contract value is below the floor for this deal — it cannot be written here.
-                      Raise it to {money(price.commission.floor)} or switch to a rate card with a lower floor.
+                      {money(comm.shortfall)} below the redline — this deal pays nobody. Raise the net sale
+                      to at least {money(comm.redline)}.
                     </p>
                   )}
 
-                  <div className="mt-3 pt-3 border-t border-violet-400/20 text-[11px] text-slate-400 space-y-1">
-                    <div className="flex justify-between gap-3">
-                      <span>Floor, before solar</span>
-                      <span className="font-mono">{money(price.commission.base)}</span>
-                    </div>
-                    {price.commission.addedPanels > 0 && (
-                      <div className="flex justify-between gap-3">
-                        <span>{price.commission.addedPanels} added panels</span>
-                        <span className="font-mono">
-                          {price.commission.panelUplift > 0 ? '+' + money(price.commission.panelUplift) : 'no uplift set'}
-                        </span>
+                  {/* WAS IT SET? The only question a rep answers. Everything
+                      else about the split follows from it. */}
+                  <div className="mt-4 pt-3 border-t border-violet-400/20">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={hasBuilder}
+                        onChange={(e) => setHasBuilder(e.target.checked)}
+                        className="w-4 h-4 accent-violet-400" />
+                      <span className="text-[13px] text-slate-200">A builder set this deal</span>
+                    </label>
+                    <p className="text-[11px] text-slate-500 mt-1 ml-6">
+                      {hasBuilder
+                        ? `You split the rep share 50/50 — ${money(comm.total * 0.42)} each.`
+                        : `Self-gen: you keep the combined ${commSelfGenPct}% — ${money(mySplit.amount)}.`}
+                    </p>
+
+                    {hasBuilder && (
+                      <div className="grid grid-cols-2 gap-2 mt-3 ml-6">
+                        <label className="block">
+                          <span className="block text-[10.5px] uppercase tracking-wider text-slate-500 mb-1">
+                            Builder name
+                          </span>
+                          <input
+                            value={builderName}
+                            onChange={(e) => setBuilderName(e.target.value)}
+                            placeholder="Kenson Manassero"
+                            className="w-full px-2 py-1.5 rounded bg-slate-900/70 border border-slate-600 text-slate-100 text-[12.5px]"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="block text-[10.5px] uppercase tracking-wider text-slate-500 mb-1">
+                            Builder email
+                          </span>
+                          <input
+                            value={builderEmail}
+                            onChange={(e) => setBuilderEmail(e.target.value)}
+                            placeholder="their login email"
+                            className={`w-full px-2 py-1.5 rounded bg-slate-900/70 border text-slate-100 text-[12.5px] ${
+                              builderEmail ? 'border-slate-600' : 'border-amber-500/50'
+                            }`}
+                          />
+                        </label>
                       </div>
                     )}
+                    {hasBuilder && !builderEmail && (
+                      <p className="text-[11px] text-amber-300 mt-2 ml-6">
+                        Without their email this split will not reach their Beach — they will not see the
+                        {' '}{money(comm.total * 0.42)} they earned.
+                      </p>
+                    )}
+
+                    {/* The split itself. Captain and Recruiter are rep-invisible:
+                        they are overrides on production and only the admin view
+                        has any reason to show them. */}
+                    <div className="rounded-lg overflow-hidden border border-slate-700 mt-3">
+                      {comm.rows
+                        .filter((r) => r.key !== 'captain' && r.key !== 'recruiter')
+                        .map((r) => (
+                          <div key={r.key}
+                               className={`flex items-center justify-between px-3 py-2 border-t border-slate-700/60 ${
+                                 r.key === 'self' || r.key === 'engineer' ? 'bg-violet-500/10' : ''
+                               }`}>
+                            <span className="text-[12.5px] text-slate-200">
+                              {r.key === 'builder' ? (builderName || 'Builder') : r.label}
+                            </span>
+                            <span className="text-[11.5px] font-mono text-slate-500">{r.pct}%</span>
+                            <span className="text-[12.5px] font-mono text-slate-100">{money(r.amount)}</span>
+                          </div>
+                        ))}
+                    </div>
+                    <p className="text-[10.5px] text-slate-500 mt-2">
+                      Saved with the proposal, along with the percentages as they stand today — so changing the
+                      comp plan later cannot rewrite what this deal paid.
+                    </p>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-violet-400/20 text-[11px] text-slate-400 space-y-1">
                     <div className="flex justify-between gap-3">
                       <span>Payment at this contract value</span>
                       <span className="font-mono text-cyan-300">{money2(price.monthlyPayment)}/mo</span>
                     </div>
                     <p className="text-[10.5px] text-slate-500 pt-1">
-                      Commission is measured on the base contract only — adders are pass-through cost, so a main
-                      panel upgrade does not read as money you earned. Cash and the unsubsidised rate card carry a
-                      lower floor because neither needs the rate bought down.
-                      {price.commission.addedPanels > 0 && price.commission.panelUplift === 0 && (
-                        <> The per-panel floor uplift is still set to zero in Admin → Platform Defaults.</>
-                      )}
+                      Commission is measured on the net sale, never the grossed-up contract — the dealer fee is
+                      the lender&rsquo;s money, not margin. Adders and extra battery packs are pass-through cost
+                      and are excluded too, so loading a deal with a panel upgrade does not read as money earned.
                     </p>
                   </div>
                 </div>

@@ -13,11 +13,24 @@
  * pipeline figure is shown with its own conversion caveat rather than as a
  * total a rep can spend against.
  *
- * WHERE THE NUMBERS COME FROM: each deal's commission is the figure the rep
- * configured in Deep Seas and saved with the proposal — contract value above
- * the floor. Nothing here re-derives it from a rate card, because no rate card
- * exists yet in Recruits. When one does, this panel reads it instead and the
- * arithmetic below stays exactly the same.
+ * WHERE THE NUMBERS COME FROM: the API returns each deal's `commission` as
+ * THIS VIEWER'S OWN SHARE, computed from the split snapshot stored with the
+ * proposal — not the pool. `commissionTotal` is the pool, shown to managers.
+ *
+ * THE SNAPSHOT IS THE POINT. Percentages are read off the saved proposal, never
+ * recomputed from today's rate card, because a comp change would otherwise
+ * rewrite what every past deal paid. A rep whose banked total moves overnight
+ * stops believing the number, and they would be right to.
+ *
+ * MANAGER BUCKETS ARE ADMIN-ONLY. An admin viewing the whole book sees the pool
+ * plus what the Captain and Recruiter seats earned across it. A rep never sees
+ * either: it is not their money, and showing it starts a conversation nobody
+ * asked for.
+ *
+ * A BUILDER SEES THEIR HALF HERE TOO. They do not own the contact — the closer
+ * does — so the API scopes them in separately by the builder email stored on
+ * the deal. Without that, a builder's own Beach would show none of the deals
+ * they set, which is exactly the money they most want to see.
  *
  * Rendered by: src/beach/TheBeach.jsx
  */
@@ -29,7 +42,8 @@ const money = (v) => '$' + Math.round(Number(v) || 0).toLocaleString();
 
 const sum = (list, key) => list.reduce((a, d) => a + (Number(d[key]) || 0), 0);
 
-const TreasurePanel = ({ deals = [], byTide = {} }) => {
+const TreasurePanel = ({ deals = [], byTide = {}, role = 'rep' }) => {
+  const isManager = role === 'admin';
   const met = byTide.met || [];
   const project = byTide.project || [];
   const installed = byTide.installed || [];
@@ -44,6 +58,17 @@ const TreasurePanel = ({ deals = [], byTide = {} }) => {
     // A deal at Project has signed; one at Met has not. Weighting them the
     // same would flatter the pipeline, so they are reported separately and
     // the blended figure is left to the rep rather than asserted here.
+    // Override buckets. Summed across every deal rather than by tide, because
+    // an override is earned on production regardless of which tide it sits in.
+    const captain = deals.reduce((a, d) => a + Number(
+      (d.commissionRows || []).find((r) => r.key === 'captain')?.amount || 0
+    ), 0);
+    const recruiter = deals.reduce((a, d) => a + Number(
+      (d.commissionRows || []).find((r) => r.key === 'recruiter')?.amount || 0
+    ), 0);
+    const pool = deals.reduce((a, d) => a + (Number(d.commissionTotal) || 0), 0);
+    const selfGenCount = deals.filter((d) => d.selfGen).length;
+
     return {
       metCommission: sum(met, 'commission'),
       projectCommission: sum(project, 'commission'),
@@ -53,9 +78,10 @@ const TreasurePanel = ({ deals = [], byTide = {} }) => {
       installedRevenue,
       avgInstalled: installed.length ? installedCommission / installed.length : 0,
       avgPipeline: pipeline.length ? pipelineCommission / pipeline.length : 0,
-      count: { met: met.length, project: project.length, installed: installed.length }
+      count: { met: met.length, project: project.length, installed: installed.length },
+      captain, recruiter, pool, selfGenCount
     };
-  }, [met, project, installed]);
+  }, [met, project, installed, deals]);
 
   return (
     <div className="space-y-5">
@@ -109,6 +135,35 @@ const TreasurePanel = ({ deals = [], byTide = {} }) => {
           get hurt.
         </p>
       </div>
+
+      {/* ------------------------ override buckets ------------------------
+          Captain and Recruiter earn on other people's production, so they are
+          their own buckets rather than part of a personal total. Shown to
+          managers, and to anyone who actually holds one of those seats. */}
+      {/* ADMIN ONLY. A rep has no business seeing what their captain or the
+          recruiter earned off their production — it is not their money and
+          showing it invites a conversation nobody asked for. */}
+      {isManager && (
+        <div className="rounded-2xl p-5" style={{ background: SURF.deep, border: `1px solid ${SURF.line}` }}>
+          <div className="text-[11px] uppercase tracking-[0.18em] mb-3" style={{ color: SURF.textMuted }}>
+            Override income
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-px rounded-xl overflow-hidden"
+               style={{ background: SURF.line }}>
+            <Split label="Captain — 12% of the book" value={money(t.captain)}
+                   count={deals.length} tone={SURF.seaBright} />
+            <Split label="Recruiter — 4% of the book" value={money(t.recruiter)}
+                   count={deals.length} tone={SURF.sun} />
+            <Split label="Total commission paid out" value={money(t.pool)}
+                   count={deals.length} tone={SURF.textBright} />
+          </div>
+          <p className="text-[11.5px] mt-3 max-w-[70ch]" style={{ color: SURF.textFaint }}>
+            Percentages come from each deal&rsquo;s own saved split, not today&rsquo;s rate card — so changing the
+            comp plan does not rewrite what past deals paid.
+            {t.selfGenCount > 0 && <> {t.selfGenCount} of these were self-gen, where one rep took the combined share.</>}
+          </p>
+        </div>
+      )}
 
       {/* --------------------------- averages --------------------------- */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-px rounded-2xl overflow-hidden"

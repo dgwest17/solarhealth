@@ -229,7 +229,7 @@ export const allStepsComplete = (purchaseType, stepStatus = {}) => {
  */
 export function buildProposal({
   price, projection, inputs = {}, battery = {}, financing = {},
-  bill = {}, solar = null, parties = {}, meta = {}
+  bill = {}, solar = null, parties = {}, meta = {}, commission = null
 } = {}) {
   const now = new Date();
   const mode = financing.mode || 'loan';
@@ -376,11 +376,42 @@ export function buildProposal({
     },
 
     // ---- rep-only. Never rendered on anything the customer sees. ----
-    internal: price && price.commission ? {
+    /**
+     * REP-FACING ONLY. Never rendered on the customer proposal.
+     *
+     * `commission` is a SNAPSHOT of the split as it stood when the deal was
+     * saved — total, redline, every seat's percentage and amount, and who held
+     * which seat. Snapshotted rather than recomputed because comp plans change,
+     * and a percentage read live from settings would retroactively rewrite what
+     * every past deal paid. Treasure reads this, not the current rate card.
+     *
+     * `commission.total` is the whole pool, which is what Zoho's Rep_Commission
+     * field holds — not any one rep's share.
+     */
+    internal: commission ? {
+      commission: commission.total,
+      total: commission.total,
+      redline: commission.redline,
+      netSale: commission.netSale,
+      dealerFeePct: commission.dealerFeePct,
+      dealerFee: commission.dealerFee,
+      customerContract: commission.customerContract,
+      selfGen: !!commission.selfGen,
+      seat: commission.seat || null,
+      // The builder's email is what routes their half into their own Beach.
+      // A name cannot do that job: two Kensons, or a typo, and the money is
+      // invisible to the person who earned it.
+      builderName: commission.builderName || null,
+      builderEmail: commission.builderEmail || null,
+      rows: commission.rows || []
+    } : (price && price.commission ? {
+      // Legacy shape, for proposals saved before the split model existed.
       commission: price.commission.amount,
+      total: price.commission.amount,
       floor: price.commission.floor,
-      floorReason: price.commission.reason
-    } : null,
+      floorReason: price.commission.reason,
+      rows: []
+    } : null),
 
     // ---- where it is in the pipeline ----
     stage: SALES_STAGE.MET,
@@ -449,7 +480,11 @@ export function toZohoSummary(proposal) {
     Net_Investment: p.netInvestment ?? null,
     Storage_Rebate: p.storageRebate ?? null,
     Est_Monthly_Savings: s.estMonthlySavings ?? null,
-    Rep_Commission: proposal.internal ? proposal.internal.commission : null,
+    // The TOTAL pool, not any one rep's share. A manager reading this field
+    // sees what the deal paid out altogether; who got what comes from the
+    // seat fields below and the snapshot in Supabase.
+    Rep_Commission: proposal.internal ? (proposal.internal.total ?? proposal.internal.commission) : null,
+    Self_Gen: proposal.internal ? !!proposal.internal.selfGen : null,
     Lender_Qualification: proposal.steps.qualification || null,
     Documents_Step: proposal.steps.paperwork || null,
     Intake_Step: proposal.steps.site_inspection || null
@@ -491,6 +526,14 @@ export const ZOHO_FIELDS = {
     { api: 'Net_Investment', type: 'currency' },
     { api: 'Storage_Rebate', type: 'currency' },
     { api: 'Est_Monthly_Savings', type: 'currency' },
+    { api: 'Self_Gen', type: 'boolean',
+      note: 'One rep both set and closed it, so they take the combined share.' },
+    // The four seats. Lookups to Recruits, which is the rep roster — reps are
+    // not Zoho users, so a User lookup would have nothing to point at.
+    { api: 'Builder', type: 'lookup', module: 'Recruits' },
+    { api: 'Engineer', type: 'lookup', module: 'Recruits' },
+    { api: 'Captain', type: 'lookup', module: 'Recruits' },
+    { api: 'Recruiter', type: 'lookup', module: 'Recruits' },
     { api: 'Rep_Commission', type: 'currency',
       note: 'Rep-facing. Restrict field permissions if reps should not see each other’s.' },
     { api: 'Lender_Qualification', type: 'picklist',
