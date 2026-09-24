@@ -30,8 +30,19 @@
  * penny can type their number in; nobody has to reverse-engineer a circular
  * reference under time pressure.
  *
+ * THE DEALER FEE IS COMPUTED TWO WAYS, and the difference is the point.
+ * The customer's contract carries 10% OF THE CONTRACT. The loan fee the
+ * contractor bills is 10% OF THE NET. That gap — net x fee^2/(1-fee), or $222.22
+ * on a $20,000 net sale at 10% — is money that stays in the deal, so the
+ * commission on THIS FORM is higher than the commission everywhere else by
+ * exactly that amount. Deliberately scoped to the handoff: the comp plan is
+ * written against the net sale, and moving it in five places to gain $222 would
+ * leave every screen disagreeing with every other.
+ *
  * Used by: src/project/IntakeForm.jsx, api/intake.js
  */
+
+import { intakeFeeSpread } from '../pricing/commission';
 
 /**
  * The services table, in the workbook's own order. `id` is stable and is what
@@ -192,6 +203,12 @@ export function prefillIntake({ proposal = null, contact = null, repName = '', s
     : f.purchaseType === 'cash' ? 'Cash'
     : f.purchaseType === 'lease' ? 'PPA' : 'Loan';
 
+  const feeSpread = intakeFeeSpread({
+    netSale: (proposal && proposal.internal && proposal.internal.netSale) || 0,
+    mode: paymentType === 'Loan' ? 'loan' : 'cash',
+    dealerFeePct: (proposal && proposal.internal && proposal.internal.dealerFeePct) || 0
+  });
+
   return {
     // --- customer ---
     customerName: (contact && contact.Full_Name) || (proposal && proposal.client && proposal.client.name) || '',
@@ -212,7 +229,22 @@ export function prefillIntake({ proposal = null, contact = null, repName = '', s
     services,
 
     // --- money ---
-    commission: (proposal && proposal.internal && proposal.internal.commission) || '',
+    /**
+     * COMMISSION ON THE HANDOFF IS HIGHER, and on purpose.
+     *
+     * The customer's contract carries 10% OF THE CONTRACT; the contractor bills
+     * 10% OF THE NET. That difference stays in the deal, so it is added here —
+     * and only here. Every other screen measures commission on the net sale,
+     * because that is what the comp plan is written against.
+     */
+    commission: (() => {
+      const base = (proposal && proposal.internal
+        && (proposal.internal.total ?? proposal.internal.commission)) || 0;
+      return base ? Math.round((base + feeSpread) * 100) / 100 : '';
+    })(),
+    commissionBase: (proposal && proposal.internal
+      && (proposal.internal.total ?? proposal.internal.commission)) || '',
+    commissionFeeSpread: feeSpread ? Math.round(feeSpread * 100) / 100 : 0,
     loanFeeRate: DEFAULT_LOAN_FEE_RATE,
     loanFeeBase: '',
     prepaidLease: false,

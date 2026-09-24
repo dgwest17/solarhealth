@@ -145,6 +145,18 @@ export const ADDERS = [
     hint: 'Minimum 4 panels. A $1,000 baseline applies at 4-7 panels and drops away above 7.' },
   { id: 'non_export', label: 'Non-export system',         kind: 'flat',    amount: 1200,
     blocksRebate: true, hint: 'A non-exporting system is not eligible for the storage rebate.' },
+  /**
+   * TRAVEL. Anything north of Laguna Canyon or Temecula Road is far enough out
+   * that the crew day costs more.
+   *
+   * A manual tick rather than something derived from the address. Geocoding a
+   * boundary drawn through two named roads would need a real polygon and would
+   * be wrong at the edges — and wrong quietly, in a figure nobody re-checks.
+   * The rep knows where they are standing; asking them is both cheaper and more
+   * accurate than a guess dressed as a calculation.
+   */
+  { id: 'travel', label: 'Out-of-area travel', kind: 'flat', amount: 1500,
+    hint: 'North of Laguna Canyon or Temecula Road.' },
 
   /* --------------------------- extra batteries ---------------------------
    * Additional packs are adders. They were briefly a parallel mechanism of

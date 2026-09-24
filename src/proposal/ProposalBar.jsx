@@ -73,7 +73,7 @@ const ProposalBar = ({
       });
       if (r && r.path) {
         const url = window.location.origin + r.path;
-        setShare({ url });
+        setShare({ url, expiresAt: r.expiresAt || null, days: r.days || null });
         try { await navigator.clipboard.writeText(url); } catch { /* shown below regardless */ }
       } else {
         setShareErr('Could not create a link.');
@@ -184,6 +184,10 @@ const ProposalBar = ({
             />
             <span className="text-[11px] text-slate-500">
               Opens the same proposal, no login. Nothing rep-facing is on it.
+              {share.expiresAt && (
+                <> Good until {new Date(share.expiresAt).toLocaleDateString()}
+                  {share.days ? ` (${share.days} days)` : ''}.</>
+              )}
             </span>
           </div>
         )}

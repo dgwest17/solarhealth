@@ -229,6 +229,61 @@ export function calcBatteryCommission({
 }
 
 /**
+ * THE INTAKE SPREAD — why the handoff form shows a higher commission.
+ *
+ * Two different fees are called "the dealer fee":
+ *
+ *   WHAT THE CUSTOMER CARRIES   10% OF THE CONTRACT. The contract is grossed up
+ *                               to netSale/(1-fee), so on a $20,000 net sale
+ *                               that is $2,222.22.
+ *
+ *   WHAT THE CONTRACTOR BILLS   10% OF THE NET. $2,000 on the same deal.
+ *
+ * The difference is real money that stays in the deal, so on the intake it is
+ * added to commission. Everywhere else — Deep Seas, Treasure, Forecast, Zoho —
+ * commission stays measured on the net sale, because that is the figure the comp
+ * plan is written against and changing it in five places to gain $222 would make
+ * every screen disagree with every other.
+ *
+ * Closed form, for anyone checking it by hand:
+ *
+ *   spread = net x fee / (1 - fee)  -  net x fee
+ *          = net x fee^2 / (1 - fee)
+ *
+ * At 10% that is 1.111% of the net sale; at 5% it is 0.263%. It grows fast with
+ * the fee, which is worth knowing before anyone raises one.
+ *
+ * Returns 0 for cash: there is no fee, so there is no spread.
+ */
+export function intakeFeeSpread({ netSale = 0, mode = 'loan', dealerFeePct = DEALER_FEE_PCT } = {}) {
+  const sale = Math.max(0, Number(netSale) || 0);
+  if (mode !== 'loan') return 0;
+  const f = Math.max(0, Math.min(0.9, Number(dealerFeePct) || 0));
+  if (f <= 0) return 0;
+  return sale * f * f / (1 - f);
+}
+
+/**
+ * What the INTAKE form shows as commission: the pool plus the fee spread.
+ *
+ * Deliberately a separate function rather than a field on calcBatteryCommission.
+ * A caller has to ask for the intake figure by name, so it cannot leak into a
+ * screen that means the ordinary one.
+ */
+export function intakeCommission({ total = 0, netSale = 0, mode = 'loan', dealerFeePct = DEALER_FEE_PCT } = {}) {
+  const spread = intakeFeeSpread({ netSale, mode, dealerFeePct });
+  const base = Math.max(0, Number(total) || 0);
+  return {
+    base,
+    spread,
+    total: base + spread,
+    contractorLoanFee: mode === 'loan'
+      ? Math.max(0, Number(netSale) || 0) * Math.max(0, Math.min(0.9, Number(dealerFeePct) || 0))
+      : 0
+  };
+}
+
+/**
  * Invert it: what net sale price produces a given total commission?
  * Used by the Forecast planner, which works backwards from a target.
  */

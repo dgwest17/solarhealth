@@ -250,53 +250,125 @@ const Forecast = ({ role = 'rep', deals = [] }) => {
           <SwellIcon size={15} /> What the goal costs
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
-          <div>
-            <Label>Goal</Label>
-            <input
-              type="number"
-              value={goal}
-              onChange={(e) => setGoal(Number(e.target.value) || 0)}
-              className="w-full px-3 py-2.5 rounded-lg font-mono text-xl font-bold focus:outline-none"
-              style={{ background: SURF.surface, border: `1px solid ${SURF.line}`, color: SURF.sun }}
-            />
-          </div>
-          <div>
-            <Label>Over {months} month{months === 1 ? '' : 's'}</Label>
-            <input
-              type="range" min={1} max={12} step={1}
-              value={months}
-              onChange={(e) => setMonths(Number(e.target.value))}
-              className="w-full accent-amber-400 mt-2"
-            />
-            <div className="flex justify-between text-[10.5px] mt-0.5" style={{ color: SURF.textFaint }}>
-              <span>1 mo</span><span>12 mo</span>
+        {/* LEFT: the goal and its timeframe, stacked tight — they are one
+            question ("how much, by when") and splitting them across the page
+            made the reader look twice to ask it.
+            RIGHT: the answer, where the month slider used to sit. Cause on the
+            left, consequence on the right, and the eye travels the way the
+            arithmetic does. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-4">
+          <div className="space-y-3">
+            <div>
+              <Label>Goal</Label>
+              <input
+                type="number"
+                value={goal}
+                onChange={(e) => setGoal(Number(e.target.value) || 0)}
+                className="w-full px-3 py-2.5 rounded-lg font-mono text-xl font-bold focus:outline-none"
+                style={{ background: SURF.surface, border: `1px solid ${SURF.line}`, color: SURF.sun }}
+              />
             </div>
+            <div>
+              <div className="flex justify-between text-[12px] mb-1">
+                <span style={{ color: SURF.textMuted }}>Over</span>
+                <span className="font-mono" style={{ color: SURF.textBright }}>
+                  {months} month{months === 1 ? '' : 's'}
+                </span>
+              </div>
+              <input
+                type="range" min={1} max={12} step={1}
+                value={months}
+                onChange={(e) => setMonths(Number(e.target.value))}
+                className="w-full accent-amber-400"
+              />
+              <div className="flex justify-between text-[10.5px]" style={{ color: SURF.textFaint }}>
+                <span>1 mo</span><span>12 mo</span>
+              </div>
+            </div>
+
+            {/* Take-home, immediately under the goal it belongs to. A goal and
+                what actually reaches the account are the same sentence, and
+                separating them by two panels let a rep read the gross as their
+                income. */}
+            {mine.amount > 0 && (
+              <div className="rounded-xl p-4" style={{ background: SURF.surface, border: `1px solid ${SURF.line}` }}>
+                <div className="text-[11px] uppercase tracking-wider mb-2" style={{ color: SURF.textMuted }}>
+                  What reaches your account
+                </div>
+                <Row label="Gross" value={money(net.gross)} />
+                <Row label="Less expenses" value={'− ' + money(net.expenses)} tone={SURF.caution} />
+                <Row label="Less tax on profit" value={'− ' + money(net.tax)} tone={SURF.caution} />
+                <Row label="Invested" value={'− ' + money(net.invested)} tone={SURF.seaBright} />
+                <div className="flex items-baseline justify-between mt-2 pt-2"
+                     style={{ borderTop: `1px solid ${SURF.lineStrong}` }}>
+                  <span className="text-[13px]" style={{ color: SURF.textBright }}>Take home</span>
+                  <span className="text-2xl font-bold font-mono" style={{ color: SURF.good }}>
+                    {money(net.takeHome)}
+                  </span>
+                </div>
+                <div className="text-[11px] mt-0.5 text-right" style={{ color: SURF.textFaint }}>
+                  {money(net.takeHome / months)} a month
+                </div>
+
+                <div className="mt-3 pt-3 space-y-2.5" style={{ borderTop: `1px solid ${SURF.line}` }}>
+                  <Slide label="Business expenses" value={expensesPct} onChange={setExpensesPct} max={40} />
+                  <Slide label="Tax set-aside" value={taxPct} onChange={setTaxPct} max={50} />
+                  <Slide label="Invested" value={investPct} onChange={setInvestPct} max={50} sub="post-tax" />
+                </div>
+                <p className="text-[10.5px] mt-2" style={{ color: SURF.textFaint }}>
+                  Tax is on profit after expenses, not on the gross. The default rate is a placeholder for an
+                  accountant, not advice — 1099, so nothing is withheld for you.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT: the answer */}
+          <div>
+            {mine.amount <= 0 ? (
+              <div className="rounded-xl p-5 text-center text-[13px] h-full flex items-center justify-center"
+                   style={{ background: SURF.surface, border: `1px solid ${SURF.line}`, color: SURF.textMuted }}>
+                Set a sale price above the redline to see what the goal takes.
+              </div>
+            ) : (
+              <div className="rounded-2xl p-6"
+                   style={{ background: 'rgba(242,181,94,.10)', border: `1px solid ${SURF.sun}55` }}>
+                <div className="text-[11px] uppercase tracking-wider" style={{ color: SURF.textMuted }}>
+                  Doors per day, every working day
+                </div>
+                <div className="text-[64px] leading-none font-extrabold mt-1" style={{ color: SURF.sun }}>
+                  {round1(plan.doorsPerDay)}
+                </div>
+                <p className="text-[13px] mt-2" style={{ color: SURF.text }}>
+                  {Math.round(plan.doors).toLocaleString()} doors over {months} month{months === 1 ? '' : 's'} —
+                  about {round1(plan.doorsPerWeek)} a week. Each knock is worth {money2(plan.dollarsPerDoor)} on
+                  average.
+                </p>
+                <div className="mt-4 pt-3 grid grid-cols-2 gap-3" style={{ borderTop: `1px solid ${SURF.sun}33` }}>
+                  <div>
+                    <div className="text-[10.5px] uppercase tracking-wider" style={{ color: SURF.textMuted }}>
+                      Installs needed
+                    </div>
+                    <div className="text-xl font-bold font-mono" style={{ color: SURF.textBright }}>
+                      {round1(plan.installs)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10.5px] uppercase tracking-wider" style={{ color: SURF.textMuted }}>
+                      Per month
+                    </div>
+                    <div className="text-xl font-bold font-mono" style={{ color: SURF.textBright }}>
+                      {round1(plan.installsPerMonth)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {mine.amount <= 0 ? (
-          <div className="rounded-xl p-5 text-center text-[13px]"
-               style={{ background: SURF.surface, border: `1px solid ${SURF.line}`, color: SURF.textMuted }}>
-            Set a sale price above the redline to see what the goal takes.
-          </div>
-        ) : (
+        {mine.amount > 0 && (
           <>
-            {/* the answer */}
-            <div className="rounded-2xl p-6 mb-4"
-                 style={{ background: 'rgba(242,181,94,.10)', border: `1px solid ${SURF.sun}55` }}>
-              <div className="text-[11px] uppercase tracking-wider" style={{ color: SURF.textMuted }}>
-                Doors per day, every working day
-              </div>
-              <div className="text-[64px] leading-none font-extrabold mt-1" style={{ color: SURF.sun }}>
-                {round1(plan.doorsPerDay)}
-              </div>
-              <p className="text-[13px] mt-2" style={{ color: SURF.text }}>
-                {Math.round(plan.doors).toLocaleString()} doors over {months} month{months === 1 ? '' : 's'} —
-                about {round1(plan.doorsPerWeek)} a week. Each knock is worth {money2(plan.dollarsPerDoor)} on average.
-              </p>
-            </div>
-
             {/* the funnel, so the number can be argued with */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-px rounded-2xl overflow-hidden mb-3"
                  style={{ background: SURF.line }}>
@@ -405,40 +477,6 @@ const Forecast = ({ role = 'rep', deals = [] }) => {
               )}
             </div>
 
-            {/* what actually reaches the account */}
-            <div className="rounded-2xl p-5" style={{ background: SURF.surface, border: `1px solid ${SURF.line}` }}>
-              <div className="text-[11px] uppercase tracking-wider mb-3" style={{ color: SURF.textMuted }}>
-                What reaches your account
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div className="space-y-3">
-                  <Slide label="Business expenses" value={expensesPct} onChange={setExpensesPct} max={40} />
-                  <Slide label="Tax set-aside" value={taxPct} onChange={setTaxPct} max={50} />
-                  <Slide label="Invested" value={investPct} onChange={setInvestPct} max={50} sub="out of post-tax" />
-                </div>
-                <div>
-                  <Row label="Gross commission" value={money(net.gross)} />
-                  <Row label="Less expenses" value={'− ' + money(net.expenses)} tone={SURF.caution} />
-                  <Row label="Taxable profit" value={money(net.profit)} />
-                  <Row label="Less tax" value={'− ' + money(net.tax)} tone={SURF.caution} />
-                  <Row label="Invested" value={'− ' + money(net.invested)} tone={SURF.seaBright} />
-                  <div className="flex items-baseline justify-between mt-3 pt-3"
-                       style={{ borderTop: `1px solid ${SURF.lineStrong}` }}>
-                    <span className="text-[13px]" style={{ color: SURF.textBright }}>Take home</span>
-                    <span className="text-2xl font-bold font-mono" style={{ color: SURF.good }}>
-                      {money(net.takeHome)}
-                    </span>
-                  </div>
-                  <div className="text-[11px] mt-1 text-right" style={{ color: SURF.textFaint }}>
-                    {Math.round(net.takeHome / months).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })} a month
-                  </div>
-                </div>
-              </div>
-              <p className="text-[11px] mt-4" style={{ color: SURF.textFaint }}>
-                Tax is taken on profit after expenses, not on the gross. The default rate is a placeholder for a
-                conversation with an accountant, not advice — 1099 income, so nothing is withheld for you.
-              </p>
-            </div>
           </>
         )}
       </section>

@@ -69,7 +69,7 @@ export default async function handler(req, res) {
     }
     const user = await requireUser(req);
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-    const { contactId, revoke = false, rotate = false } = body;
+    const { contactId, revoke = false, rotate = false, days = null } = body;
 
     if (!contactId) return res.status(400).json({ error: 'contactId required' });
     if (!SUPABASE_URL || !SERVICE_KEY) {
@@ -91,13 +91,32 @@ export default async function handler(req, res) {
       token = randomBytes(32).toString('hex');
     }
 
+    /**
+     * HOW LONG THE LINK LIVES.
+     *
+     * 30 days by default, 7 to 90 accepted. Long enough that a customer reading
+     * it a fortnight later at the kitchen table still can — which is the whole
+     * reason the link exists — and short enough that a forwarded URL does not
+     * sit live in somebody's inbox for a year.
+     *
+     * Clamped, because a caller asking for 3650 days has misunderstood what
+     * this is for, and a caller asking for 0 would break the link they just
+     * made.
+     */
+    const SHARE_DEFAULT_DAYS = 30;
+    const span = Math.max(7, Math.min(90, Math.round(Number(days) || SHARE_DEFAULT_DAYS)));
+
     const next = { ...proposal, shareToken: token };
     if (token) {
       next.sharedAt = proposal.sharedAt && !rotate ? proposal.sharedAt : new Date().toISOString();
       next.sharedBy = user.email || null;
+      // Re-sharing extends from NOW rather than from the original share, so a
+      // rep re-sending a link a month later does not hand over a dead one.
+      next.shareExpiresAt = new Date(Date.now() + span * 86400000).toISOString();
     } else {
       delete next.sharedAt;
       delete next.sharedBy;
+      delete next.shareExpiresAt;
     }
 
     await sbFetch('/client_data', {
@@ -114,7 +133,9 @@ export default async function handler(req, res) {
       // The path only. The origin is the browser's business — hard-coding one
       // here breaks every preview deployment and gets noticed in production.
       path: token ? `/?proposal=${token}` : null,
-      sharedAt: next.sharedAt || null
+      sharedAt: next.sharedAt || null,
+      expiresAt: next.shareExpiresAt || null,
+      days: token ? span : null
     });
   } catch (e) {
     return sendError(res, e);

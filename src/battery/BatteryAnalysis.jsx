@@ -29,7 +29,10 @@ import Nem3ValuePanel from './Nem3ValuePanel';
  * The overlay (built from the selected profile + the client's system data)
  * is computed once here and shared, so every section stays in sync.
  */
-const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null , consumptionProfile = null, onConsumptionProfileChange = null, calculations = null, rateOverride = null, onRateOverrideChange = null, clientContext = null, clientLabel = '' }) => {
+const BatteryAnalysis = ({ 
+  /** Verdict from the Eligibility tab; drives the rebate Auto in Stabilize. */
+  eligibility = null,
+inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null , consumptionProfile = null, onConsumptionProfileChange = null, calculations = null, rateOverride = null, onRateOverrideChange = null, clientContext = null, clientLabel = '' }) => {
   const [profileKeyInternal, setProfileKeyInternal] = useState('evening_heavy');
   const profileKey = consumptionProfile || profileKeyInternal;
   const setProfileKey = (k) => { setProfileKeyInternal(k); if (onConsumptionProfileChange) onConsumptionProfileChange(k); };
@@ -251,6 +254,7 @@ const BatteryAnalysis = ({ inputs, nemImpact: nemImpactProp = null, extraUsage =
 
       <Accordion title="Stabilize Your Bill With Storage" subtitle="Smoothing your load and your bill" accent="cyan">
         <BatteryStabilization
+          eligibility={eligibility}
           recoveredValuePerYear={totalRecoveredPerYear}
           overlay={overlay}
           inputs={inputs}

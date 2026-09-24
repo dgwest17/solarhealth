@@ -103,6 +103,24 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'Not found' });
     }
 
+    /**
+     * EXPIRY, checked here rather than trusted from the link.
+     *
+     * A token past its date is a 404 with no explanation — the same response as
+     * a wrong one. Telling a caller "expired" confirms the token was real,
+     * which is the one thing worth knowing to somebody guessing.
+     *
+     * A proposal with no expiry recorded is one shared before expiry existed.
+     * It still works: silently killing links already in customers' inboxes to
+     * enforce a rule invented afterwards would cost live deals.
+     */
+    if (proposal.shareExpiresAt) {
+      const until = Date.parse(proposal.shareExpiresAt);
+      if (Number.isFinite(until) && Date.now() > until) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+    }
+
     // Not indexed, not cached by a shared proxy — this is one person's private
     // pricing, even though the URL needs no login.
     res.setHeader('Cache-Control', 'private, max-age=0, no-store');

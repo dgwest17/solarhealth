@@ -71,7 +71,9 @@ const BatteryStabilization = ({
   calculations = null,
   annualExportKwh = 0,
   clientContext = null,
-  clientLabel = ''
+  clientLabel = '',
+  /** The Eligibility tab's verdict. Drives the rebate's Auto setting. */
+  eligibility = null
 }) => {
   const { settings } = useSettings();
   const A = settings.assumptions;
@@ -107,8 +109,26 @@ const BatteryStabilization = ({
    * rep had already ruled out.
    */
   const [rebateEligibleOverride, setRebateEligibleOverride] = useState(null);
+
+  /**
+   * AUTO FOLLOWS THE ELIGIBILITY TAB, not the utility.
+   *
+   * Territory was the coarsest possible proxy: it said every SDG&E customer
+   * qualifies, including one whose surplus cannot fill the battery in four
+   * months of the year — which is the exact case the Eligibility tab exists to
+   * catch, and which the program administrator will catch later, after the deal
+   * was quoted with $3,375 in it.
+   *
+   * The tab's verdict wins when there is one. Territory remains the fallback
+   * for a rep who has not opened that tab, because refusing to guess would mean
+   * showing no rebate at all on a deal that almost certainly has one.
+   */
   const rebateByTerritory = (inputs.utility || 'SDGE') === 'SDGE';
-  const rebateEligible = rebateEligibleOverride === null ? rebateByTerritory : rebateEligibleOverride;
+  const assessed = eligibility && eligibility.status && eligibility.status !== 'insufficient-data'
+    ? eligibility
+    : null;
+  const rebateAuto = assessed ? !!assessed.eligible : rebateByTerritory;
+  const rebateEligible = rebateEligibleOverride === null ? rebateAuto : rebateEligibleOverride;
 
   // ---- lender & terms, from the editable rate cards ----
   const lenders = settings.lenders && settings.lenders.length ? settings.lenders : [];
@@ -169,6 +189,9 @@ const BatteryStabilization = ({
   const [builderEmail, setBuilderEmail] = useState('');
   const selfGen = !hasBuilder;
   const seat = 'engineer';
+
+  /** Admin sees the pool and the override seats; a rep sees their own money. */
+  const isAdminView = (clientContext && clientContext.viewerRole) === 'admin';
 
   const commissionCfg = settings.commission || {};
   const commRoles = (commissionCfg.roles && commissionCfg.roles.length)
@@ -665,9 +688,15 @@ const BatteryStabilization = ({
             <div className="min-w-0">
               <div className="text-[12.5px] text-slate-200">Eligible for the utility storage rebate</div>
               <div className="text-[11px] text-slate-500">
-                {rebateEligibleOverride === null
-                  ? `Following the utility on file (${inputs.utility || 'SDGE'}) — ${rebateByTerritory ? 'eligible' : 'not eligible'}.`
-                  : 'Set by hand for this customer.'}
+                {rebateEligibleOverride !== null
+                  ? 'Set by hand for this customer.'
+                  : assessed
+                    ? <>
+                        From the Eligibility tab — <b className={assessed.eligible ? 'text-emerald-300' : 'text-red-300'}>
+                          {assessed.eligible ? 'qualifies' : 'does not qualify'}
+                        </b>{assessed.reason ? `: ${assessed.reason}` : ''}.
+                      </>
+                    : `No eligibility check run yet — following the utility on file (${inputs.utility || 'SDGE'}).`}
               </div>
             </div>
             <div className="flex gap-1 bg-slate-900/70 rounded-lg p-1 border border-slate-600 shrink-0">
@@ -1327,15 +1356,23 @@ const BatteryStabilization = ({
                 <div className="mt-3 rounded-xl border border-violet-400/30 bg-violet-500/5 p-4">
                   <div className="flex flex-wrap items-baseline justify-between gap-4 mb-3">
                     <div>
+                      {/* THE ENGINEER'S OWN NUMBER, not the pool.
+                          A rep working the slider is deciding what THEY earn.
+                          Leading with the total made them do arithmetic to find
+                          that out, and showed them the captain's and
+                          recruiter's cut on the way — neither of which is their
+                          money or their business. The pool is on the admin
+                          views, where somebody is actually accountable for it. */}
                       <div className="text-[11px] uppercase tracking-widest text-violet-300">
-                        Total commission on this deal
+                        {hasBuilder ? 'Your half' : 'You make'}
                       </div>
                       <div className={`text-4xl font-extrabold mt-1 ${
                         comm.belowRedline ? 'text-red-400' : 'text-violet-200'
-                      }`}>{money(comm.total)}</div>
+                      }`}>{money(mySplit.amount)}</div>
                       <div className="text-[11.5px] text-slate-400 mt-0.5">
-                        Your share as {SEAT_LABEL[seat] || seat}: <b className="text-violet-200">{money(mySplit.amount)}</b>
-                        {' '}({mySplit.pct}%)
+                        {hasBuilder
+                          ? <>Split with {builderName || 'the builder'} — they get the same.</>
+                          : <>Self-gen, so you keep the whole rep share.</>}
                       </div>
                     </div>
                     <div className="text-right text-[12px] font-mono text-slate-400">
@@ -1343,6 +1380,11 @@ const BatteryStabilization = ({
                       <div>Redline {money(comm.redline)}</div>
                       {comm.feePct > 0 && <div>Dealer fee {money(comm.dealerFee)}</div>}
                       <div className="text-cyan-300">Contract {money(comm.customerContract)}</div>
+                      {/* The pool, admin only. A rep does not need it and the
+                          captain's share is inside it. */}
+                      {isAdminView && (
+                        <div className="text-violet-300 mt-1">Pool {money(comm.total)}</div>
+                      )}
                     </div>
                   </div>
 
@@ -1537,22 +1579,29 @@ const BatteryStabilization = ({
                     {/* The split itself. Captain and Recruiter are rep-invisible:
                         they are overrides on production and only the admin view
                         has any reason to show them. */}
-                    <div className="rounded-lg overflow-hidden border border-slate-700 mt-3">
-                      {comm.rows
-                        .filter((r) => r.key !== 'captain' && r.key !== 'recruiter')
-                        .map((r) => (
-                          <div key={r.key}
-                               className={`flex items-center justify-between px-3 py-2 border-t border-slate-700/60 ${
-                                 r.key === 'self' || r.key === 'engineer' ? 'bg-violet-500/10' : ''
-                               }`}>
-                            <span className="text-[12.5px] text-slate-200">
-                              {r.key === 'builder' ? (builderName || 'Builder') : r.label}
-                            </span>
-                            <span className="text-[11.5px] font-mono text-slate-500">{r.pct}%</span>
-                            <span className="text-[12.5px] font-mono text-slate-100">{money(r.amount)}</span>
-                          </div>
-                        ))}
-                    </div>
+                    {/* Only shown when there IS a split to show. On a self-gen
+                        deal there is one number and it is already above; a
+                        one-row table would just repeat it. Percentages are left
+                        off deliberately — a rep who knows their own figure does
+                        not need to be told it is 42% of something they are not
+                        being shown. */}
+                    {hasBuilder && (
+                      <div className="rounded-lg overflow-hidden border border-slate-700 mt-3">
+                        {comm.rows
+                          .filter((r) => r.key === 'engineer' || r.key === 'builder')
+                          .map((r) => (
+                            <div key={r.key}
+                                 className={`flex items-center justify-between px-3 py-2 border-t border-slate-700/60 ${
+                                   r.key === 'engineer' ? 'bg-violet-500/10' : ''
+                                 }`}>
+                              <span className="text-[12.5px] text-slate-200">
+                                {r.key === 'builder' ? (builderName || 'Builder') : 'You (closed it)'}
+                              </span>
+                              <span className="text-[12.5px] font-mono text-slate-100">{money(r.amount)}</span>
+                            </div>
+                          ))}
+                      </div>
+                    )}
                     <p className="text-[10.5px] text-slate-500 mt-2">
                       Saved with the proposal, along with the percentages as they stand today — so changing the
                       comp plan later cannot rewrite what this deal paid.

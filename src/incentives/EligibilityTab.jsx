@@ -16,7 +16,7 @@
  *
  * Rendered by: src/SolarCalculator.jsx (Eligibility tab)
  */
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { CheckCircle2, AlertTriangle, XCircle, Info, FileSearch } from 'lucide-react';
 import { assessEligibility } from './eligibility';
 import { BATTERY_MODELS, getProgram, calcRebate } from './programData';
@@ -36,7 +36,9 @@ const STATUS_STYLE = {
   ineligible:           { ring: 'border-red-400/50 bg-red-900/15',         text: 'text-red-300',     Icon: XCircle }
 };
 
-const EligibilityTab = ({ inputs, gbProfile = null, consumptionProfile = null }) => {
+const EligibilityTab = ({
+  /** Reports the verdict upward so Stabilize's rebate Auto can follow it. */
+  onAssessed = null, inputs, gbProfile = null, consumptionProfile = null }) => {
   const assumptions = useAssumptions();
   const [batteryId, setBatteryId] = useState('tesla_pw3');
   const [qty, setQty] = useState(1);
@@ -74,6 +76,26 @@ const EligibilityTab = ({ inputs, gbProfile = null, consumptionProfile = null })
   }), [monthlyExcess, batteryId, qty, hasExistingSolar, solarOverOneYear, addingSolar]);
 
   const rebate = calcRebate(program, result.usableKwh, qty, onCare);
+
+  /**
+   * Publish the verdict.
+   *
+   * Stabilize used to infer eligibility from the utility alone, which is the
+   * coarsest possible proxy — it says a customer in SDG&E territory qualifies
+   * even when this tab has just worked out that their surplus cannot fill the
+   * battery in four months of the year. One assessment, computed here where the
+   * inputs live, read there.
+   */
+  useEffect(() => {
+    if (!onAssessed) return;
+    onAssessed({
+      status: result.status,
+      eligible: result.status === 'eligible',
+      rebate: rebate && rebate.total ? rebate.total : 0,
+      usableKwh: result.usableKwh,
+      reason: result.status === 'eligible' ? null : (result.reason || result.status)
+    });
+  }, [onAssessed, result.status, result.reason, result.usableKwh, rebate && rebate.total]);
   const st = STATUS_STYLE[result.status] || STATUS_STYLE['insufficient-data'];
   const { Icon } = st;
   const maxExcess = Math.max(...result.months.map((m) => Math.max(m.excess || 0, m.threshold)), 1);

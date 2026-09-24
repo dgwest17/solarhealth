@@ -54,6 +54,15 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
   // Tab switcher: 'audit' | 'battery' | 'eligibility' | 'tide' | 'simulator'
   const [activeTab, setActiveTab] = useState('audit');
 
+  /**
+   * The Eligibility tab's verdict, held here so Battery Analysis can read it.
+   *
+   * Lifted rather than recomputed: two assessments of the same question would
+   * eventually disagree, and the one a rep has actually looked at is the one
+   * that should drive the rebate.
+   */
+  const [eligibility, setEligibility] = useState(null);
+
   // The Load Simulator is NON-DESTRUCTIVE. It never changes currentAnnualUsage.
   // Instead it reports an additive "extra usage" result, shown as a separate
   // line on the audit + battery tabs. Baselines/profile stay static.
@@ -356,7 +365,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         {/* BATTERY ANALYSIS TAB */}
         {activeTab === 'battery' && (
           <div className="print:hidden">
-            <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} extraUsage={extraUsage} measured={gbApplied ? gbProfile : null} calculations={calculations} rateOverride={batteryRateOverride} onRateOverrideChange={persistBatteryRateOverride} clientLabel={clientLabel}
+            <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} extraUsage={extraUsage} measured={gbApplied ? gbProfile : null} calculations={calculations} rateOverride={batteryRateOverride} onRateOverrideChange={persistBatteryRateOverride} clientLabel={clientLabel} eligibility={eligibility}
               clientContext={clientContext ? {
                 ...clientContext,
                 // "Open proposal" switches to the Big Wave tab. Carried on
@@ -371,7 +380,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         {/* ELIGIBILITY TAB — can they actually get the rebate? */}
         {activeTab === 'eligibility' && (
           <div className="print:hidden">
-            <EligibilityTab inputs={inputs} gbProfile={gbApplied ? gbProfile : null} consumptionProfile={inputs.consumptionProfile} />
+            <EligibilityTab inputs={inputs} gbProfile={gbApplied ? gbProfile : null} consumptionProfile={inputs.consumptionProfile} onAssessed={setEligibility} />
           </div>
         )}
 
