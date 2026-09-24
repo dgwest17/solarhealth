@@ -31,6 +31,11 @@ import {
   COMMISSION_FLOOR_PER_ADDED_PANEL
 } from '../pricing/loanPricing';
 import { BATTERY_MODELS, INCENTIVE_PROGRAMS, UTILITY_RATE_DEFAULTS } from '../incentives/programData';
+import {
+  COMMISSION_ROLES, SELF_GEN_PCT, BATTERY_REDLINE, DEALER_FEE_PCT,
+  SOLAR_PPW_TIERS, PANEL_WATTS, SOLAR_FIRST_BATTERY_CARVE_OUT,
+  FUNNEL_DEFAULTS
+} from '../pricing/commission';
 import { CONNECTION_FEE_SCHEDULE } from '../utils/rateData';
 
 /** Bump when a stored payload needs migrating. */
@@ -137,6 +142,26 @@ export const buildDefaultSettings = () => ({
   batteries: BATTERY_MODELS.map((b) => ({ ...b })),
   lenders: DEFAULT_LENDERS.map((l) => ({ ...l, terms: l.terms.map((t) => ({ ...t })) })),
   adders: ADDERS.map((a) => ({ ...a })),
+
+  /**
+   * COMMISSION. The redline, the dealer fee and the role split all move with
+   * the comp plan, which changes far more often than the code does — so they
+   * are settings, not constants, and a comp change is an admin edit rather
+   * than a deploy.
+   */
+  commission: {
+    roles: COMMISSION_ROLES.map((r) => ({ ...r })),
+    selfGenPct: SELF_GEN_PCT,
+    batteryRedline: BATTERY_REDLINE,
+    dealerFeePct: DEALER_FEE_PCT,
+    solarPpwTiers: SOLAR_PPW_TIERS.map((t) => ({ ...t })),
+    panelWatts: PANEL_WATTS,
+    solarFirstBatteryCarveOut: SOLAR_FIRST_BATTERY_CARVE_OUT
+  },
+
+  /** Funnel conversion rates for Forecast. Every team's differ, and a rep who
+   *  has measured their own should be able to plan on theirs. */
+  funnel: { ...FUNNEL_DEFAULTS },
   panels: DEFAULT_PANEL_OPTIONS.map((p) => ({ ...p })),
   quiver: DEFAULT_QUIVER.map((q) => ({ ...q })),
   parties: {

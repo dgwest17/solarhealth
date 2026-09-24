@@ -32,6 +32,7 @@ import TreasurePanel from './Treasure';
 import SwellPanel from './Swell';
 import QuiverPanel from './Quiver';
 import Pipeline from './Pipeline';
+import Forecast from './Forecast';
 
 const money = (v) => '$' + Math.round(Number(v) || 0).toLocaleString();
 
@@ -44,6 +45,7 @@ export const TIDES = [
 
 const PANELS = [
   { id: 'pipeline', label: 'Pipeline', Icon: BuoyIcon,     blurb: 'Every deal, and who needs a call' },
+  { id: 'forecast', label: 'Forecast', Icon: SwellIcon,    blurb: 'Doors per day to hit a number' },
   { id: 'treasure', label: 'Treasure', Icon: TreasureIcon, blurb: 'What you are owed' },
   { id: 'swell',    label: 'Swell',    Icon: SwellIcon,    blurb: 'How you are trending' },
   { id: 'quiver',   label: 'Quiver',   Icon: QuiverIcon,   blurb: 'Sharpen your tools' }
@@ -152,6 +154,7 @@ const TheBeach = ({ role = 'rep', userEmail = '', onOpenClient = null }) => {
 
         {/* the open panel */}
         {!loading && panel === 'pipeline' && <Pipeline deals={deals} onOpenClient={onOpenClient} />}
+        {panel === 'forecast' && <Forecast role={role} />}
         {!loading && panel === 'treasure' && <TreasurePanel deals={deals} byTide={byTide} />}
         {!loading && panel === 'swell'    && <SwellPanel deals={deals} byTide={byTide} />}
         {!loading && panel === 'quiver'   && <QuiverPanel userEmail={userEmail} role={role} />}
