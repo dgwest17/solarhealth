@@ -42,7 +42,7 @@
  * Used by: src/project/IntakeForm.jsx, api/intake.js
  */
 
-import { intakeFeeSpread } from '../pricing/commission';
+import { intakeFeeSpread } from '../pricing/commission.js';
 
 /**
  * The services table, in the workbook's own order. `id` is stable and is what
