@@ -50,7 +50,40 @@ const money = (v) => '$' + Math.round(Number(v) || 0).toLocaleString();
 const money2 = (v) => '$' + (Number(v) || 0).toFixed(2);
 const round1 = (v) => Math.round((Number(v) || 0) * 10) / 10;
 
-const Forecast = ({ role = 'rep' }) => {
+/**
+ * What this rep's OWN book says about the two rates it can actually see.
+ *
+ * A priced deal is an appointment that happened, so met -> project is a real
+ * close rate and project -> installed is a real install rate. Doors and
+ * decision-makers are not in the CRM at all — nobody logs a knock — so those
+ * two stay as the rep's own estimate and this function does not pretend
+ * otherwise. Returning null rather than a plausible default is the point:
+ * an invented conversion rate propagates into every door count below it.
+ */
+const measuredRates = (deals) => {
+  const met = deals.filter((d) => d.tide === 'met').length;
+  const project = deals.filter((d) => d.tide === 'project').length;
+  const installed = deals.filter((d) => d.tide === 'installed').length;
+
+  const priced = met + project + installed;     // every deal that got a price
+  const signed = project + installed;           // every deal that then signed
+  const reachedInstall = installed;
+
+  return {
+    priced, signed, installed: reachedInstall,
+    // Appointments per close, measured. Needs a signed deal to divide by.
+    apptsPerClose: signed > 0 ? priced / signed : null,
+    closeRatePct: priced > 0 ? Math.round((signed / priced) * 100) : null,
+    // Install rate only means anything once something has actually installed.
+    installRate: signed > 0 ? reachedInstall / signed : null,
+    installRatePct: signed > 0 ? Math.round((reachedInstall / signed) * 100) : null,
+    // Too few deals to read anything into. Three is arbitrary but a rate off
+    // one deal is either 0% or 100% and both are lies.
+    thin: priced < 3
+  };
+};
+
+const Forecast = ({ role = 'rep', deals = [] }) => {
   const { settings } = useSettings();
   const C = settings.commission || {};
 
@@ -75,6 +108,14 @@ const Forecast = ({ role = 'rep' }) => {
   const [taxPct, setTaxPct] = useState(NET_DEFAULTS.taxPct);
   const [investPct, setInvestPct] = useState(NET_DEFAULTS.investPct);
 
+  // --- the funnel, overridable ---
+  const baseFunnel = { ...FUNNEL_DEFAULTS, ...(settings.funnel || {}) };
+  const [funnel, setFunnel] = useState(baseFunnel);
+  const [showFunnel, setShowFunnel] = useState(false);
+  const setF = (k) => (v) => setFunnel((f) => ({ ...f, [k]: v }));
+  const measured = useMemo(() => measuredRates(deals), [deals]);
+  const funnelEdited = Object.keys(baseFunnel).some((k) => funnel[k] !== baseFunnel[k]);
+
   const deal = useMemo(() => calcBatteryCommission({
     netSale, batteryCount, redlinePerUnit: redline, mode,
     dealerFeePct: feePct, selfGen, roles, selfGenPct
@@ -83,9 +124,8 @@ const Forecast = ({ role = 'rep' }) => {
   const mine = shareFor(seat, { total: deal.total, selfGen, roles, selfGenPct });
 
   const plan = useMemo(() => planFunnel({
-    goal, months, commissionPerInstall: mine.amount,
-    funnel: settings.funnel
-  }), [goal, months, mine.amount, settings.funnel]);
+    goal, months, commissionPerInstall: mine.amount, funnel
+  }), [goal, months, mine.amount, funnel]);
 
   const net = useMemo(
     () => netIncome({ gross: goal, expensesPct, investPct, taxPct }),
@@ -277,6 +317,94 @@ const Forecast = ({ role = 'rep' }) => {
               {' '}{Math.round(plan.doorsPerInstall)} doors per install at these rates.
             </p>
 
+            {/* ---- the rates behind those numbers, and what the book says ---- */}
+            <div className="rounded-2xl p-4 mb-4" style={{ background: SURF.surface, border: `1px solid ${SURF.line}` }}>
+              <button
+                onClick={() => setShowFunnel((v) => !v)}
+                className="w-full flex items-center justify-between text-left"
+              >
+                <span className="text-[11px] uppercase tracking-wider" style={{ color: SURF.textMuted }}>
+                  Your conversion rates{funnelEdited ? ' · edited' : ''}
+                </span>
+                <span className="text-[12px]" style={{ color: SURF.sun }}>
+                  {showFunnel ? 'Hide' : 'Change these'}
+                </span>
+              </button>
+
+              {/* What their own book actually shows. Two of the five rates are
+                  measurable from deals; the others nobody logs, and inventing
+                  them would corrupt every door count above. */}
+              {!measured.thin && (
+                <div className="mt-3 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-3"
+                     style={{ borderTop: `1px solid ${SURF.line}` }}>
+                  <Measured
+                    label="Your close rate"
+                    measured={measured.closeRatePct != null ? `${measured.closeRatePct}%` : null}
+                    using={`1 in ${round1(funnel.apptsPerClose)}`}
+                    detail={`${measured.signed} of ${measured.priced} priced deals signed`}
+                    onUse={measured.apptsPerClose ? () => setF('apptsPerClose')(round1(measured.apptsPerClose)) : null}
+                  />
+                  <Measured
+                    label="Your install rate"
+                    measured={measured.installRatePct != null ? `${measured.installRatePct}%` : null}
+                    using={`${Math.round(funnel.installRate * 100)}%`}
+                    detail={`${measured.installed} of ${measured.signed} signed deals installed`}
+                    onUse={measured.installRate ? () => setF('installRate')(Math.round(measured.installRate * 100) / 100) : null}
+                  />
+                </div>
+              )}
+              {measured.thin && (
+                <p className="text-[11.5px] mt-2" style={{ color: SURF.textFaint }}>
+                  Not enough saved deals yet to read your own rates from — a close rate off one deal is either
+                  0% or 100%, and both are lies. These are the team assumptions until your book fills up.
+                </p>
+              )}
+
+              {showFunnel && (
+                <div className="mt-4 pt-3 space-y-3" style={{ borderTop: `1px solid ${SURF.line}` }}>
+                  <Ratio label="Doors per decision maker" value={funnel.doorsPerDecisionMaker}
+                         onChange={setF('doorsPerDecisionMaker')} min={1} max={20}
+                         sub="nobody logs knocks, so this one is yours to know" />
+                  <Ratio label="Decision makers per appointment" value={funnel.decisionMakersPerAppt}
+                         onChange={setF('decisionMakersPerAppt')} min={1} max={40}
+                         sub="also not in the CRM" />
+                  <Ratio label="Appointments per close" value={funnel.apptsPerClose}
+                         onChange={setF('apptsPerClose')} min={1} max={15}
+                         sub="measurable — your book says what it says" />
+                  <div>
+                    <div className="flex justify-between text-[12px] mb-1">
+                      <span style={{ color: SURF.textMuted }}>
+                        Closes that reach installation
+                        <span style={{ color: SURF.textFaint }}> · measurable</span>
+                      </span>
+                      <span className="font-mono" style={{ color: SURF.textBright }}>
+                        {Math.round(funnel.installRate * 100)}%
+                      </span>
+                    </div>
+                    <input type="range" min={30} max={100} step={1}
+                           value={Math.round(funnel.installRate * 100)}
+                           onChange={(e) => setF('installRate')(Number(e.target.value) / 100)}
+                           className="w-full accent-amber-400" />
+                  </div>
+                  <Ratio label="Working days per month" value={funnel.workingDaysPerMonth}
+                         onChange={setF('workingDaysPerMonth')} min={10} max={31}
+                         sub="how many days you actually knock" />
+                  {funnelEdited && (
+                    <button
+                      onClick={() => setFunnel(baseFunnel)}
+                      className="text-[12px] underline" style={{ color: SURF.textFaint }}
+                    >
+                      Back to the team assumptions
+                    </button>
+                  )}
+                  <p className="text-[11px]" style={{ color: SURF.textFaint }}>
+                    {Math.round(plan.doorsPerInstall)} doors per install at these rates. Changes are yours only —
+                    they are not saved to anyone else&rsquo;s Forecast.
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* what actually reaches the account */}
             <div className="rounded-2xl p-5" style={{ background: SURF.surface, border: `1px solid ${SURF.line}` }}>
               <div className="text-[11px] uppercase tracking-wider mb-3" style={{ color: SURF.textMuted }}>
@@ -373,6 +501,37 @@ const Slide = ({ label, value, onChange, max = 50, sub = '' }) => (
       <span className="font-mono" style={{ color: SURF.textBright }}>{value}%</span>
     </div>
     <input type="range" min={0} max={max} step={1} value={value}
+           onChange={(e) => onChange(Number(e.target.value))}
+           className="w-full accent-amber-400" />
+  </div>
+);
+
+/** A measured rate next to the one being planned on, with a one-click adopt. */
+const Measured = ({ label, measured, using, detail, onUse }) => (
+  <div className="rounded-xl p-3" style={{ background: SURF.deep, border: `1px solid ${SURF.line}` }}>
+    <div className="text-[11px] uppercase tracking-wider" style={{ color: SURF.textMuted }}>{label}</div>
+    <div className="flex items-baseline gap-2 mt-1">
+      <span className="text-xl font-bold font-mono" style={{ color: SURF.sun }}>{measured || '—'}</span>
+      <span className="text-[11.5px]" style={{ color: SURF.textFaint }}>planning on {using}</span>
+    </div>
+    <div className="text-[11px] mt-0.5" style={{ color: SURF.textFaint }}>{detail}</div>
+    {onUse && (
+      <button onClick={onUse} className="text-[11.5px] underline mt-1" style={{ color: SURF.seaBright }}>
+        Use my actual rate
+      </button>
+    )}
+  </div>
+);
+
+const Ratio = ({ label, value, onChange, min, max, sub }) => (
+  <div>
+    <div className="flex justify-between text-[12px] mb-1">
+      <span style={{ color: SURF.textMuted }}>
+        {label}{sub && <span style={{ color: SURF.textFaint }}> · {sub}</span>}
+      </span>
+      <span className="font-mono" style={{ color: SURF.textBright }}>1 in {value}</span>
+    </div>
+    <input type="range" min={min} max={max} step={1} value={value}
            onChange={(e) => onChange(Number(e.target.value))}
            className="w-full accent-amber-400" />
   </div>

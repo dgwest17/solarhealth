@@ -154,7 +154,7 @@ const TheBeach = ({ role = 'rep', userEmail = '', onOpenClient = null }) => {
 
         {/* the open panel */}
         {!loading && panel === 'pipeline' && <Pipeline deals={deals} onOpenClient={onOpenClient} />}
-        {panel === 'forecast' && <Forecast role={role} />}
+        {panel === 'forecast' && <Forecast role={role} deals={deals} />}
         {!loading && panel === 'treasure' && <TreasurePanel deals={deals} byTide={byTide} role={role} />}
         {!loading && panel === 'swell'    && <SwellPanel deals={deals} byTide={byTide} />}
         {!loading && panel === 'quiver'   && <QuiverPanel userEmail={userEmail} role={role} />}

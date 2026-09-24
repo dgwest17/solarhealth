@@ -148,6 +148,8 @@ const BatteryStabilization = ({
    * The email is what makes the split reachable: it is how the deal finds its
    * way into the builder's own Beach. A name alone cannot do that reliably.
    */
+  /** Typed-in commission, which back-solves the net sale. Empty = use slider. */
+  const [commissionInput, setCommissionInput] = useState('');
   const [hasBuilder, setHasBuilder] = useState(false);
   const [builderName, setBuilderName] = useState('');
   const [builderEmail, setBuilderEmail] = useState('');
@@ -1285,6 +1287,50 @@ const BatteryStabilization = ({
                   <div className="flex justify-between text-[10.5px] text-slate-500">
                     <span>{money(comm.redline)} · redline, pays nobody</span>
                     <span>{money(comm.redline + 20000)}</span>
+                  </div>
+
+                  {/* TYPE THE COMMISSION INSTEAD.
+                      A slider is right for exploring and wrong for landing on
+                      a figure — $250 steps cannot express $3,500, and an admin
+                      setting a deal to an exact number should not have to hunt
+                      for it. The net sale is solved backwards from what is
+                      typed: netSale = commission + redline. Same arithmetic the
+                      slider runs, entered from the other end. */}
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                    <span className="text-[11px] uppercase tracking-wider text-slate-500">
+                      Or set the commission exactly
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-slate-400 text-[13px]">$</span>
+                      <input
+                        type="number"
+                        step={50}
+                        value={commissionInput}
+                        placeholder={String(Math.round(comm.total))}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setCommissionInput(v);
+                          if (v === '') return;
+                          // Back-solve. Clamped at the redline: a negative
+                          // commission is not a thing, and letting the net sale
+                          // fall below the redline would quietly zero it again.
+                          const want = Math.max(0, Number(v) || 0);
+                          setContractValue(comm.redline + want);
+                        }}
+                        className="w-28 px-2 py-1.5 rounded bg-slate-900/70 border border-violet-400/40 text-slate-100 font-mono text-[13px]"
+                      />
+                    </div>
+                    {commissionInput !== '' && (
+                      <button
+                        onClick={() => setCommissionInput('')}
+                        className="text-[11.5px] underline text-slate-500 hover:text-slate-300"
+                      >
+                        back to the slider
+                      </button>
+                    )}
+                    <span className="text-[11px] text-slate-500">
+                      net sale {money(comm.netSale)}
+                    </span>
                   </div>
 
                   {comm.belowRedline && (
