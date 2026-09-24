@@ -33,6 +33,8 @@
 import React, { useMemo, useState } from 'react';
 import { SURF } from '../surf/theme';
 import { Swell as SwellIcon } from '../surf/SurfIcons';
+import { SALES_STAGE } from '../proposal/proposalModel';
+import { apiFetch } from '../lib/supabaseClient';
 
 const money = (v) => '$' + Math.round(Number(v) || 0).toLocaleString();
 
@@ -82,7 +84,14 @@ const COLUMNS = [
   { id: 'install',     label: 'Install',      sort: (d) => (daysUntil(d.installDate) ?? 1e9) }
 ];
 
-const Pipeline = ({ deals = [], onOpenClient = null }) => {
+const Pipeline = ({ deals = [], onOpenClient = null, role = 'rep' }) => {
+  const isAdmin = role === 'admin';
+  /** Which row is open for editing. One at a time — a table full of open forms
+   *  is unreadable, and nobody edits two deals simultaneously. */
+  const [editing, setEditing] = useState(null);
+  /** Local overlay of saved edits, so a row updates without refetching the
+   *  whole book. Keyed by deal id. */
+  const [patches, setPatches] = useState({});
   const [sortBy, setSortBy] = useState('lastContact');
   const [asc, setAsc] = useState(false);
   const [tideFilter, setTideFilter] = useState('all');
@@ -99,7 +108,8 @@ const Pipeline = ({ deals = [], onOpenClient = null }) => {
   }, [deals]);
 
   const rows = useMemo(() => {
-    let out = deals.slice();
+    // Saved edits win over the fetched row until the next reload.
+    let out = deals.map((d) => (patches[d.id] ? { ...d, ...patches[d.id] } : d));
     if (tideFilter !== 'all') out = out.filter((d) => d.tide === tideFilter);
     if (batteryFilter !== 'all') out = out.filter((d) => d.battery === batteryFilter);
     if (hasSolar) out = out.filter((d) => Number(d.solarKw) > 0 || Number(d.panels) > 0);
@@ -120,7 +130,7 @@ const Pipeline = ({ deals = [], onOpenClient = null }) => {
       return 0;
     });
     return out;
-  }, [deals, tideFilter, batteryFilter, hasSolar, staleOnly, q, sortBy, asc]);
+  }, [deals, patches, tideFilter, batteryFilter, hasSolar, staleOnly, q, sortBy, asc]);
 
   const toggleSort = (id) => {
     if (sortBy === id) setAsc((v) => !v);
@@ -200,9 +210,9 @@ const Pipeline = ({ deals = [], onOpenClient = null }) => {
               const contact = staleness(daysSince(d.lastContact));
               const install = daysUntil(d.installDate);
               return (
+                <React.Fragment key={d.id}>
                 <tr
-                  key={d.id}
-                  onClick={() => onOpenClient && d.contactId && onOpenClient(d.contactId)}
+                  onClick={() => setEditing(editing === d.id ? null : d.id)}
                   className="cursor-pointer"
                   style={{ borderTop: `1px solid ${SURF.line}`, background: SURF.surface }}
                 >
@@ -247,6 +257,23 @@ const Pipeline = ({ deals = [], onOpenClient = null }) => {
                     {install === null ? '—' : install >= 0 ? `in ${install}d` : `${-install}d ago`}
                   </td>
                 </tr>
+                {editing === d.id && (
+                  <tr>
+                    <td colSpan={COLUMNS.length} style={{ background: SURF.deep, padding: 0 }}>
+                      <EditRow
+                        deal={d}
+                        isAdmin={isAdmin}
+                        onOpenClient={onOpenClient}
+                        onSaved={(patch) => {
+                          setPatches((p) => ({ ...p, [d.id]: { ...(p[d.id] || {}), ...patch } }));
+                          setEditing(null);
+                        }}
+                        onCancel={() => setEditing(null)}
+                      />
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               );
             })}
           </tbody>
@@ -262,12 +289,157 @@ const Pipeline = ({ deals = [], onOpenClient = null }) => {
       </div>
 
       <p className="text-[11px]" style={{ color: SURF.textFaint }}>
-        Ages, not dates — hover any for the date itself. Last contact is the CRM&rsquo;s last activity on the
+        Click a row to edit it. Ages, not dates — hover any for the date itself. Last contact is the CRM&rsquo;s last activity on the
         contact, so a call logged in Zoho counts and one that was not, does not.
       </p>
     </div>
   );
 };
+
+/**
+ * Inline editor for one deal.
+ *
+ * Deliberately narrow: stage, install date, who set it, and — for an admin —
+ * the commission. Nothing here changes the customer's PRICE. Changing a
+ * contract value without re-deriving the payment, the rebate and the federal
+ * deduction produces a record that contradicts the proposal the customer is
+ * holding, and none of that machinery is on this screen. Re-pricing happens on
+ * the pricing screen, where a new version is saved and `supersedes` leaves a
+ * trail.
+ *
+ * The commission field is admin-only here AND on the server. This is the one
+ * write with a direct financial motive for the person making it, so hiding the
+ * input is a convenience and the server check is the control.
+ */
+const EditRow = ({ deal, isAdmin, onSaved, onCancel, onOpenClient }) => {
+  const [stage, setStage] = useState(
+    deal.tide === 'installed' ? SALES_STAGE.INSTALLED
+      : deal.tide === 'project' ? SALES_STAGE.CONVERTED
+      : SALES_STAGE.MET
+  );
+  const [installDate, setInstallDate] = useState(
+    deal.installDate ? String(deal.installDate).slice(0, 10) : ''
+  );
+  const [commission, setCommission] = useState(
+    deal.commissionTotal != null ? String(Math.round(deal.commissionTotal)) : ''
+  );
+  const [setByRep, setSetByRep] = useState(deal.builderName || '');
+  const [setByRepEmail, setSetByRepEmail] = useState(deal.builderEmail || '');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const save = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const body = {
+        contactId: deal.contactId,
+        projectId: String(deal.id).startsWith('prop_') ? null : deal.id,
+        stage,
+        installDate: installDate || '',
+        setByRep: setByRep || '',
+        setByRepEmail: setByRepEmail || ''
+      };
+      if (isAdmin && commission !== '') body.commission = Number(commission) || 0;
+
+      const r = await apiFetch('/api/update-deal', { method: 'POST', body: JSON.stringify(body) });
+      if (r && r.warning) { setMsg({ ok: false, text: r.warning }); setBusy(false); return; }
+
+      // Reflect it locally so the row is right before the next reload.
+      onSaved({
+        tide: stage === SALES_STAGE.INSTALLED ? 'installed'
+          : stage === SALES_STAGE.CONVERTED ? 'project' : 'met',
+        installDate: installDate || null,
+        builderName: setByRep || null,
+        builderEmail: setByRepEmail || null,
+        ...(isAdmin && commission !== '' ? { commissionTotal: Number(commission) || 0 } : {})
+      });
+    } catch (e) {
+      setMsg({ ok: false, text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="p-4" style={{ borderTop: `1px solid ${SURF.sun}55` }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <Field label="Stage">
+          <Select value={stage} onChange={setStage}
+                  options={Object.values(SALES_STAGE).map((v) => [v, v])} />
+        </Field>
+        <Field label="Install date">
+          <input type="date" value={installDate} onChange={(e) => setInstallDate(e.target.value)}
+                 className="w-full px-2.5 py-2 rounded-lg text-[13px] focus:outline-none"
+                 style={{ background: SURF.surface, border: `1px solid ${SURF.line}`, color: SURF.textBright }} />
+        </Field>
+        <Field label="Set by (name)">
+          <input value={setByRep} onChange={(e) => setSetByRep(e.target.value)}
+                 placeholder="blank = self-gen"
+                 className="w-full px-2.5 py-2 rounded-lg text-[13px] focus:outline-none"
+                 style={{ background: SURF.surface, border: `1px solid ${SURF.line}`, color: SURF.textBright }} />
+        </Field>
+        <Field label="Set by (email)">
+          <input value={setByRepEmail} onChange={(e) => setSetByRepEmail(e.target.value)}
+                 placeholder="routes their half to them"
+                 className="w-full px-2.5 py-2 rounded-lg text-[13px] focus:outline-none"
+                 style={{ background: SURF.surface, border: `1px solid ${SURF.line}`, color: SURF.textBright }} />
+        </Field>
+        {isAdmin && (
+          <Field label="Total commission">
+            <input type="number" step={50} value={commission}
+                   onChange={(e) => setCommission(e.target.value)}
+                   className="w-full px-2.5 py-2 rounded-lg font-mono text-[13px] focus:outline-none"
+                   style={{ background: SURF.surface, border: `1px solid ${SURF.sun}66`, color: SURF.textBright }} />
+          </Field>
+        )}
+      </div>
+
+      {isAdmin && (
+        <p className="text-[11px] mt-2" style={{ color: SURF.textFaint }}>
+          Changing the total re-splits it using this deal&rsquo;s own stored percentages, not today&rsquo;s rate
+          card — so a comp change cannot leak backwards into it.
+        </p>
+      )}
+      {!isAdmin && (
+        <p className="text-[11px] mt-2" style={{ color: SURF.textFaint }}>
+          Commission is admin-only. Naming somebody here ends self-gen on this deal and moves half the rep
+          share to them; clearing it gives it back.
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2 mt-3">
+        <button onClick={save} disabled={busy}
+                className="px-4 py-2 rounded-lg text-[12.5px] font-bold"
+                style={{ background: busy ? SURF.line : SURF.sun, color: busy ? SURF.textFaint : '#06202c' }}>
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+        <button onClick={onCancel} className="px-3 py-2 rounded-lg text-[12.5px] border"
+                style={{ borderColor: SURF.line, color: SURF.textMuted }}>
+          Cancel
+        </button>
+        {onOpenClient && deal.contactId && (
+          <button onClick={() => onOpenClient(deal.contactId)}
+                  className="px-3 py-2 rounded-lg text-[12.5px] border"
+                  style={{ borderColor: SURF.line, color: SURF.seaBright }}>
+            Open the full audit — re-price it there
+          </button>
+        )}
+        {msg && (
+          <span className="text-[12px]" style={{ color: msg.ok ? SURF.good : SURF.danger }}>{msg.text}</span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const Field = ({ label, children }) => (
+  <label className="block">
+    <span className="block text-[10.5px] uppercase tracking-wider mb-1" style={{ color: SURF.textMuted }}>
+      {label}
+    </span>
+    {children}
+  </label>
+);
 
 const Select = ({ value, onChange, options }) => (
   <select

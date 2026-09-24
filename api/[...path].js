@@ -53,6 +53,7 @@ import saveProject from './_routes/save-project.js';
 import saveProposal from './_routes/save-proposal.js';
 import sendAudit from './_routes/send-audit.js';
 import settings from './_routes/settings.js';
+import updateDeal from './_routes/update-deal.js';
 import uploadDoc from './_routes/upload-doc.js';
 
 /**
@@ -76,6 +77,7 @@ const ROUTES = {
   'save-proposal': saveProposal,
   'send-audit': sendAudit,
   'settings': settings,
+  'update-deal': updateDeal,
   'upload-doc': uploadDoc
 };
 
