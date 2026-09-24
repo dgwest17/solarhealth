@@ -38,8 +38,9 @@ import {
 import { estimateBackupHours } from './BatteryModel';
 import { priceBattery, projectTwentyYear, solarAddOnCost, batteryAddersFor } from '../pricing/loanPricing';
 import {
-  calcBatteryCommission, shareFor, COMMISSION_ROLES, SELF_GEN_PCT,
-  BATTERY_REDLINE, DEALER_FEE_PCT
+  calcBatteryCommission, calcSolarCommission, shareFor,
+  COMMISSION_ROLES, SELF_GEN_PCT, BATTERY_REDLINE, DEALER_FEE_PCT,
+  PANEL_WATTS, SOLAR_FIRST_BATTERY_CARVE_OUT
 } from '../pricing/commission';
 import { BATTERY_MODELS } from '../incentives/programData';
 import { getConnectionFeeForYear } from '../utils/rateData';
@@ -148,6 +149,18 @@ const BatteryStabilization = ({
    * The email is what makes the split reachable: it is how the deal finds its
    * way into the builder's own Beach. A name alone cannot do that reliably.
    */
+  /**
+   * BATTERY ONLY, OR SOLAR TOO.
+   *
+   * The two redline differently and there is no way to infer which this is —
+   * a solar adder on a battery deal is not the same thing as a solar deal that
+   * includes a battery. A selector, because guessing wrong moves the redline
+   * by five figures on a 20-panel system.
+   */
+  const [dealKind, setDealKind] = useState('battery');   // battery | solar
+  const [solarPanels, setSolarPanels] = useState(20);
+  const [solarIncludesBattery, setSolarIncludesBattery] = useState(true);
+
   /** Typed-in commission, which back-solves the net sale. Empty = use slider. */
   const [commissionInput, setCommissionInput] = useState('');
   const [hasBuilder, setHasBuilder] = useState(false);
@@ -317,6 +330,47 @@ const BatteryStabilization = ({
   // screen rather than a re-derivation that could drift from it.
   // -------------------------------------------------------------------------
   /**
+   * Commission, from the shared model. `contractValue` is the NET SALE now —
+   * what the rep writes the deal at before any dealer fee — and the customer's
+   * contract is derived from it rather than the reverse.
+   */
+  const comm = useMemo(() => {
+    const shared = {
+      netSale: Number(contractValue) || 0,
+      mode,
+      dealerFeePct: commissionCfg.dealerFeePct != null ? commissionCfg.dealerFeePct : DEALER_FEE_PCT,
+      selfGen, roles: commRoles, selfGenPct: commSelfGenPct
+    };
+    if (dealKind === 'solar') {
+      // Adders that are NOT the solar line itself — that line's panels are
+      // already priced by the PPW tier, so counting its cost again would
+      // double-charge the redline against the rep.
+      const nonSolarAdders = price.adders.lines
+        .filter((l) => l.id !== 'solar_add')
+        .reduce((a, l) => a + (Number(l.cost) || 0), 0);
+      return calcSolarCommission({
+        ...shared,
+        panels: Number(solarPanels) || 0,
+        panelWatts: commissionCfg.panelWatts || PANEL_WATTS,
+        includesBattery: solarIncludesBattery,
+        firstBatteryCarveOut: commissionCfg.solarFirstBatteryCarveOut != null
+          ? commissionCfg.solarFirstBatteryCarveOut : SOLAR_FIRST_BATTERY_CARVE_OUT,
+        addersCost: nonSolarAdders,
+        tiers: commissionCfg.solarPpwTiers
+      });
+    }
+    return calcBatteryCommission({
+      ...shared,
+      batteryCount: 1 + price.adders.lines
+        .filter((l) => l.kind === 'battery')
+        .reduce((a, l) => a + (Number(l.units) || 0), 0),
+      redlinePerUnit: commissionCfg.batteryRedline != null ? commissionCfg.batteryRedline : BATTERY_REDLINE,
+      addersCost: price.adders.total
+    });
+  }, [dealKind, solarPanels, solarIncludesBattery, contractValue, price.adders,
+      commissionCfg, mode, selfGen, commRoles, commSelfGenPct]);
+
+  /**
    * Build a proposal from whatever is on screen right now.
    *
    * ONE BUILDER, two consumers: the save path and the "Open proposal" preview.
@@ -361,6 +415,9 @@ const BatteryStabilization = ({
       // The split, snapshotted. Percentages travel WITH the deal so a comp
       // change next quarter cannot rewrite what this one paid.
       commission: {
+        dealKind,
+        solarPanels: dealKind === 'solar' ? (Number(solarPanels) || 0) : 0,
+        solarWatts: dealKind === 'solar' ? (comm.watts || 0) : 0,
         total: comm.total,
         redline: comm.redline,
         netSale: comm.netSale,
@@ -376,6 +433,7 @@ const BatteryStabilization = ({
     });
   }, [
     clientContext, price, proj, inputs, batteryModelId, batteryModel, baseKwh, rebateEligible,
+    comm, dealKind, solarPanels, selfGen, seat, hasBuilder, builderName, builderEmail,
     mode, lender, termYears, activeTermCard, escalator, leasePayment,
     monthlyBill, connectionFee, monthlySavings, escalation, clientLabel, savedProposal
   ]);
@@ -431,22 +489,6 @@ const BatteryStabilization = ({
   // copy in this component that could drift from it.
   const totalKwh = price.totalKwh;
 
-  /**
-   * Commission, from the shared model. `contractValue` is the NET SALE now —
-   * what the rep writes the deal at before any dealer fee — and the customer's
-   * contract is derived from it rather than the reverse.
-   */
-  const comm = useMemo(() => calcBatteryCommission({
-    netSale: Number(contractValue) || 0,
-    batteryCount: 1 + price.adders.lines
-      .filter((l) => l.kind === 'battery')
-      .reduce((a, l) => a + (Number(l.units) || 0), 0),
-    redlinePerUnit: commissionCfg.batteryRedline != null ? commissionCfg.batteryRedline : BATTERY_REDLINE,
-    mode,
-    dealerFeePct: commissionCfg.dealerFeePct != null ? commissionCfg.dealerFeePct : DEALER_FEE_PCT,
-    addersCost: price.adders.total,
-    selfGen, roles: commRoles, selfGenPct: commSelfGenPct
-  }), [contractValue, price.adders, commissionCfg, mode, selfGen, commRoles, commSelfGenPct]);
 
   const mySplit = shareFor(seat, {
     total: comm.total, selfGen, roles: commRoles, selfGenPct: commSelfGenPct
@@ -1269,6 +1311,87 @@ const BatteryStabilization = ({
                       {comm.feePct > 0 && <div>Dealer fee {money(comm.dealerFee)}</div>}
                       <div className="text-cyan-300">Contract {money(comm.customerContract)}</div>
                     </div>
+                  </div>
+
+                  {/* ---- battery only, or solar too ---- */}
+                  <div className="mb-3 pb-3 border-b border-violet-400/20">
+                    <div className="flex gap-1 mb-2">
+                      {[['battery', 'Battery only'], ['solar', 'Solar + battery']].map(([k, l]) => (
+                        <button
+                          key={k}
+                          onClick={() => setDealKind(k)}
+                          className={`px-3 py-1.5 rounded-lg text-[12.5px] font-semibold ${
+                            dealKind === k
+                              ? 'bg-violet-400 text-slate-900'
+                              : 'border border-slate-600 text-slate-300 hover:border-violet-400/60'
+                          }`}
+                        >{l}</button>
+                      ))}
+                    </div>
+
+                    {dealKind === 'solar' && (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <label className="flex items-center gap-2">
+                            <span className="text-[11.5px] text-slate-400">Panels</span>
+                            <input
+                              type="number" min={1} value={solarPanels}
+                              onChange={(e) => setSolarPanels(Number(e.target.value) || 0)}
+                              className="w-20 px-2 py-1 rounded bg-slate-900/70 border border-slate-600 text-slate-100 font-mono text-[12.5px]"
+                            />
+                          </label>
+                          <span className="text-[11.5px] font-mono text-slate-500">
+                            {(comm.watts || 0).toLocaleString()} W
+                            {comm.tier && <> · base {money2(comm.basePPW)}/W</>}
+                          </span>
+                          <label className="flex items-center gap-1.5 text-[12px] text-slate-300 cursor-pointer">
+                            <input type="checkbox" checked={solarIncludesBattery}
+                              onChange={(e) => setSolarIncludesBattery(e.target.checked)}
+                              className="w-3.5 h-3.5 accent-violet-400" />
+                            Includes a battery
+                          </label>
+                        </div>
+
+                        {/* The redline, itemised. On a solar deal it is built up
+                            rather than being one figure, and a rep who cannot
+                            see the build-up cannot tell a bad quote from a
+                            small system. */}
+                        <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-2.5 text-[11.5px] space-y-1">
+                          <div className="flex justify-between text-slate-400">
+                            <span>{comm.panels} panels × {money2(comm.basePPW)}/W</span>
+                            <span className="font-mono">{money(comm.baseCost)}</span>
+                          </div>
+                          {comm.tierAdder > 0 && (
+                            <div className="flex justify-between text-slate-400">
+                              <span>Small-system adder</span>
+                              <span className="font-mono">{money(comm.tierAdder)}</span>
+                            </div>
+                          )}
+                          {comm.batteryCarveOut > 0 && (
+                            <div className="flex justify-between text-slate-400">
+                              <span>First battery</span>
+                              <span className="font-mono">{money(comm.batteryCarveOut)}</span>
+                            </div>
+                          )}
+                          {comm.addersCost > 0 && (
+                            <div className="flex justify-between text-slate-400">
+                              <span>Adders</span>
+                              <span className="font-mono">{money(comm.addersCost)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between pt-1 border-t border-slate-700 text-violet-200 font-semibold">
+                            <span>Redline</span>
+                            <span className="font-mono">{money(comm.redline)}</span>
+                          </div>
+                        </div>
+                        {!comm.tier && (
+                          <p className="text-[11px] text-amber-300">
+                            No price-per-watt tier covers {comm.panels} panels — the tiers start at 4. The redline
+                            is missing its base cost until that is fixed in Admin → Platform Defaults.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* The slider sets the NET SALE — what the deal is written at

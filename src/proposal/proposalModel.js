@@ -389,6 +389,9 @@ export function buildProposal({
      * field holds — not any one rep's share.
      */
     internal: commission ? {
+      dealKind: commission.dealKind || 'battery',
+      solarPanels: commission.solarPanels || 0,
+      solarWatts: commission.solarWatts || 0,
       commission: commission.total,
       total: commission.total,
       redline: commission.redline,
