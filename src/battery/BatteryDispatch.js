@@ -210,7 +210,13 @@ export const simulateDay = ({
   nemVersion,
   batteryCapacityKwh = 0,
   roundTripEfficiency = 0.90,
-  maxPowerKw = 5,           // Powerwall 3 continuous ~11.5kW; per-hour throughput cap
+  /**
+   * Per-hour throughput cap, kWh. Defaults to a Powerwall 3's continuous
+   * rating. It was 5, which is neither a real product nor a conservative
+   * assumption — it is a third ceiling that binds before either real one and
+   * quietly reshapes the dispatch.
+   */
+  maxPowerKw = 11.5,
   allowGridCharging = false,
   reserveFraction = 0       // backup reserve held out of arbitrage (0-1)
 }) => {
@@ -321,9 +327,36 @@ export const simulateDay = ({
       }
     }
 
-    // ---- Export leftover SOLAR-origin charge during peak ----
+    /* ---- Export leftover SOLAR-origin charge during peak ----
+     *
+     * ONLY WHAT THE REST OF THE EVENING WILL NOT NEED.
+     *
+     * This step used to export everything it could reach in the current hour.
+     * Greedy, with no view of the hours after it — so at 4pm a full pack dumped
+     * 11 kWh to the grid at the export rate, and the house then bought 11 kWh
+     * back at the retail peak rate between 6 and 9pm. On a July evening that
+     * earned $7.25 and paid $7.77: a loss, every day, for doing the extra work.
+     *
+     * Serving your own peak load always beats exporting into it. Under NEM 2.0
+     * by the non-bypassable charge; under NEM 3.0 by a mile, since evening
+     * avoided-cost is a fraction of retail; under NEM 1.0 they tie. There is no
+     * regime where dumping first is right, which is what makes this a bug and
+     * not a policy choice.
+     *
+     * So: look ahead across the remaining peak hours, hold back what they will
+     * draw, and export only the surplus beyond that.
+     */
     if (period === 'peak' && usableCap > 0 && socSolar > 0 && sell > rates.offPeak) {
-      const available = socSolar * legEff;
+      let laterPeakNeed = 0;
+      for (let k = h + 1; k < 24; k++) {
+        if (periodFor(plan, k) !== 'peak') continue;
+        laterPeakNeed += Math.max(0, loadHourly[k] - solarHourly[k]);
+      }
+      // Grid-origin charge can never be exported, so it counts toward the
+      // reserve first and only solar-origin charge is ever surplus.
+      const reserveFromSolar = Math.max(0, laterPeakNeed - socGrid * legEff);
+      const exportable = Math.max(0, socSolar * legEff - reserveFromSolar);
+      const available = exportable;
       const ex = Math.min(available, Math.max(0, maxPowerKw - throughput));
       if (ex > 0) {
         socSolar -= ex / legEff;
@@ -350,14 +383,26 @@ export const simulateYear = ({
   nemVersion = 'NEM2',
   batteryCapacityKwh = 0,
   roundTripEfficiency = 0.90,
-  maxPowerKw = 5,
-  allowGridCharging = false,
+  maxPowerKw = 11.5,
+  /**
+   * Midday grid charging. `null` means "decide from the plan": a plan with a
+   * midday super-off-peak window (EV-TOU-5's 10am-2pm at 12c) is one where
+   * buying cheap and discharging at the 4-9pm peak is the entire point, and a
+   * model that leaves it off understates that plan by hundreds a year. A plan
+   * without such a window has nothing cheap to buy, so it stays off.
+   */
+  allowGridCharging = null,
   reserveFraction = 0,
   onCareProgram = false,
   incentive = null  // { perKwh, weekdayOnly, upfront } — e.g. SDCP dispatch program
 }) => {
   const profile = CONSUMPTION_PROFILES[consumptionProfile] || CONSUMPTION_PROFILES.evening_heavy;
   const care = onCareProgram ? 0.70 : 1;
+
+  // A midday SOP window is what makes grid charging worth doing at all.
+  const gridCharging = allowGridCharging === null
+    ? (plan.sopWindows || []).some(([a, b]) => a >= 8 && b <= 16)
+    : !!allowGridCharging;
 
   const months = [];
   const total = {
@@ -397,7 +442,7 @@ export const simulateYear = ({
       batteryCapacityKwh,
       roundTripEfficiency,
       maxPowerKw,
-      allowGridCharging,
+      allowGridCharging: gridCharging,
       reserveFraction
     });
 
@@ -557,6 +602,19 @@ export const compareBatteryScenarios = ({
   const withBatteryEvTou = simulateYear({
     ...common, plan: evPlan, batteryCapacityKwh, allowGridCharging: true
   });
+  /**
+   * THE PLAN SWITCH ON ITS OWN, WITH NO BATTERY.
+   *
+   * Worth simulating because it is the scenario a customer will ask about and
+   * the answer is counter-intuitive: on EV-TOU-5 the midday hours become
+   * super-off-peak, so exported solar earns 12c instead of 45c. A solar
+   * household that switches plans without storage LOSES money — badly.
+   *
+   * That is the argument for the battery, stated honestly. Without this figure
+   * the tool can only say the combination is good, which invites a customer to
+   * try the free half first and conclude the whole idea was wrong.
+   */
+  const evTouNoBattery = simulateYear({ ...common, plan: evPlan, batteryCapacityKwh: 0 });
 
   const gain = (s) => s.netPosition - today.netPosition;
 
@@ -593,6 +651,7 @@ export const compareBatteryScenarios = ({
   };
 
   return {
+    evTouNoBattery,
     recommendation,
     today,
     withBattery,
@@ -600,7 +659,14 @@ export const compareBatteryScenarios = ({
     gains: {
       battery: gain(withBattery),
       batteryEvTou: gain(withBatteryEvTou),
-      planSwitchOnly: withBatteryEvTou.netPosition - withBattery.netPosition
+      /**
+       * Renamed from `planSwitchOnly`, which is what it was NOT. This is the
+       * incremental value of switching plans GIVEN a battery is already there.
+       * The old name implied the figure below, which has the opposite sign.
+       */
+      planSwitchWithBattery: withBatteryEvTou.netPosition - withBattery.netPosition,
+      /** Switching with NO battery. Usually negative, and that is the point. */
+      planSwitchAlone: evTouNoBattery.netPosition - today.netPosition
     },
     ceiling: {
       deficitKwh,
