@@ -484,7 +484,12 @@ export function toZohoSummary(proposal) {
     // sees what the deal paid out altogether; who got what comes from the
     // seat fields below and the snapshot in Supabase.
     Rep_Commission: proposal.internal ? (proposal.internal.total ?? proposal.internal.commission) : null,
-    Self_Gen: proposal.internal ? !!proposal.internal.selfGen : null,
+    // WHO SET IT. Empty means self-gen — the closer both set and closed it.
+    // There is deliberately no Self_Gen field alongside this: two fields
+    // encoding one fact is how they end up disagreeing, and then nobody can
+    // say who should have been paid. Emptiness IS the flag.
+    Set_By_Rep: proposal.internal ? (proposal.internal.builderName || null) : null,
+    Set_By_Rep_Email: proposal.internal ? (proposal.internal.builderEmail || null) : null,
     Lender_Qualification: proposal.steps.qualification || null,
     Documents_Step: proposal.steps.paperwork || null,
     Intake_Step: proposal.steps.site_inspection || null
@@ -526,14 +531,25 @@ export const ZOHO_FIELDS = {
     { api: 'Net_Investment', type: 'currency' },
     { api: 'Storage_Rebate', type: 'currency' },
     { api: 'Est_Monthly_Savings', type: 'currency' },
-    { api: 'Self_Gen', type: 'boolean',
-      note: 'One rep both set and closed it, so they take the combined share.' },
-    // The four seats. Lookups to Recruits, which is the rep roster — reps are
-    // not Zoho users, so a User lookup would have nothing to point at.
-    { api: 'Builder', type: 'lookup', module: 'Recruits' },
-    { api: 'Engineer', type: 'lookup', module: 'Recruits' },
-    { api: 'Captain', type: 'lookup', module: 'Recruits' },
-    { api: 'Recruiter', type: 'lookup', module: 'Recruits' },
+    /**
+     * ONE seat field, not four.
+     *
+     * The engineer is already Created_By_Rep on the Contact. Captain and
+     * Recruiter are overrides on production rather than facts about a deal.
+     * Self-gen is the ABSENCE of a setter, so a boolean for it would be a
+     * second field encoding one fact.
+     *
+     * Text rather than a lookup to Recruits: the app knows the builder by the
+     * email a rep typed, and a lookup needs a record id. Resolving one would
+     * add a Zoho round-trip and a failure mode to every save, for a link the
+     * split does not depend on — the authoritative split lives with the
+     * proposal in Supabase. Swap it for a lookup later if CRM reporting wants
+     * the relation; nothing downstream reads these.
+     */
+    { api: 'Set_By_Rep', type: 'text',
+      note: 'The builder who set it. EMPTY MEANS SELF-GEN.' },
+    { api: 'Set_By_Rep_Email', type: 'email',
+      note: 'How the split finds its way into that builder\u2019s Beach.' },
     { api: 'Rep_Commission', type: 'currency',
       note: 'Rep-facing. Restrict field permissions if reps should not see each other’s.' },
     { api: 'Lender_Qualification', type: 'picklist',
