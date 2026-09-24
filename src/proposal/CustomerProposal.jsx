@@ -557,8 +557,13 @@ const CustomerProposal = ({
                     value={f.purchaseType === 'lease'
                       ? `${(f.escalatorPct ?? 0).toFixed(1)}%`
                       : (f.apr != null ? `${(f.apr * 100).toFixed(2)}% fixed` : '—')} />
-              <Term label="Total of payments"
-                    value={p.totalOfPayments ? money(p.totalOfPayments) : '—'} />
+              {/* NO "total of payments".
+                  It is the single most alarming number on a twenty-year loan
+                  and it sells nothing — a customer who is comfortable with the
+                  monthly payment and the net investment learns only that
+                  interest exists, at the exact moment they were deciding. It
+                  stays in the stored proposal and in the rep's Breakdown, where
+                  the person reading it has the context to place it. */}
             </div>
           )}
           {isFinanced && (

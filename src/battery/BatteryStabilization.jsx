@@ -283,8 +283,29 @@ const BatteryStabilization = ({
   }, [nemExpiry, annualExportKwh, inputs.exportRate, inputs.nemVersion, HORIZON]);
 
   // -------------------------------------------------------------------------
+  /**
+   * THE DEALER FEE GOES IN BEFORE THE PAYMENT IS SIZED.
+   *
+   * `contractValue` is the NET SALE — what the rep writes the deal at. The
+   * customer finances the GROSSED figure, netSale / (1 - fee), because the
+   * lender takes its cut of the contract. Sizing the payment on the net sale
+   * understated it by the whole fee on every financed deal: $20,000 instead of
+   * $22,222.22, which is about $10/mo the customer would have discovered at
+   * signing.
+   *
+   * Computed here rather than read off `comm`, because `comm` needs
+   * `price.adders` and reading it back would be circular. The gross-up depends
+   * only on the net sale, the mode and the fee, so it can be derived first and
+   * both figures then agree by construction.
+   */
+  const dealerFeePct = mode === 'loan'
+    ? (commissionCfg.dealerFeePct != null ? commissionCfg.dealerFeePct : DEALER_FEE_PCT)
+    : 0;
+  const netSale = Number(contractValue) || 0;
+  const grossedContract = dealerFeePct > 0 ? netSale / (1 - dealerFeePct) : netSale;
+
   const price = useMemo(() => priceBattery({
-    contractValue: Number(contractValue) || 0,
+    contractValue: grossedContract,
     adderSelections: adderSel,
     adderCatalog: settings.adders,
     fedPct,
@@ -302,7 +323,7 @@ const BatteryStabilization = ({
       unsubsidisedApr: A.commissionUnsubsidisedApr,
       perAddedPanel: A.commissionFloorPerAddedPanel
     }
-  }), [contractValue, adderSel, settings.adders, fedPct, baseKwh, rebateEligible, termYears,
+  }), [grossedContract, adderSel, settings.adders, fedPct, baseKwh, rebateEligible, termYears,
        activeTermCard, applyRebateToLoan, inputs.utility, A, mode]);
 
   const activePayment =
@@ -1110,7 +1131,18 @@ const BatteryStabilization = ({
 
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Contract value ($)" value={contractValue} onChange={setContractValue} />
+                  {/* The SAME state the Deep Seas slider and the commission box
+                      write. One number, three controls — change it anywhere and
+                      the commission, the payment and this stack all move
+                      together, because there is nothing to keep in step. */}
+                  <div>
+                    <Field label="Net sale price ($)" value={contractValue} onChange={setContractValue} />
+                    <div className="text-[10.5px] text-slate-500 mt-1">
+                      {dealerFeePct > 0
+                        ? <>Customer signs {money(price.contract)} — {Math.round(dealerFeePct * 100)}% dealer fee grossed in</>
+                        : <>Customer signs {money(price.contract)}</>}
+                    </div>
+                  </div>
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">Term</label>
                     <select value={termYears} onChange={(e) => setTermYears(Number(e.target.value))}
