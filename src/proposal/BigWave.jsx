@@ -39,7 +39,9 @@ import { Swell, Shell, Heading, Treasure } from '../surf/SurfIcons';
 import CustomerProposal from './CustomerProposal';
 import DropIn from './DropIn';
 import ProjectSteps from '../project/ProjectSteps';
-import { proposalSummaryLine } from './proposalModel';
+import { proposalSummaryLine, makeParty } from './proposalModel';
+import { installersFrom } from '../admin/settingsSchema';
+import { useSettings } from '../admin/SettingsContext';
 import { apiFetch } from '../lib/supabaseClient';
 
 const TABS = [
@@ -53,6 +55,9 @@ const BigWave = ({ clientData = null, role = 'client', userEmail = '', onBackToC
   const [tab, setTab] = useState('proposal');
   const [proposal, setProposal] = useState((clientData && clientData.proposal) || null);
   const [loading, setLoading] = useState(false);
+  const { settings } = useSettings();
+  const installers = installersFrom(settings);
+  const [savingInstaller, setSavingInstaller] = useState(false);
 
   const contact = (clientData && clientData.contact) || null;
   const contactId = contact && contact.id;
@@ -81,6 +86,44 @@ const BigWave = ({ clientData = null, role = 'client', userEmail = '', onBackToC
   }, [contactId]);
 
   useEffect(() => { reload(); }, [reload]);
+
+  /**
+   * Change who installs this job.
+   *
+   * Written straight back to the stored proposal rather than held in local
+   * state, because the customer's copy is served from storage: an installer
+   * changed only in this component would show the old crew on the link the
+   * customer already has, which is a promise about who turns up at the house.
+   *
+   * ONLY THE INSTALLER MOVES. The rest of the proposal is sent back exactly as
+   * it was read, so this cannot become a way to re-price a deal from a screen
+   * with none of the pricing machinery on it.
+   */
+  const setInstaller = async (name) => {
+    if (!proposal || !contactId) return;
+    const chosen = installers.find((i) => (i.name || '') === name) || { name };
+    const next = {
+      ...proposal,
+      parties: {
+        ...(proposal.parties || {}),
+        contractor: makeParty(chosen)
+      }
+    };
+    setSavingInstaller(true);
+    setProposal(next);           // optimistic: the dropdown must not lag
+    try {
+      await apiFetch('/api/save-proposal', {
+        method: 'POST',
+        body: JSON.stringify({ contactId, projectId, proposal: next })
+      });
+    } catch {
+      // Put the stored version back rather than leaving the page claiming an
+      // installer that was never saved.
+      reload();
+    } finally {
+      setSavingInstaller(false);
+    }
+  };
 
   if (!clientData || !contact) {
     return (
@@ -179,13 +222,43 @@ const BigWave = ({ clientData = null, role = 'client', userEmail = '', onBackToC
               <span className="text-[11px] uppercase tracking-widest" style={{ color: SURF.textMuted }}>
                 What the customer sees
               </span>
-              <button
-                onClick={() => window.print()}
-                className="px-3 py-1.5 rounded-lg border text-[12px]"
-                style={{ borderColor: SURF.line, color: SURF.textMuted }}
-              >
-                Print / PDF
-              </button>
+              <div className="flex items-center gap-2">
+                {/* WHO INSTALLS IT. On this tab because this is where the page
+                    the customer reads is in front of you — the line it changes
+                    ("Installed by …") is visible while you change it. */}
+                {canEdit && (
+                  <label className="flex items-center gap-1.5 text-[11.5px]"
+                         style={{ color: SURF.textMuted }}>
+                    Installer
+                    <select
+                      value={(proposal.parties && proposal.parties.contractor
+                        && proposal.parties.contractor.name) || ''}
+                      onChange={(e) => setInstaller(e.target.value)}
+                      disabled={savingInstaller}
+                      className="px-2 py-1 rounded-lg text-[12px]"
+                      style={{ background: SURF.surface, border: `1px solid ${SURF.line}`,
+                               color: SURF.textBright }}
+                    >
+                      {/* Only offered when the proposal has no installer at all,
+                          so a saved one cannot be blanked by a stray click. */}
+                      {!(proposal.parties && proposal.parties.contractor
+                        && proposal.parties.contractor.name) && (
+                        <option value="">Not set</option>
+                      )}
+                      {installers.map((i) => (
+                        <option key={i.id || i.name} value={i.name}>{i.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <button
+                  onClick={() => window.print()}
+                  className="px-3 py-1.5 rounded-lg border text-[12px]"
+                  style={{ borderColor: SURF.line, color: SURF.textMuted }}
+                >
+                  Print / PDF
+                </button>
+              </div>
             </div>
             <CustomerProposal proposal={proposal} />
           </div>

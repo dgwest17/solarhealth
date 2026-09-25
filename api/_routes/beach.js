@@ -77,16 +77,33 @@ const tideFor = (project, proposal) => {
  * A proposal saved before the split model has no rows. Its total is attributed
  * to the rep who saved it, which is what the old single-figure field meant.
  */
-const commissionFor = (proposal, viewerEmail, isManager) => {
+/**
+ * ADMIN-ONLY FIGURES, STRIPPED ON THE SERVER.
+ *
+ * The Captain and Recruiter rows, and the pool total, are a manager's business.
+ * They were correctly hidden in the UI and sent to every browser anyway, which
+ * is a rendering decision rather than a control — a rep with the network tab
+ * open could read what their captain earns off their production. So the seats a
+ * rep is not entitled to never leave this function.
+ *
+ * A rep keeps the builder and engineer rows: those two ARE the split they are
+ * part of, and the Pipeline shows them what a setter is owed.
+ */
+const REP_VISIBLE_SEATS = new Set(['builder', 'engineer', 'self']);
+
+const commissionFor = (proposal, viewerEmail, { isAdmin = false, isManager = false } = {}) => {
   const int = (proposal && proposal.internal) || null;
   if (!int) return { total: 0, mine: 0, rows: [], legacy: false };
 
   const total = Number(int.total ?? int.commission) || 0;
   const rows = Array.isArray(int.rows) ? int.rows : [];
+  // What leaves the server. `total` is the pool, so a non-admin gets null
+  // rather than a figure they should not be reading.
+  const outTotal = isAdmin ? total : null;
 
   if (!rows.length) {
     // Legacy proposal: one figure, no seats. Treat it as the saver's.
-    return { total, mine: total, rows: [], legacy: true, seat: null, selfGen: false };
+    return { total: outTotal, mine: total, rows: [], legacy: true, seat: null, selfGen: false };
   }
 
   const me = (viewerEmail || '').toLowerCase();
@@ -112,18 +129,19 @@ const commissionFor = (proposal, viewerEmail, isManager) => {
   const mine = seatRow ? Number(seatRow.amount) || 0 : 0;
 
   return {
-    total,
+    total: outTotal,
     mine: isManager ? total : mine,
-    rows,
+    rows: isAdmin ? rows : rows.filter((r) => REP_VISIBLE_SEATS.has(r.key)),
     legacy: false,
     seat,
     selfGen: !builder,
     builderRecruitId: (builder && builder.recruitId) || null,
     builderName: (builder && builder.name) || null,
     builderEmail: (builder && builder.email) || null,
-    // Manager buckets: what the override seats earned across the book.
-    captain: (rows.find((r) => r.key === 'captain') || {}).amount || 0,
-    recruiter: (rows.find((r) => r.key === 'recruiter') || {}).amount || 0
+    // Manager buckets: what the override seats earned. Zero, not omitted, for a
+    // non-admin — Treasure sums these and a null would poison the total.
+    captain: isAdmin ? ((rows.find((r) => r.key === 'captain') || {}).amount || 0) : 0,
+    recruiter: isAdmin ? ((rows.find((r) => r.key === 'recruiter') || {}).amount || 0) : 0
   };
 };
 
@@ -183,6 +201,16 @@ export default async function handler(req, res) {
     // An admin looking at the whole book is a manager view: they see the pool
     // and the override buckets, not one seat's share.
     const isManager = user.role === 'admin' && !requested;
+    /**
+     * TWO DIFFERENT QUESTIONS, kept apart.
+     *
+     * `isAdmin` decides which FIGURES a caller may see — the pool, and the
+     * Captain/Recruiter rows. `isManager` decides whether `mine` means the pool
+     * or one seat's share. They were one flag, which meant an admin looking at
+     * a single rep's book stopped being allowed to see the total commission on
+     * a deal whose comp plan they own.
+     */
+    const isAdmin = user.role === 'admin';
 
     // --- contacts in scope ---
     let contactQuery = 'select id, Full_Name, Email, Created_By_Rep, Last_Activity_Time from Contacts where Last_Name is not null';
@@ -329,7 +357,7 @@ export default async function handler(req, res) {
       const tide = tideFor(project, proposal);
       if (!tide) continue;
       seen.add(contactId);
-      const comm = commissionFor(proposal, me, isManager);
+      const comm = commissionFor(proposal, me, { isAdmin, isManager });
       deals.push({
         id: project.id,
         contactId,
@@ -373,7 +401,19 @@ export default async function handler(req, res) {
         soldDate: (proposal && proposal.stepsUpdatedAt && proposal.stage === 'Project')
           ? proposal.stepsUpdatedAt
           : (project.Proposal_Date || null),
-        installDate: project.Battery_Install_Date || project.Install_Date || null,
+        /**
+         * TWO INSTALL DATES, and they are not interchangeable.
+         *
+         * `installDate` is when THIS DEAL goes in — Battery_Install_Date. No
+         * fallback to Install_Date any more: that is the existing array's
+         * turn-on date, so falling back printed a date from years ago in a
+         * column headed "Install" on a deal that has not been scheduled.
+         *
+         * `originalInstallDate` is that existing turn-on date, carried
+         * separately and shown read-only, because it is an audit input.
+         */
+        installDate: project.Battery_Install_Date || null,
+        originalInstallDate: project.Install_Date || null,
         ptoDate: project.PTO_Date || null,
         lastContact: (contact && contact.Last_Activity_Time) || null,
         // Equipment: the saved proposal is what was SOLD, the project is what
@@ -407,7 +447,7 @@ export default async function handler(req, res) {
     // A proposal saved against a contact with no project row still counts.
     for (const [contactId, proposal] of Object.entries(proposals)) {
       if (seen.has(contactId) || !byId[contactId]) continue;
-      const comm = commissionFor(proposal, me, isManager);
+      const comm = commissionFor(proposal, me, { isAdmin, isManager });
       deals.push({
         id: `prop_${contactId}`,
         contactId,
@@ -439,6 +479,7 @@ export default async function handler(req, res) {
         rep: byId[contactId].Created_By_Rep || null,
         soldDate: null,
         installDate: null,
+        originalInstallDate: null,
         ptoDate: null,
         lastContact: byId[contactId].Last_Activity_Time || null,
         battery: batteryLabel(proposal, null),

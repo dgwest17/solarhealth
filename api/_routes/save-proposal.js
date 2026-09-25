@@ -38,7 +38,8 @@ const OPTIONAL_ZOHO_FIELDS = [
   // Add-on tracking and the setter lookup. Listed so a save still lands with a
   // clear "these fields do not exist yet" report on an org where they have not
   // been created, instead of failing outright the first time one is written.
-  'Proposal_Scope', 'Added_Solar_kW', 'Added_Annual_Production_kWh', 'Set_By'
+  'Proposal_Scope', 'Added_Solar_kW', 'Added_Annual_Production_kWh', 'Set_By',
+  'Install_Company'
 ];
 
 /**

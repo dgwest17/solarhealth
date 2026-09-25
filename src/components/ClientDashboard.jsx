@@ -8,28 +8,75 @@ import { apiFetch } from '../lib/supabaseClient';
 import ContactFormModal from './ContactFormModal';
 
 /**
- * Client Dashboard — pulls the caller's clients from /api/clients (role-scoped
- * server-side), then sorts/filters client-side. Clicking a client calls onOpen.
+ * FILE: src/components/ClientDashboard.jsx
+ *
+ * CLIENT DASHBOARD — the book of records, not the book of deals.
+ *
+ * Pulls the caller's clients from /api/clients (role-scoped server-side), then
+ * sorts and filters client-side. Clicking a client opens their audit.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THIS SCREEN IS FOR, NOW THAT THE PIPELINE EXISTS
+ *
+ * It used to open with three tabs — All Clients / Not Signed / Signed · Pre-PTO
+ * — which made it a deal board. The Pipeline is the deal board, and two screens
+ * answering "where is this deal" is how they end up disagreeing. So the tabs are
+ * gone and this screen answers the question only it can: who is on the books,
+ * what do they already have, and who is worth a call.
+ *
+ * Which is why the columns are what they are: identity (name, address, zip),
+ * their existing system (PTO date), the number that makes them a prospect
+ * (estimated true-up), what kind of opportunity they are, and the follow-up
+ * facts (review, last contacted, whose client this is).
+ *
+ * HIDDEN IS NOT GONE. Savings, finance provider and system size are still
+ * sortable and searchable while switched off — the column menu controls what is
+ * rendered, not what the screen knows.
  */
-const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = false, onRole, onLoaded }) => {
-  const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(true);
+const ClientDashboard = ({
+  onOpen, userEmail, role, onSignOut, hideHeader = false, onRole, onLoaded,
+  /**
+   * Rows to start with, instead of an empty table awaiting the fetch.
+   *
+   * The fetch runs in an effect, and effects do not run during a server render —
+   * so without this the only reachable state of this screen in a render check is
+   * the spinner, and the table, its column alignment and every cell in it go
+   * untested. Nothing in the app passes it; scripts/render-check.mjs does.
+   */
+  initialClients = null,
+  /** Which optional columns start switched on. The same test seam as above. */
+  initialShowCols = null
+}) => {
+  const [clients, setClients] = useState(initialClients || []);
+  const [loading, setLoading] = useState(!initialClients);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [projStatusFilter, setProjStatusFilter] = useState('all');
   const [oppFilter, setOppFilter] = useState('all');
+  /**
+   * BATTERY TARGETS — one control, not two.
+   *
+   * There were two, both called battery targets: a checkbox for "owes a true-up
+   * of $300+" and a button for "owes a true-up at all". Two filters with the
+   * same name and different rules, so which one a rep had on changed the answer
+   * with nothing on screen explaining why.
+   *
+   * The $300 rule is the one that means anything — a $40 true-up is not a
+   * battery prospect — so that is the one that survived.
+   */
   const [batteryOnly, setBatteryOnly] = useState(false);
-  const [bucket, setBucket] = useState('all'); // all | notsigned | signed
+  const [createdByFilter, setCreatedByFilter] = useState('all');
   // Default view: whatever you touched most recently, first. A rep's working
   // set is almost always "what I was just in", not an alphabetical list.
   const [sortBy, setSortBy] = useState('lastModified');
   const [sortDir, setSortDir] = useState('desc');
-  const [trueUpOnly, setTrueUpOnly] = useState(false);
   const [notReportReady, setNotReportReady] = useState(false);
   // Columns off by default to keep the table scannable. Everything is still
   // sortable and searchable — this only controls what's rendered.
-  const [showCols, setShowCols] = useState({ savings: false, finance: false, kw: false });
+  const [showCols, setShowCols] = useState(
+    { savings: false, finance: false, kw: false, status: false, ...(initialShowCols || {}) }
+  );
   const [colMenuOpen, setColMenuOpen] = useState(false);
   const [editing, setEditing] = useState(null);   // client for the edit modal
 
@@ -50,11 +97,23 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
 
   useEffect(() => { load(); }, []);
 
-  // How many owe a true-up — drives the upsell-target badge.
-  const trueUpCount = useMemo(
-    () => clients.filter((c) => c.nemType === 'trueup').length,
-    [clients]
-  );
+  /** The battery-target rule, defined once and used by the filter and the count. */
+  const isBatteryTarget = (c) => c.nemType === 'trueup' && (c.nemAmount || 0) >= 300;
+
+  const targetCount = useMemo(() => clients.filter(isBatteryTarget).length, [clients]);
+
+  /**
+   * Who created these records, for the Created By filter.
+   *
+   * Derived from the loaded rows rather than fetched, so it offers only creators
+   * who actually appear — and it self-hides for a rep, whose book is all their
+   * own and would show a one-option dropdown.
+   */
+  const creators = useMemo(() => {
+    const set = new Set();
+    for (const c of clients) if (c.createdBy) set.add(c.createdBy);
+    return [...set].sort();
+  }, [clients]);
 
   // Report readiness — same gate the automated send uses, so what a rep sees
   // here is exactly who would (and wouldn't) receive mail.
@@ -79,17 +138,15 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     const list = clients.filter((c) => {
-      if (trueUpOnly && c.nemType !== 'trueup') return false;
       if (notReportReady) { const r = readiness.get(c.id); if (!r || r.eligible) return false; }
-      if (bucket === 'notsigned' && (c.lifecycleStage || '') !== 'Prospect') return false;
-      if (bucket === 'signed' && (c.projectStatus || '') !== 'Pre-PTO') return false;
+      if (createdByFilter !== 'all' && (c.createdBy || '') !== createdByFilter) return false;
       if (statusFilter !== 'all' && (c.lifecycleStage || '').toLowerCase() !== statusFilter) return false;
       if (projStatusFilter !== 'all' && (c.projectStatus || '') !== projStatusFilter) return false;
       if (oppFilter !== 'all') {
         const opp = c.opportunityType || 'Solar Owner – Audit / Review';
         if (opp !== oppFilter) return false;
       }
-      if (batteryOnly && !(c.nemType === 'trueup' && (c.nemAmount || 0) >= 300)) return false;
+      if (batteryOnly && !isBatteryTarget(c)) return false;
       if (!q) return true;
       return (
         c.fullName.toLowerCase().includes(q) ||
@@ -126,7 +183,8 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
       if (av > bv) return 1 * dir;
       return 0;
     });
-  }, [clients, search, statusFilter, projStatusFilter, oppFilter, batteryOnly, bucket, sortBy, sortDir, trueUpOnly, notReportReady, readiness]);
+  }, [clients, search, statusFilter, projStatusFilter, oppFilter, batteryOnly,
+      createdByFilter, sortBy, sortDir, notReportReady, readiness]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a1628] via-[#0f1e36] to-[#0a1628] p-6">
@@ -167,20 +225,11 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
           </div>
         )}
 
-        {/* Search + filter + sort */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-3">
-        <div className="flex gap-1 mb-3">
-          {[['all', 'All Clients'], ['notsigned', 'Not Signed'], ['signed', 'Signed · Pre-PTO']].map(([k, label]) => (
-            <button key={k} onClick={() => setBucket(k)}
-              className={`px-4 py-2 rounded-t-lg text-sm font-semibold border-b-2 ${bucket === k
-                ? 'text-amber-300 border-amber-400 bg-slate-800/60'
-                : 'text-slate-400 border-transparent hover:text-slate-200'}`}>
-              {label}
-            </button>
-          ))}
-        </div>
-        {/* Search gets its own full-width row so long queries stay readable;
-            sort + column controls sit to its right. */}
+        {/* ------------------------- search, then filters -------------------------
+            Search sits above the filters on its own full-width row. It is the
+            control reached for most often and the one whose content is longest,
+            so burying it in a wrapping row of dropdowns cost a rep a scan of the
+            whole bar every time they wanted it. */}
         <div className="flex flex-col md:flex-row gap-3 mb-3">
           <div className="relative flex-1 min-w-0">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -204,7 +253,7 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
               <option value="installDate">Sort: PTO Date</option>
               <option value="annualSavings">Sort: Annual Savings</option>
               <option value="creditOwe">Sort: Est. True-Up</option>
-              <option value="lastReportSent">Sort: Last Report Sent</option>
+              <option value="lastReportSent">Sort: Last Contacted</option>
               <option value="projectStatus">Sort: Status</option>
             </select>
             <button
@@ -225,11 +274,11 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
               {colMenuOpen && (
                 <div className="absolute right-0 mt-1 z-20 w-52 rounded-lg border border-slate-600 bg-[#0d1b2f] shadow-xl p-2">
                   <div className="text-[10px] uppercase tracking-wider text-slate-500 px-1 pb-1">Optional columns</div>
-                  {[['savings', 'Savings / yr'], ['finance', 'Finance provider'], ['kw', 'System size (kW)']].map(([k, label]) => (
+                  {[['savings', 'Savings / yr'], ['finance', 'Finance provider'], ['kw', 'System size (kW)'], ['status', 'Project status']].map(([k, label]) => (
                     <label key={k} className="flex items-center gap-2 px-1 py-1.5 text-sm text-slate-200 cursor-pointer hover:text-amber-300">
                       <input
                         type="checkbox"
-                        checked={showCols[k]}
+                        checked={!!showCols[k]}
                         onChange={(e) => setShowCols((p) => ({ ...p, [k]: e.target.checked }))}
                         className="w-3.5 h-3.5 accent-amber-400"
                       />
@@ -245,10 +294,12 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
           </div>
         </div>
 
+        {/* filters */}
+        <div className="flex flex-wrap items-center gap-2 mb-6">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2.5 border border-slate-600 rounded-lg bg-slate-900/70 text-slate-100"
+            className="px-3 py-2 text-sm rounded-lg bg-slate-800/80 border border-slate-600 text-slate-200"
           >
             <option value="all">All stages</option>
             <option value="client">Client</option>
@@ -277,50 +328,71 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
               <option key={v} value={v}>{v}</option>
             ))}
           </select>
-          <label className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg bg-slate-800/80 border border-slate-600 text-purple-300 cursor-pointer" title="Only clients owing $300+/yr — battery prospects">
-            <input type="checkbox" checked={batteryOnly} onChange={(e) => setBatteryOnly(e.target.checked)} className="w-3.5 h-3.5 accent-purple-400" />
+          {/* CREATED BY. Only offered when there is more than one creator in the
+              book — a rep whose every client is their own gets a dropdown with a
+              single option, which is a control that cannot do anything. */}
+          {creators.length > 1 && (
+            <select
+              value={createdByFilter}
+              onChange={(e) => setCreatedByFilter(e.target.value)}
+              className="px-3 py-2 text-sm rounded-lg bg-slate-800/80 border border-slate-600 text-slate-200"
+              title="Filter by who created the record"
+            >
+              <option value="all">Created by: anyone</option>
+              {creators.map((v) => (
+                <option key={v} value={v}>{v.split('@')[0]}</option>
+              ))}
+            </select>
+          )}
+          <label
+            className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border cursor-pointer ${
+              batteryOnly
+                ? 'bg-purple-500/20 border-purple-400/60 text-purple-200'
+                : 'bg-slate-800/80 border-slate-600 text-purple-300'
+            }`}
+            title="Only clients owing $300+/yr on their true-up — the battery prospects"
+          >
+            <input
+              type="checkbox"
+              checked={batteryOnly}
+              onChange={(e) => {
+                const next = e.target.checked;
+                setBatteryOnly(next);
+                // Biggest true-up first — the order a rep would call them in.
+                if (next) { setSortBy('creditOwe'); setSortDir('asc'); }
+              }}
+              className="w-3.5 h-3.5 accent-purple-400"
+            />
             🔋 Battery targets
           </label>
-        </div>
-
-        {/* True-up upsell-target filter */}
-        <div className="flex items-center gap-3 mb-6">
-          <button
-            onClick={() => {
-              const next = !trueUpOnly;
-              setTrueUpOnly(next);
-              if (next) { setSortBy('creditOwe'); setSortDir('asc'); }
-            }}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all border ${
-              trueUpOnly
-                ? 'bg-red-500/20 border-red-400/60 text-red-200'
-                : 'bg-slate-800/60 border-slate-600 text-slate-300 hover:text-red-200 hover:border-red-400/40'
-            }`}
-            title="Show only clients who owe an annual true-up — your battery upsell targets"
-          >
-            <Zap size={15} className={trueUpOnly ? 'text-red-300' : 'text-amber-400'} />
-            {trueUpOnly ? 'Showing true-up clients' : 'Battery targets (true-up only)'}
-          </button>
           <button
             onClick={() => setNotReportReady((v) => !v)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all border ${
+            className={`px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5 border transition-all ${
               notReportReady
                 ? 'bg-amber-500/20 border-amber-400/60 text-amber-200'
-                : 'bg-slate-800/60 border-slate-600 text-slate-300 hover:text-amber-200 hover:border-amber-400/40'
+                : 'bg-slate-800/80 border-slate-600 text-slate-300 hover:text-amber-200 hover:border-amber-400/40'
             }`}
             title="Clients whose CRM record is too incomplete to send an automated report"
           >
             <AlertCircle size={15} className={notReportReady ? 'text-amber-300' : 'text-slate-400'} />
-            {notReportReady ? 'Showing not report-ready' : 'Not report-ready'}
+            Not report-ready
           </button>
-          <span className="text-xs text-slate-500">
-            {trueUpCount} of {clients.length} owe a true-up
-          </span>
-          {notReadyCount > 0 && (
-            <span className="text-xs text-amber-400/80">
-              · {notReadyCount} can’t be sent a report yet
-            </span>
+          {(statusFilter !== 'all' || projStatusFilter !== 'all' || oppFilter !== 'all'
+            || createdByFilter !== 'all' || batteryOnly || notReportReady || search) && (
+            <button
+              onClick={() => {
+                setStatusFilter('all'); setProjStatusFilter('all'); setOppFilter('all');
+                setCreatedByFilter('all'); setBatteryOnly(false); setNotReportReady(false); setSearch('');
+              }}
+              className="text-xs underline text-slate-500 hover:text-slate-300"
+            >
+              Clear
+            </button>
           )}
+          <span className="ml-auto text-xs text-slate-500">
+            {filtered.length} of {clients.length} · {targetCount} battery target{targetCount === 1 ? '' : 's'}
+            {notReadyCount > 0 && <span className="text-amber-400/80"> · {notReadyCount} not report-ready</span>}
+          </span>
         </div>
 
         {error && (
@@ -359,8 +431,8 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
                       : "Once you add Contacts in Zoho, they'll appear here. Use the Sandbox tab to explore the tools meanwhile."}
                 </p>
               </>
-            ) : trueUpOnly ? (
-              'No clients currently owe a true-up.'
+            ) : batteryOnly ? (
+              'No clients owe $300 or more a year — no battery targets in this book.'
             ) : (
               'No clients match your search.'
             )}
@@ -370,19 +442,29 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
             <table className="w-full text-[12.5px] leading-tight">
               <thead>
                 <tr className="text-left text-slate-400 border-b border-slate-700/80 select-none">
+                  {/* THE COLUMN SET.
+                      Identity, then the existing system, then the number that
+                      makes someone a prospect, then the follow-up facts. Battery
+                      Target came out because it restated the true-up column
+                      beside it — a Yes in one cell and the figure it was derived
+                      from in the next. Project status came out of the default view
+                      and is available in the column menu: it is the Pipeline's
+                      subject, and this screen is not the deal board. */}
                   {[
                     ['name', 'Name'],
-                    [null, 'Street Address'],
+                    [null, 'Address'],
                     ['zip', 'Zip'],
-                    ['installDate', 'PTO Date'],
+                    // Labelled as the EXISTING system's date, because a screen
+                    // that also shows deals being sold makes a bare "PTO Date"
+                    // ambiguous about which system it belongs to.
+                    ['installDate', 'Existing PTO'],
                     ['creditOwe', 'Est. True-Up'],
-                    [null, 'Battery Target'],
-                    ['projectStatus', 'Status'],
                     [null, 'Opportunity'],
                     [null, '⭐'],
+                    ...(showCols.status  ? [['projectStatus', 'Status']] : []),
                     ...(showCols.savings ? [['annualSavings', 'Savings/yr']] : []),
                     ...(showCols.finance ? [[null, 'Finance']] : []),
-                    ...(showCols.kw ? [['systemSizeKw', 'kW']] : []),
+                    ...(showCols.kw      ? [['systemSizeKw', 'kW']] : []),
                     ['lastReportSent', 'Last Contacted'],
                     [null, 'Created By'],
                     [null, '']
@@ -403,7 +485,7 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
               </thead>
               <tbody>
                 {filtered.map((c) => {
-                  const batteryTarget = c.nemType === 'trueup' && (c.nemAmount || 0) >= 300;
+                  const batteryTarget = isBatteryTarget(c);
                   return (
                     <tr
                       key={c.id}
@@ -417,17 +499,18 @@ const ClientDashboard = ({ onOpen, userEmail, role, onSignOut, hideHeader = fals
                       <td className="px-3 py-1.5 whitespace-nowrap text-slate-300 max-w-[220px] truncate">{c.street || '—'}</td>
                       <td className="px-3 py-1.5 whitespace-nowrap text-slate-400">{c.zip || '—'}</td>
                       <td className="px-3 py-1.5 whitespace-nowrap text-slate-300">{c.ptoDate || c.installDate || '—'}</td>
+                      {/* The true-up, with the battery-target mark on it rather
+                          than in a column of its own. A target IS a true-up over
+                          $300, so the flag belongs on the figure it comes from. */}
                       <td className={`px-3 py-1.5 whitespace-nowrap font-semibold ${c.nemAmount == null ? 'text-slate-600' : c.nemType === 'credit' ? 'text-green-400' : 'text-red-400'}`}>
                         {c.nemAmount == null ? '—' : c.nemType === 'credit' ? `+$${c.nemAmount.toLocaleString()}` : `−$${c.nemAmount.toLocaleString()}`}
+                        {batteryTarget && <span className="ml-1" title="Battery target — owes $300+ a year">🔋</span>}
                       </td>
-                      <td className="px-3 py-1.5 whitespace-nowrap">
-                        {batteryTarget
-                          ? <span className="text-purple-300 font-semibold">🔋 Yes</span>
-                          : <span className="text-slate-600">—</span>}
-                      </td>
-                      <td className="px-3 py-1.5 whitespace-nowrap text-slate-300">{c.projectStatus || '—'}</td>
                       <td className="px-3 py-1.5 whitespace-nowrap text-slate-400 max-w-[150px] truncate">{(c.opportunityType || 'Audit / Review').replace('Solar Owner – ', '')}</td>
                       <td className="px-3 py-1.5 whitespace-nowrap text-center">{c.leftReview ? <span title="Left a 5-star review">⭐</span> : <span className="text-slate-600" title="No review yet — ask!">☆</span>}</td>
+                      {showCols.status && (
+                        <td className="px-3 py-1.5 whitespace-nowrap text-slate-300">{c.projectStatus || '—'}</td>
+                      )}
                       {showCols.savings && (
                         <td className="px-3 py-1.5 whitespace-nowrap text-green-300/90">
                           {c.annualSavings != null ? `$${c.annualSavings.toLocaleString()}` : '—'}

@@ -161,7 +161,24 @@ export default async function handler(req, res) {
     /* ---------------- Zoho: the reportable fields ---------------- */
     const payload = {};
     if (stage != null) payload.Sales_Stage = stage;
-    if (installDate != null) payload.Install_Date = installDate || null;
+    /**
+     * THE NEW INSTALL DATE IS Battery_Install_Date, NOT Install_Date.
+     *
+     * This wrote Install_Date, and Install_Date is the EXISTING array's turn-on
+     * date — save-project.js writes it from the audit's installedYear, and
+     * client.js falls back to it when PTO_Date is blank. The whole audit is
+     * built on it: degradation, months-since-install, and the NEM
+     * grandfathering expiry all count from that date.
+     *
+     * So a rep opening a Pipeline row to record when the battery is going in was
+     * silently moving the customer's original install date to next month. Every
+     * figure in their audit shifted, and nothing looked broken — the same class
+     * of failure as the proposal once overwriting the audit's six finance
+     * fields, at a different distance.
+     *
+     * Install_Date is now read-only from this path, like those six.
+     */
+    if (installDate != null) payload.Battery_Install_Date = installDate || null;
     if (commission != null) payload.Rep_Commission = Math.max(0, Number(commission) || 0);
     /**
      * ONE lookup field at the Recruit record, replacing the old name+email pair.

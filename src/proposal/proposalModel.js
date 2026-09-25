@@ -646,6 +646,14 @@ export function toZohoSummary(proposal) {
      * column and a summed report over zeroes give the same answer, but a filter
      * for "added nothing" only works if the value is there.
      */
+    /**
+     * WHO INSTALLS IT. Install_Company already exists on Solar_Projects and
+     * client.js already reads it, so this fills a field the app was asking for
+     * and nothing was writing rather than adding another one.
+     */
+    Install_Company: (proposal.parties && proposal.parties.contractor
+      && proposal.parties.contractor.name) || null,
+
     Proposal_Scope: proposalScope(proposal),
     Added_Solar_kW: solar && solar.adding !== false ? (solar.addedKw ?? 0) : 0,
     Added_Annual_Production_kWh: solar && solar.adding !== false

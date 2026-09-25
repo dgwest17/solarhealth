@@ -51,6 +51,7 @@ import {
   buildProposal, toZohoSummary, proposalSummaryLine, ZOHO_FIELDS
 } from '../proposal/proposalModel';
 import SolarAddOnSummary from './SolarAddOnSummary';
+import { defaultInstaller } from '../admin/settingsSchema';
 import { apiFetch } from '../lib/supabaseClient';
 import ProposalBar from '../proposal/ProposalBar';
 import RepPicker from '../proposal/RepPicker';
@@ -214,6 +215,13 @@ const BatteryStabilization = ({
 
   /** Admin sees the pool and the override seats; a rep sees their own money. */
   const isAdminView = (clientContext && clientContext.viewerRole) === 'admin';
+
+  /**
+   * The installer this proposal names. Defaults to the org's default installer
+   * (Aloha Solar Power out of the box) and is changed on Big Wave, where the
+   * proposal itself is being looked at.
+   */
+  const installer = useMemo(() => defaultInstaller(settings), [settings]);
 
   const commissionCfg = settings.commission || {};
   /** Watts per panel. One place, because the redline and the proposal's
@@ -502,6 +510,22 @@ const BatteryStabilization = ({
         annualProductionKwh: 0,
         nonExport: solarNonExport
       } : null,
+      /**
+       * WHOSE NAMES GO ON THE PAGE.
+       *
+       * This argument was missing too, exactly as `solar` was: buildProposal has
+       * always taken `parties`, CustomerProposal has always rendered "Installed
+       * by …" and the licence line from it, and nothing ever supplied one — so
+       * every proposal ever sent carried a blank seller and no installer.
+       *
+       * The installer is snapshotted, not looked up at render time. A proposal is
+       * a promise about who is coming to the house; changing the org default next
+       * month must not rewrite what an existing customer was told.
+       */
+      parties: {
+        seller: (settings.parties && settings.parties.seller) || null,
+        contractor: installer || null
+      },
       meta: {
         contactId,
         projectId: clientContext.projectId || null,
@@ -531,7 +555,7 @@ const BatteryStabilization = ({
   }, [
     clientContext, price, proj, inputs, batteryModelId, batteryModel, baseKwh, rebateEligible,
     comm, dealKind, solarPanels, solarNonExport, panelWatts,
-    selfGen, seat, builder,
+    selfGen, seat, builder, installer, settings.parties,
     mode, lender, termYears, activeTermCard, escalator, leasePayment,
     monthlyBill, connectionFee, monthlySavings, escalation, clientLabel, savedProposal
   ]);

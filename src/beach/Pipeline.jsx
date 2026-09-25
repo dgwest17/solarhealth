@@ -65,6 +65,17 @@ const fmtDate = (d) => {
  * Deliberately blunt: a rep does not need a sixteen-colour heat map, they need
  * to know which rows to call. Two weeks is a nudge, a month is a problem.
  */
+/**
+ * Does this deal need a call?
+ *
+ * One definition, used by the nudge banner, the filter and the row dot. It was
+ * written out three times as `(daysSince(d.lastContact) ?? 1e9) >= 14`, which is
+ * three places to change a threshold and two of them to forget.
+ */
+export const STALE_DAYS = 14;
+const isStale = (d) =>
+  d.tide !== 'installed' && (daysSince(d.lastContact) ?? 1e9) >= STALE_DAYS;
+
 const staleness = (days) => {
   if (days === null) return { tone: SURF.textFaint, label: 'never' };
   if (days >= 30) return { tone: SURF.danger, label: `${days}d` };
@@ -84,27 +95,44 @@ const NEXT_STAGE = {
   project: { stage: SALES_STAGE.INSTALLED, tide: 'installed', label: 'Installed' }
 };
 
+/**
+ * SIX COLUMNS, and the dates are not among them.
+ *
+ * The table used to carry last contact, sold and install as well, which made
+ * nine columns that scrolled sideways on a laptop — and the three most useful
+ * ones (what they are buying, and for how much) were the ones pushed off the
+ * edge. Every date is in the expanded row now, where there is room to label it
+ * properly. The staleness signal that made the "last contact" column worth
+ * having survives as a dot next to the name, so nothing that prompted a call
+ * was lost with the column.
+ *
+ * "On roof" is the existing array — an audit input, the thing the savings are
+ * measured against. "Adding" is what this deal puts up. One column carrying both
+ * is how a 4 kW client with 8.8 kW being added showed as a 4 kW job.
+ */
 const COLUMNS = [
-  { id: 'name',        label: 'Client',       sort: (d) => (d.name || '').toLowerCase() },
-  { id: 'tide',        label: 'Stage',        sort: (d) => ['met', 'project', 'installed'].indexOf(d.tide) },
-  { id: 'battery',     label: 'Battery',      sort: (d) => (d.battery || '~').toLowerCase() },
-  /**
-   * TWO SOLAR COLUMNS, because they answer different questions.
-   *
-   * "On roof" is the existing array — an audit input, the thing the savings are
-   * measured against. "Adding" is what this deal puts up. One column carrying
-   * both is how a 4 kW client with 8.8 kW being added showed as a 4 kW job.
-   */
-  { id: 'solar',       label: 'On roof',      sort: (d) => Number(d.solarKw) || 0 },
-  { id: 'adding',      label: 'Adding',       sort: (d) => Number(d.addedKw) || 0 },
-  { id: 'value',       label: 'Value',        sort: (d) => Number(d.contractValue) || 0, align: 'right' },
-  { id: 'lastContact', label: 'Last contact', sort: (d) => (daysSince(d.lastContact) ?? 1e9) },
-  { id: 'sold',        label: 'Sold',         sort: (d) => (daysSince(d.soldDate) ?? 1e9) },
-  { id: 'install',     label: 'Install',      sort: (d) => (daysUntil(d.installDate) ?? 1e9) }
+  { id: 'name',    label: 'Client',   sort: (d) => (d.name || '').toLowerCase() },
+  { id: 'tide',    label: 'Stage',    sort: (d) => ['met', 'project', 'installed'].indexOf(d.tide) },
+  { id: 'battery', label: 'Battery',  sort: (d) => (d.battery || '~').toLowerCase() },
+  { id: 'solar',   label: 'On roof',  sort: (d) => Number(d.solarKw) || 0 },
+  { id: 'adding',  label: 'Adding',   sort: (d) => Number(d.addedKw) || 0 },
+  { id: 'value',   label: 'Value',    sort: (d) => Number(d.contractValue) || 0, align: 'right' }
 ];
 
-const Pipeline = ({ deals = [], onOpenClient = null, role = 'rep' }) => {
+const Pipeline = ({ deals = [], onOpenClient = null, role = 'rep', viewerEmail = '' }) => {
   const isAdmin = role === 'admin';
+  /**
+   * Should the row say whose deal it is?
+   *
+   * An admin looking at the whole book needs it on every row — without it the
+   * "everyone" view is an undifferentiated list and there is no way to tell one
+   * rep's deals from another's. A setter needs it on the deals they set but did
+   * not close, which is the question "who is carrying this one".
+   *
+   * A rep looking at deals they closed themselves does not, so a viewer whose
+   * book this all is gets no closer line at all.
+   */
+  const showCloser = isAdmin || deals.some((d) => d.commissionSeat === 'builder');
   /** Which row is open for editing. One at a time — a table full of open forms
    *  is unreadable, and nobody edits two deals simultaneously. */
   const [editing, setEditing] = useState(null);
@@ -165,7 +193,7 @@ const Pipeline = ({ deals = [], onOpenClient = null, role = 'rep' }) => {
     // matched every client with a roof array, which in a solar audit tool is
     // nearly all of them — a filter that removes nothing.
     if (hasSolar) out = out.filter((d) => Number(d.addedKw) > 0 || Number(d.panels) > 0);
-    if (staleOnly) out = out.filter((d) => (daysSince(d.lastContact) ?? 1e9) >= 14);
+    if (staleOnly) out = out.filter(isStale);
     if (q.trim()) {
       const needle = q.trim().toLowerCase();
       out = out.filter((d) =>
@@ -190,7 +218,7 @@ const Pipeline = ({ deals = [], onOpenClient = null, role = 'rep' }) => {
   };
 
   const staleCount = useMemo(
-    () => deals.filter((d) => (daysSince(d.lastContact) ?? 1e9) >= 14 && d.tide !== 'installed').length,
+    () => deals.filter(isStale).length,
     [deals]
   );
 
@@ -242,7 +270,7 @@ const Pipeline = ({ deals = [], onOpenClient = null, role = 'rep' }) => {
 
       {/* ----------------------------- table ----------------------------- */}
       <div className="rounded-2xl overflow-x-auto" style={{ border: `1px solid ${SURF.line}` }}>
-        <table className="w-full text-left" style={{ minWidth: 860 }}>
+        <table className="w-full text-left" style={{ minWidth: 680 }}>
           <thead>
             <tr style={{ background: SURF.deep }}>
               {COLUMNS.map((c) => (
@@ -260,7 +288,6 @@ const Pipeline = ({ deals = [], onOpenClient = null, role = 'rep' }) => {
           <tbody>
             {rows.map((d) => {
               const contact = staleness(daysSince(d.lastContact));
-              const install = daysUntil(d.installDate);
               return (
                 <React.Fragment key={d.id}>
                 <tr
@@ -269,10 +296,36 @@ const Pipeline = ({ deals = [], onOpenClient = null, role = 'rep' }) => {
                   style={{ borderTop: `1px solid ${SURF.line}`, background: SURF.surface }}
                 >
                   <td className="px-3 py-2.5">
-                    <div className="text-[13px] font-semibold" style={{ color: SURF.textBright }}>
+                    <div className="text-[13px] font-semibold flex items-center gap-1.5"
+                         style={{ color: SURF.textBright }}>
+                      {/* The staleness signal the "last contact" column used to
+                          carry. A dot costs no width and still says "call this
+                          one"; the number itself is one click away. */}
+                      {isStale(d) && (
+                        <span title={`Last contact ${contact.label} ago — needs a call`}
+                              style={{
+                                width: 6, height: 6, borderRadius: 999,
+                                background: contact.tone, flexShrink: 0
+                              }} />
+                      )}
                       {d.name || 'Unnamed'}
                     </div>
                     <div className="text-[11px] font-mono" style={{ color: SURF.textFaint }}>{d.summary}</div>
+                    {/* WHOSE DEAL IS THIS? Shown only when the viewer is not the
+                        closer — an admin looking at the whole book, or a setter
+                        looking at a deal somebody else closed. A rep scanning
+                        their own deals already knows, so a column of their own
+                        name would be pure noise. */}
+                    {showCloser && d.rep && d.commissionSeat !== 'engineer' && d.commissionSeat !== 'self' && (
+                      <div className="text-[10.5px]" style={{ color: SURF.seaBright }}>
+                        Closed by {String(d.rep).split('@')[0]}
+                      </div>
+                    )}
+                    {showCloser && d.rep && (d.commissionSeat === 'engineer' || d.commissionSeat === 'self') && (
+                      <div className="text-[10.5px]" style={{ color: SURF.textFaint }}>
+                        {String(d.rep).split('@')[0]}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 text-[12px]" style={{ color: SURF.textMuted }}>
                     {TIDE_LABEL[d.tide] || '—'}
@@ -334,18 +387,6 @@ const Pipeline = ({ deals = [], onOpenClient = null, role = 'rep' }) => {
                   <td className="px-3 py-2.5 text-[13px] font-mono text-right" style={{ color: SURF.textBright }}>
                     {d.contractValue ? money(d.contractValue) : '—'}
                   </td>
-                  <td className="px-3 py-2.5 text-[12.5px] font-mono" title={fmtDate(d.lastContact)}
-                      style={{ color: contact.tone }}>
-                    {contact.label}
-                  </td>
-                  <td className="px-3 py-2.5 text-[12.5px] font-mono" title={fmtDate(d.soldDate)}
-                      style={{ color: SURF.textMuted }}>
-                    {d.soldDate ? `${daysSince(d.soldDate)}d` : '—'}
-                  </td>
-                  <td className="px-3 py-2.5 text-[12.5px] font-mono" title={fmtDate(d.installDate)}
-                      style={{ color: install !== null && install >= 0 ? SURF.seaBright : SURF.textMuted }}>
-                    {install === null ? '—' : install >= 0 ? `in ${install}d` : `${-install}d ago`}
-                  </td>
                 </tr>
                 {editing === d.id && (
                   <tr>
@@ -379,8 +420,9 @@ const Pipeline = ({ deals = [], onOpenClient = null, role = 'rep' }) => {
       </div>
 
       <p className="text-[11px]" style={{ color: SURF.textFaint }}>
-        Click a row to edit it. Ages, not dates — hover any for the date itself. Last contact is the CRM&rsquo;s last activity on the
-        contact, so a call logged in Zoho counts and one that was not, does not.
+        Click a row to open it — dates, who set it and the commission are in there. A dot beside a name means
+        no contact in two weeks; last contact is the CRM&rsquo;s last activity on the contact, so a call logged
+        in Zoho counts and one that was not, does not.
       </p>
     </div>
   );
@@ -485,7 +527,7 @@ const EditRow = ({ deal, isAdmin, onSaved, onCancel, onOpenClient }) => {
           <Select value={stage} onChange={setStage}
                   options={Object.values(SALES_STAGE).map((v) => [v, v])} />
         </Field>
-        <Field label="Install date">
+        <Field label="Battery install date">
           <input type="date" value={installDate} onChange={(e) => setInstallDate(e.target.value)}
                  className="w-full px-2.5 py-2 rounded-lg text-[13px] focus:outline-none"
                  style={{ background: SURF.surface, border: `1px solid ${SURF.line}`, color: SURF.textBright }} />
@@ -507,6 +549,55 @@ const EditRow = ({ deal, isAdmin, onSaved, onCancel, onOpenClient }) => {
                    className="w-full px-2.5 py-2 rounded-lg font-mono text-[13px] focus:outline-none"
                    style={{ background: SURF.surface, border: `1px solid ${SURF.sun}66`, color: SURF.textBright }} />
           </Field>
+        )}
+      </div>
+
+      {/* ------------------------- read-only facts -------------------------
+          The dates that used to be columns, plus the money.
+
+          ORIGINAL INSTALL DATE IS NOT EDITABLE HERE. It is the existing array's
+          turn-on date and the audit's whole time base — degradation,
+          months-since-install and the NEM grandfathering expiry all count from
+          it. The editable date above is Battery_Install_Date, when THIS deal
+          goes in. Until this release they were the same field, and scheduling a
+          battery quietly moved the customer's original install date. */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-5 gap-y-2 mt-4 pt-3"
+           style={{ borderTop: `1px solid ${SURF.line}` }}>
+        <Fact label="Original install" value={fmtDate(deal.originalInstallDate)}
+              hint="The existing system's turn-on date — an audit input, edited on the audit screen" />
+        <Fact label="PTO" value={fmtDate(deal.ptoDate)} />
+        <Fact label="Sold" value={fmtDate(deal.soldDate)} />
+        <Fact label="Last contact" value={fmtDate(deal.lastContact)} />
+        <Fact label="Set by"
+              value={deal.builderName || (deal.selfGen ? 'Self-gen' : '—')}
+              tone={deal.builderName ? SURF.textBright : SURF.textMuted} />
+      </div>
+
+      {/* ---------------------------- the money ----------------------------
+          A rep sees their own share. The pool is admin-only and is not merely
+          hidden here — the server sends null for it to a non-admin, so there is
+          nothing in the page to read. */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-5 gap-y-2 mt-3 pt-3"
+           style={{ borderTop: `1px solid ${SURF.line}` }}>
+        <Fact label="Rep commission" value={money(deal.commission)} tone={SURF.sun}
+              hint={deal.commissionSeat === 'builder' ? 'Your half as the setter'
+                : deal.commissionSeat === 'self' ? 'Self-gen — the combined share'
+                : 'Your share as the closer'} />
+        {isAdmin && (
+          <Fact label="Total commission" value={money(deal.commissionTotal)} tone={SURF.textBright}
+                hint="The whole pool on this deal" />
+        )}
+        {isAdmin && (deal.commissionRows || []).length > 0 && (
+          <div>
+            <span className="block text-[10.5px] uppercase tracking-wider mb-1"
+                  style={{ color: SURF.textMuted }}>Split</span>
+            {deal.commissionRows.map((r) => (
+              <div key={r.key} className="flex justify-between gap-3 text-[11.5px]">
+                <span style={{ color: SURF.textMuted }}>{r.label || r.key}</span>
+                <span className="font-mono" style={{ color: SURF.textBright }}>{money(r.amount)}</span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
@@ -547,6 +638,21 @@ const EditRow = ({ deal, isAdmin, onSaved, onCancel, onOpenClient }) => {
     </div>
   );
 };
+
+/** A read-only figure in the expanded row. */
+const Fact = ({ label, value, hint = null, tone = null }) => (
+  <div>
+    <span className="block text-[10.5px] uppercase tracking-wider" style={{ color: SURF.textMuted }}>
+      {label}
+    </span>
+    <span className="block text-[13px] font-mono" style={{ color: tone || SURF.textBright }}>
+      {value || '—'}
+    </span>
+    {hint && (
+      <span className="block text-[10px] leading-snug mt-0.5" style={{ color: SURF.textFaint }}>{hint}</span>
+    )}
+  </div>
+);
 
 const Field = ({ label, children }) => (
   <label className="block">

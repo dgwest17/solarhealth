@@ -77,6 +77,52 @@ export const DEFAULT_PARTIES = {
 };
 
 /**
+ * WHO INSTALLS THE JOB.
+ *
+ * A list rather than a single configured contractor, because the installer is a
+ * per-deal fact: the same rep sells jobs that different crews build, and the
+ * proposal has to name the one that is actually coming. `parties.contractor`
+ * above is the ORG-WIDE default and predates this; `installers` is the set a rep
+ * picks from, and the choice is snapshotted onto each proposal.
+ *
+ * Shipped with Aloha Solar Power as the default, which is a deliberate exception
+ * to the empty-by-default rule the parties follow: Dave asked for it by name,
+ * and it is the installer on essentially every job. An installer that turns out
+ * to be wrong is visible on the proposal and one dropdown away from being fixed,
+ * which is not true of a blank that nobody notices.
+ */
+export const DEFAULT_INSTALLERS = [
+  { id: 'aloha', name: 'Aloha Solar Power', license: '', logoUrl: '', isDefault: true }
+];
+
+/**
+ * The installers a rep may choose from, for a given settings object.
+ *
+ * One reader, so the list is assembled the same way everywhere. It folds in an
+ * org-wide `parties.contractor` configured before this list existed — otherwise
+ * upgrading would silently drop whatever installer that org had been putting on
+ * its proposals.
+ */
+export function installersFrom(settings) {
+  const list = (settings && Array.isArray(settings.installers) && settings.installers.length)
+    ? settings.installers
+    : DEFAULT_INSTALLERS;
+
+  const legacy = settings && settings.parties && settings.parties.contractor;
+  const legacyName = (legacy && legacy.name || '').trim();
+  if (legacyName && !list.some((i) => (i.name || '').trim() === legacyName)) {
+    return [{ ...legacy, id: 'configured', isDefault: true }, ...list];
+  }
+  return list;
+}
+
+/** The one a new proposal gets. Marked default, else the first on the list. */
+export const defaultInstaller = (settings) => {
+  const list = installersFrom(settings);
+  return list.find((i) => i.isDefault) || list[0] || null;
+};
+
+/**
  * The Quiver catalogue. Empty by design: a training centre listing modules
  * that do not exist teaches reps to ignore it.
  */
@@ -168,6 +214,7 @@ export const buildDefaultSettings = () => ({
     seller: { ...DEFAULT_PARTIES.seller },
     contractor: { ...DEFAULT_PARTIES.contractor }
   },
+  installers: DEFAULT_INSTALLERS.map((i) => ({ ...i })),
   programs: Object.fromEntries(
     Object.entries(INCENTIVE_PROGRAMS).map(([k, v]) => [k, { ...v }])
   ),
@@ -177,7 +224,7 @@ export const buildDefaultSettings = () => ({
 });
 
 /** Lists are replaced wholesale; objects are merged key by key. */
-const LIST_KEYS = ['batteries', 'lenders', 'adders', 'panels', 'quiver'];
+const LIST_KEYS = ['batteries', 'lenders', 'adders', 'panels', 'quiver', 'installers'];
 const MAP_KEYS = ['programs', 'rates', 'parties'];
 
 /**

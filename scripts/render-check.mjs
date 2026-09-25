@@ -16,6 +16,15 @@
  * by doing the one thing the build does not: bundling each screen with esbuild
  * and actually rendering it with react-dom/server.
  *
+ * DO NOT REACH FOR A React.useState STUB to drive a component into a particular
+ * state. Every component here does `import React, { useState } from 'react'`,
+ * which captures the binding at import time — patching React.useState after that
+ * changes nothing, and the case renders the DEFAULT state while reporting a pass.
+ * That has produced a false green twice: once for the Storage deck's seven slides
+ * and once for this file's optional columns, both times as byte-identical output
+ * across cases that were supposed to differ. Use an explicit prop instead, and
+ * check that the character counts actually differ between cases.
+ *
  * WHAT IT CANNOT CATCH: anything that only happens after a click or an effect.
  * renderToString runs one synchronous pass, so useEffect never fires. A screen
  * with internal tab state therefore needs one case PER TAB — rendering slide 1
@@ -128,28 +137,6 @@ const CASES = [
   })),
 
   // -------------------------------------------------------------- THE BEACH
-  {
-    name: 'Pipeline (one battery deal, one solar add-on)',
-    src: `
-      import React from 'react';
-      import Pipeline from '${ROOT}src/beach/Pipeline.jsx';
-      const deals = [
-        { id: '1', contactId: 'c1', name: 'Battery Only', tide: 'met', contractValue: 22222,
-          battery: 'Tesla Powerwall 3', batteryKwh: 13.5, solarKw: 6, addedKw: 0,
-          addedKwhPerYear: 0, lastContact: new Date().toISOString(), commission: 2940,
-          commissionRows: [], summary: 'Loan · 20 yr' },
-        { id: '2', contactId: 'c2', name: 'Solar Add On', tide: 'project', contractValue: 48000,
-          battery: 'Tesla Powerwall 3', batteryKwh: 13.5, solarKw: 4, addedKw: 8.8,
-          addedKwhPerYear: 13640, lastContact: null, commission: 5200,
-          commissionRows: [], summary: 'Loan · 25 yr',
-          // A deal with a builder on it, which the row must carry through to the
-          // editor. It did not, and saving the row silently cleared the builder.
-          builderRecruitId: '123', builderName: 'Kenson Manassero',
-          builderEmail: 'kenson@example.com' }
-      ];
-      export default React.createElement(Pipeline, { deals, role: 'admin' });
-    `
-  },
 
   // --------------------------------------------------- SOLAR ADD-ON SUMMARY
   // Extracted from BatteryStabilization precisely so it can be reached. The
@@ -173,6 +160,130 @@ const CASES = [
       });
     `
   })),
+
+  // -------------------------------------------------------- CLIENT DASHBOARD
+  // Rendered WITH rows, so the table, its optional columns and every cell are
+  // actually exercised. Two clients so the Created By filter appears (it hides
+  // itself when there is only one creator) and both the battery-target and the
+  // no-figure paths render.
+  ...[
+    { label: 'default columns', cols: '' },
+    { label: 'all optional columns on', cols: 'status,savings,finance,kw' }
+  ].map(({ label, cols }) => ({
+    name: `Client dashboard (${label})`,
+    src: `
+      import React from 'react';
+      import ClientDashboard from '${ROOT}src/components/ClientDashboard.jsx';
+
+      const clients = [
+        { id: 'c1', fullName: 'Owes A Lot', lastName: 'Lot', email: 'a@x.com', city: 'Encinitas',
+          street: '123 Neptune Ave', zip: '92024', ptoDate: '2019-05-10', installDate: '2019-04-01',
+          nemType: 'trueup', nemAmount: 1240, opportunityType: 'Solar Owner – Add Battery',
+          projectStatus: 'PTO-Approved', leftReview: true, annualSavings: 2100,
+          financeProvider: 'Mosaic', systemSizeKw: 6, lastReportSent: '2026-09-01',
+          lastModified: '2026-09-20', createdBy: 'austin@example.com', lifecycleStage: 'Client',
+          annualProduction: 9600, currentAnnualUsage: 13000, nemVersion: 'NEM2' },
+        { id: 'c2', fullName: 'Gets A Check', lastName: 'Check', email: 'b@x.com', city: 'Carlsbad',
+          street: '9 Ocean St', zip: '92008', ptoDate: null, installDate: null,
+          nemType: 'credit', nemAmount: 80, opportunityType: null,
+          projectStatus: 'Pre-PTO', leftReview: false, annualSavings: null,
+          financeProvider: null, systemSizeKw: null, lastReportSent: null,
+          lastModified: '2026-09-18', createdBy: 'kenson@example.com', lifecycleStage: 'Prospect',
+          annualProduction: null, currentAnnualUsage: null, nemVersion: null }
+      ];
+
+      const wanted = '${cols}'.split(',').filter(Boolean);
+      const showCols = Object.fromEntries(wanted.map((k) => [k, true]));
+
+      export default React.createElement(ClientDashboard, {
+        initialClients: clients, initialShowCols: showCols,
+        role: 'admin', userEmail: 'dave@example.com',
+        onOpen: () => {}, hideHeader: true
+      });
+    `
+  })),
+
+  // ------------------------------------------------------------------ BEACH
+  // Pipeline and Treasure in BOTH roles. The rep/admin split is the whole
+  // point of these screens, so one role proves half of each.
+  //
+  // The rep fixture carries NO pool and NO captain/recruiter rows, because that
+  // is what the server now sends a rep — a fixture with them would test a
+  // payload that cannot occur and would hide a crash on the real one.
+  ...(() => {
+    const repDeal = (over) => JSON.stringify({
+      id: '1', contactId: 'c1', name: 'Rep Deal', tide: 'installed',
+      contractValue: 22222, battery: 'Tesla Powerwall 3', batteryKwh: 13.5,
+      solarKw: 6, addedKw: 0, addedKwhPerYear: 0, panels: 0,
+      commission: 2940, commissionTotal: null, commissionSeat: 'self', selfGen: true,
+      commissionRows: [{ key: 'self', label: 'Self-gen', pct: 84, amount: 2940 }],
+      lastContact: null, soldDate: '2026-09-02', installDate: '2026-09-15',
+      originalInstallDate: '2019-04-01', ptoDate: '2019-05-10',
+      rep: 'rep@example.com', summary: 'Cash · $22,222', ...JSON.parse(over || '{}')
+    });
+    const adminDeals = JSON.stringify([
+      { id: '1', contactId: 'c1', name: 'Team Deal', tide: 'installed', contractValue: 48000,
+        battery: 'Tesla Powerwall 3', batteryKwh: 13.5, solarKw: 4, addedKw: 8.8,
+        addedKwhPerYear: 13640, panels: 20, commission: 5500, commissionTotal: 5500,
+        commissionSeat: 'engineer', selfGen: false,
+        commissionRows: [
+          { key: 'builder', label: 'Builder', pct: 42, amount: 2310 },
+          { key: 'engineer', label: 'Engineer', pct: 42, amount: 2310 },
+          { key: 'captain', label: 'Captain', pct: 12, amount: 660 },
+          { key: 'recruiter', label: 'Recruiter', pct: 4, amount: 220 }
+        ],
+        builderRecruitId: '123', builderName: 'Kenson Manassero',
+        builderEmail: 'kenson@example.com',
+        lastContact: '2026-07-01', soldDate: '2026-09-04', installDate: '2026-09-20',
+        originalInstallDate: '2018-03-01', ptoDate: '2018-04-02',
+        rep: 'austin@example.com', summary: 'Loan · 25 yr · $48,000' },
+      { id: '2', contactId: 'c2', name: 'Open Deal', tide: 'met', contractValue: 20000,
+        battery: 'Enphase IQ 10C', batteryKwh: 10, solarKw: 7, addedKw: 0,
+        addedKwhPerYear: 0, panels: 0, commission: 3500, commissionTotal: 3500,
+        commissionSeat: 'self', selfGen: true,
+        commissionRows: [{ key: 'self', label: 'Self-gen', pct: 84, amount: 2940 }],
+        lastContact: null, soldDate: null, installDate: null,
+        originalInstallDate: null, ptoDate: null,
+        rep: 'dave@example.com', summary: 'Loan · 20 yr · $20,000' }
+    ]);
+
+    const cases = [];
+    for (const [label, role, deals] of [
+      ['rep', 'rep', `[${repDeal()}]`],
+      ['admin', 'admin', adminDeals]
+    ]) {
+      cases.push({
+        name: `Pipeline (${label})`,
+        src: `
+          import React from 'react';
+          import Pipeline from '${ROOT}src/beach/Pipeline.jsx';
+          export default React.createElement(Pipeline, {
+            deals: ${deals}, role: '${role}', viewerEmail: '${label}@example.com'
+          });
+        `
+      });
+      cases.push({
+        name: `Treasure (${label})`,
+        // mustNotContain guards the rule that matters: a rep never sees the
+        // override seats. Checked against the RENDERED page, not the intent.
+        mustNotContain: label === 'rep' ? ['Captain', 'Recruiter', 'Override'] : [],
+        src: `
+          import React from 'react';
+          import TreasurePanel from '${ROOT}src/beach/Treasure.jsx';
+          const deals = ${deals};
+          const byTide = {
+            met: deals.filter((d) => d.tide === 'met'),
+            project: deals.filter((d) => d.tide === 'project'),
+            installed: deals.filter((d) => d.tide === 'installed')
+          };
+          export default React.createElement(TreasurePanel, {
+            deals, byTide, role: '${role}'
+          });
+        `
+      });
+    }
+    return cases;
+  })(),
 
   // -------------------------------------------------------------- REP PICKER
   // Self-gen and a selected builder. Keyed on the recruit id, so a value that
