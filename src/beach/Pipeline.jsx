@@ -536,7 +536,9 @@ const EditRow = ({ deal, isAdmin, onSaved, onCancel, onOpenClient }) => {
           {/* One control, not two. Selecting the person carries their id and
               their email, so nothing here can disagree about who gets paid. */}
           <RepPicker
-            value={builder ? builder.id : ''}
+            value={builder ? (builder.id || '') : ''}
+            matchEmail={builder && !builder.id ? builder.email : ''}
+            onResolve={setBuilder}
             onChange={(rep) => { setBuilder(rep); setBuilderTouched(true); }}
             className="w-full px-2.5 py-2 rounded-lg text-[13px] focus:outline-none"
             style={{ background: SURF.surface, border: `1px solid ${SURF.line}`, color: SURF.textBright }}

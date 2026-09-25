@@ -212,11 +212,23 @@ const ProposalBar = ({
             {saveResult.ok ? (
               <div className="text-emerald-300">
                 Saved{saveResult.zoho && saveResult.zoho.ok ? ' · moved to Met in the CRM' : ''}.
-                {saveResult.missingZohoFields && saveResult.missingZohoFields.length > 0 && (
+                {/* Which CRM fields were refused, and WHY. This used to say
+                    every refused field "doesn't exist yet", which sent Dave
+                    looking for a field that was sitting in the CRM — the real
+                    cause was a decimal sent to an integer field. */}
+                {((saveResult.zohoProblems && saveResult.zohoProblems.length > 0)
+                  || (saveResult.missingZohoFields && saveResult.missingZohoFields.length > 0)) && (
                   <div className="text-amber-300 mt-1">
-                    These Zoho fields don&rsquo;t exist yet, so they weren&rsquo;t written:{' '}
-                    <span className="font-mono">{saveResult.missingZohoFields.join(', ')}</span>.
-                    The full proposal is saved either way.
+                    The CRM didn&rsquo;t accept{' '}
+                    {(saveResult.zohoProblems && saveResult.zohoProblems.length > 0)
+                      ? saveResult.zohoProblems.map((pr, i) => (
+                          <span key={pr.field}>
+                            {i > 0 ? '; ' : ''}
+                            <span className="font-mono">{pr.field}</span> ({pr.reason})
+                          </span>
+                        ))
+                      : <span className="font-mono">{saveResult.missingZohoFields.join(', ')}</span>}
+                    . Everything else was written, and the full proposal is saved either way.
                   </div>
                 )}
                 {saveResult.supabaseError && (

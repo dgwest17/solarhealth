@@ -75,8 +75,33 @@ async function sbFetch(path, options = {}) {
  * Write the summary to Solar_Projects, dropping fields Zoho does not know
  * about and reporting them back.
  */
+/**
+ * Why Zoho refused a field, in words a rep can act on.
+ *
+ * Every refusal used to be reported as "this field doesn't exist yet", which
+ * sent Dave hunting for a field that was sitting right there in the CRM: the
+ * real cause was a decimal sent to an integer field. Zoho says which it is —
+ * `expected_data_type` on a type mismatch — so that is passed through, and
+ * "not found" is only claimed when Zoho's own message says so.
+ */
+function reasonFor(e, field) {
+  const row = e.zohoRow || null;
+  const details = (row && row.details) || null;
+  let expected = details && details.expected_data_type;
+  const text = String((row && row.message) || e.message || '');
+  if (!expected) {
+    const m = /"api_name"\s*:\s*"([^"]+)"[^}]*"expected_data_type"\s*:\s*"([^"]+)"/.exec(text)
+      || /"expected_data_type"\s*:\s*"([^"]+)"[^}]*"api_name"\s*:\s*"([^"]+)"/.exec(text);
+    if (m) expected = m[1] === field ? m[2] : m[1];
+  }
+  if (expected) return `wrong type — Zoho expects ${expected}`;
+  if (/not\s*found|invalid\s*field|no\s*such/i.test(text)) return 'not found on Solar_Projects';
+  return (row && row.code) || text.slice(0, 120) || 'rejected';
+}
+
 async function writeZohoSummary(projectId, summary) {
   const missing = [];
+  const problems = [];
   let payload = { ...summary };
 
   // Nulls are meaningful to Zoho (they clear a field) but here a null just
@@ -97,7 +122,7 @@ async function writeZohoSummary(projectId, summary) {
       if (row && row.code && row.code !== 'SUCCESS') {
         throw Object.assign(new Error(row.message || row.code), { zohoRow: row });
       }
-      return { ok: true, missing, written: Object.keys(payload) };
+      return { ok: true, missing, problems, written: Object.keys(payload) };
     } catch (e) {
       // Zoho names the offending field in `details.api_name` on an
       // INVALID_DATA / mandatory-field style rejection.
@@ -107,14 +132,15 @@ async function writeZohoSummary(projectId, summary) {
 
       if (name && payload[name] !== undefined) {
         missing.push(name);
+        problems.push({ field: name, value: payload[name], reason: reasonFor(e, name) });
         delete payload[name];
         continue;
       }
       // Not a missing-field problem, or nothing left to drop.
-      return { ok: false, missing, error: e.message };
+      return { ok: false, missing, problems, error: e.message };
     }
   }
-  return { ok: false, missing, error: 'Could not write any proposal fields to Zoho.' };
+  return { ok: false, missing, problems, error: 'Could not write any proposal fields to Zoho.' };
 }
 
 export default async function handler(req, res) {
@@ -197,7 +223,10 @@ export default async function handler(req, res) {
       stage: proposal.stage,
       // Surfaced so the UI can tell the rep precisely what to create in Zoho
       // rather than showing a generic failure.
-      missingZohoFields: zoho.missing
+      missingZohoFields: zoho.missing,
+      // Each refused field with Zoho's reason, so the message can say "wrong
+      // type" when it is wrong type instead of claiming the field is missing.
+      zohoProblems: zoho.problems || []
     });
   } catch (e) {
     return sendError(res, e);

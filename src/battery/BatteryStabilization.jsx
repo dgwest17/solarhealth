@@ -31,7 +31,7 @@
  *
  * Rendered by: src/battery/BatteryAnalysis.jsx
  */
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   ChevronDown, ShieldCheck, Home, RefreshCw, Check, Wallet, TrendingUp, Waves
 } from 'lucide-react';
@@ -48,7 +48,7 @@ import { NEM3_EXPORT_MIDDAY } from './BatteryDispatch';
 import { useSettings } from '../admin/SettingsContext';
 import { DeepSeas, Shell } from '../surf/SurfIcons';
 import {
-  buildProposal, toZohoSummary, proposalSummaryLine, ZOHO_FIELDS
+  buildProposal, toZohoSummary, proposalSummaryLine, ZOHO_FIELDS, builderOf
 } from '../proposal/proposalModel';
 import SolarAddOnSummary from './SolarAddOnSummary';
 import { defaultInstaller } from '../admin/settingsSchema';
@@ -209,8 +209,17 @@ const BatteryStabilization = ({
    * picker's own blank option ("No setter — self-gen") is the control, so there
    * is nothing to keep in step.
    */
-  const [builder, setBuilder] = useState(null);   // { id, name, email } | null
+  const [builder, setBuilderState] = useState(null);   // { id, name, email } | null
   const selfGen = !builder;
+  /**
+   * Has the rep chosen a setter in this session? Until they have, the setter
+   * on the saved proposal is the truth, and loading it must not be overridden.
+   */
+  const builderChosen = useRef(false);
+  const setBuilder = useCallback((next) => {
+    builderChosen.current = true;
+    setBuilderState(next);
+  }, []);
   const seat = 'engineer';
 
   /** Admin sees the pool and the override seats; a rep sees their own money. */
@@ -283,7 +292,26 @@ const BatteryStabilization = ({
     (async () => {
       try {
         const r = await apiFetch(`/api/save-proposal?contactId=${encodeURIComponent(contactId)}`);
-        if (!cancelled && r && r.proposal) setSavedProposal(r.proposal);
+        if (!cancelled && r && r.proposal) {
+          setSavedProposal(r.proposal);
+          /**
+           * TAKE THE SETTER BACK FROM THE SAVED DEAL.
+           *
+           * The saved proposal was loaded but never read back into this
+           * screen, and the setter is the one control hidden inside two
+           * collapsed sections — so it reopened as "self-gen" where nobody
+           * could see it, and the next "Save new version" saved the deal as
+           * self-gen: the builder lost their half, and the CRM's Set_By lookup
+           * was cleared along with it.
+           *
+           * Only when the rep has not already picked someone, so a slow load
+           * can never overwrite a choice they have just made.
+           */
+          const saved = builderOf(r.proposal.internal);
+          if (saved && !builderChosen.current) {
+            setBuilderState({ id: saved.recruitId, name: saved.name, email: saved.email });
+          }
+        }
       } catch { /* a missing proposal is the normal case, not an error */ }
     })();
     return () => { cancelled = true; };
@@ -1645,8 +1673,10 @@ const BatteryStabilization = ({
                         misspelling makes them unfindable in a report, and a
                         mistyped email means their half never reaches them. */}
                     <RepPicker
-                      value={builder ? builder.id : ''}
+                      value={builder ? (builder.id || '') : ''}
+                      matchEmail={builder && !builder.id ? builder.email : ''}
                       onChange={setBuilder}
+                      onResolve={setBuilderState}
                       className="w-full max-w-sm px-2 py-1.5 rounded bg-slate-900/70 border border-slate-600 text-slate-100 text-[12.5px]"
                     />
                     <p className="text-[11px] text-slate-500 mt-1.5">

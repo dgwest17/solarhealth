@@ -104,7 +104,7 @@ export const StatTile = ({ icon: Icon, label, value, unit = null, delta = null, 
  *
  * `onClick` is required and there is no disabled variant on purpose: a card
  * this prominent that does nothing when pressed is worse than one that is not
- * there. Things that do not exist yet belong in the sidebar's quiet list.
+ * there. Pages that are not built yet get no card and no rail entry.
  */
 export const ActionCard = ({ icon: Icon, title, sub = null, onClick, art = null, minHeight = 190 }) => (
   <button

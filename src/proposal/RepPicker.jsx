@@ -65,7 +65,18 @@ const loadRoster = () => {
  * @param {boolean}  allowNone Offer the self-gen option. Off only where a
  *                             builder is already known to exist.
  */
-const RepPicker = ({ value = '', onChange, className = '', style = null, allowNone = true }) => {
+const RepPicker = ({
+  value = '', onChange, className = '', style = null, allowNone = true,
+  /**
+   * A setter saved before recruit ids existed has an email and no id, so no
+   * option matched and the picker showed "self-gen" over a deal that has a
+   * setter. Given their email, the picker finds them on the roster, shows
+   * them, and hands the resolved person to `onResolve` so their id is filled
+   * in — which is what lets the CRM's Set_By lookup be written for them.
+   */
+  matchEmail = '',
+  onResolve = null
+}) => {
   const [reps, setReps] = useState(ROSTER || []);
   const [loading, setLoading] = useState(!ROSTER);
   const [failed, setFailed] = useState(false);
@@ -80,6 +91,17 @@ const RepPicker = ({ value = '', onChange, className = '', style = null, allowNo
     });
     return () => { cancelled = true; };
   }, []);
+
+  const resolved = (!value && matchEmail)
+    ? reps.find((r) => r.email && r.email.toLowerCase() === String(matchEmail).toLowerCase())
+    : null;
+
+  useEffect(() => {
+    if (resolved && onResolve) {
+      onResolve({ id: resolved.id, name: resolved.name || '', email: resolved.email || '' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolved && resolved.id]);
 
   const pick = (id) => {
     if (!onChange) return;
@@ -114,7 +136,7 @@ const RepPicker = ({ value = '', onChange, className = '', style = null, allowNo
 
   return (
     <select
-      value={value || ''}
+      value={value || (resolved ? resolved.id : '')}
       onChange={(e) => pick(e.target.value)}
       disabled={loading}
       className={className}

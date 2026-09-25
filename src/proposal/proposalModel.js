@@ -606,7 +606,7 @@ export function toZohoSummary(proposal) {
   const s = proposal.savings || {};
   const solar = proposal.solar || null;
 
-  return {
+  const out = {
     // --- the proposal's own finance terms ---
     // Never Purchase_Type / Contract_Value / Term / Escalator_or_Interest /
     // Monthly_Payment / Finance_Provider: those six are the existing system.
@@ -701,13 +701,30 @@ export function toZohoSummary(proposal) {
     Documents_Step: proposal.steps.paperwork || null,
     Intake_Step: proposal.steps.site_inspection || null
   };
+
+  /**
+   * WHOLE NUMBERS FOR THE CRM'S INTEGER FIELDS.
+   *
+   * Zoho refuses a decimal in an integer field and rejects the value. The
+   * contract a customer signs is grossed up for the dealer fee — $20,000 at
+   * 10% is $22,222.22 — so Proposal_Contract_Value was refused on every
+   * financed deal, and the save reported it as a field that "doesn't exist".
+   * Storage_Rebate goes the same way on any Tesla DC expansion, which earns a
+   * half rebate: $3,375 + $1,687.50.
+   *
+   * Rounded here, once, from the field types in ZOHO_FIELDS, rather than with
+   * a Math.round at each line — the next integer field added to that list is
+   * then handled without anybody having to remember this.
+   *
+   * The full-precision figures stay on the proposal in Supabase; this is only
+   * the CRM's reporting copy.
+   */
+  for (const key of ZOHO_INTEGER_FIELDS) {
+    if (typeof out[key] === 'number' && Number.isFinite(out[key])) out[key] = Math.round(out[key]);
+  }
+  return out;
 }
 
-/**
- * The Zoho fields this module writes, split into what already exists and what
- * has to be created. Surfaced as data so the app can tell a rep exactly which
- * field is missing when a save partially fails, instead of a generic error.
- */
 export const ZOHO_FIELDS = {
   /**
    * The existing system's finance terms. READ ONLY from the proposal path —
@@ -731,7 +748,8 @@ export const ZOHO_FIELDS = {
     // --- the proposal's finance terms, parallel to the audit six above ---
     { api: 'Proposal_Purchase_Type', type: 'picklist',
       values: ['Loan', 'Cash', 'Lease', 'Other'] },
-    { api: 'Proposal_Contract_Value', type: 'currency' },
+    { api: 'Proposal_Contract_Value', type: 'integer',
+      note: 'Integer on the live org, so the CRM copy is rounded to whole dollars.' },
     { api: 'Proposal_Term', type: 'integer', note: 'Years: 20, 15, 12 or 8.' },
     { api: 'Proposal_Rate', type: 'percent',
       note: 'APR for a loan; annual escalator for a lease.' },
@@ -745,7 +763,8 @@ export const ZOHO_FIELDS = {
       note: 'Same wording as Sales_Stage on Leads, so the two pipelines report together.' },
     { api: 'Proposal_Date', type: 'date' },
     { api: 'Net_Investment', type: 'currency' },
-    { api: 'Storage_Rebate', type: 'currency' },
+    { api: 'Storage_Rebate', type: 'integer',
+      note: 'Integer on the live org. A DC-expansion half rebate ends in .50, so this is rounded.' },
     { api: 'Est_Monthly_Savings', type: 'currency' },
 
     /**
@@ -763,7 +782,7 @@ export const ZOHO_FIELDS = {
           + 'find add-on deals.' },
     { api: 'Added_Solar_kW', type: 'decimal', decimals: 2,
       note: 'NEW DC kW only — not the existing System_Size_kW.' },
-    { api: 'Added_Annual_Production_kWh', type: 'number',
+    { api: 'Added_Annual_Production_kWh', type: 'integer',
       note: 'Estimated annual kWh the new array adds. Derived from the existing '
           + 'system’s own measured yield per kW where there is one, so it '
           + 'reflects this roof rather than a state average.' },
@@ -824,3 +843,12 @@ export const proposalSummaryLine = (proposal) => {
   if (f.monthlyPayment) parts.push(`${money(f.monthlyPayment)}/mo`);
   return parts.join(' · ');
 };
+
+/**
+ * The CRM fields whose Zoho type is integer, read from ZOHO_FIELDS so the list
+ * and the spec cannot drift apart. Checked against the live org: Proposal_Term,
+ * Proposal_Contract_Value, Storage_Rebate and Added_Annual_Production_kWh.
+ */
+export const ZOHO_INTEGER_FIELDS = ZOHO_FIELDS.toCreate
+  .filter((f) => f.type === 'integer')
+  .map((f) => f.api);
