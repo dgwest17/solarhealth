@@ -8,3 +8,4 @@ dist
 
 # scratch bundles from scripts/render-check.mjs
 .render-check-*/
+.beach-check/

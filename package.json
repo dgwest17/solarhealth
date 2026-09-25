@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/check-api.mjs && node scripts/render-check.mjs && vite build",
+    "build": "node scripts/check-api.mjs && node scripts/check-beach.mjs && node scripts/render-check.mjs && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext js,jsx",
     "check-api": "node scripts/check-api.mjs",
-    "render-check": "node scripts/render-check.mjs"
+    "render-check": "node scripts/render-check.mjs",
+    "check-beach": "node scripts/check-beach.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^9.114.0",

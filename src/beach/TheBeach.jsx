@@ -78,6 +78,25 @@ const TheBeach = ({ role = 'rep', userEmail = '', onOpenClient = null }) => {
   }, [repFilter]);
 
   const deals = (data && data.deals) || [];
+  /**
+   * The roster for the switcher.
+   *
+   * Reps with deals first, then the rest of the active roster — a manager
+   * usually wants somebody who is selling, and a rep with nothing yet is worth
+   * being able to check on precisely because they have nothing yet.
+   */
+  const repOptions = useMemo(() => {
+    const list = (data && Array.isArray(data.reps) ? data.reps : []).filter((r) => r && r.email);
+    return [...list].sort((a, b) => {
+      if (!!b.hasDeals !== !!a.hasDeals) return b.hasDeals ? 1 : -1;
+      return String(a.name || a.email).localeCompare(String(b.name || b.email));
+    });
+  }, [data]);
+
+  /** Who the header says this book belongs to. */
+  const viewingLabel = repFilter
+    ? ((repOptions.find((r) => r.email === repFilter) || {}).name || repFilter)
+    : (role === 'admin' ? 'Everyone' : (userEmail || 'Your book'));
   const byTide = useMemo(() => ({
     met:       deals.filter((d) => d.tide === 'met'),
     project:   deals.filter((d) => d.tide === 'project'),
@@ -99,11 +118,20 @@ const TheBeach = ({ role = 'rep', userEmail = '', onOpenClient = null }) => {
                 <BeachIcon size={34} style={{ color: SURF.sunGlow }} /> The Beach
               </h1>
               <p className="text-[13px] mt-1" style={{ color: 'rgba(255,255,255,.75)' }}>
-                {repFilter || userEmail || 'Your book'} · {deals.length} deal{deals.length === 1 ? '' : 's'}
+                {viewingLabel} · {deals.length} deal{deals.length === 1 ? '' : 's'}
               </p>
             </div>
 
-            {role === 'admin' && data && data.reps && data.reps.length > 0 && (
+            {/* WHOSE BOOK AM I LOOKING AT — admins only.
+                Rendered only for an admin, and the server ignores the parameter
+                for anybody else, so a rep can neither switch nor be switched
+                into somebody else's book by a crafted URL.
+
+                The options carry a name and send an email. The old list sent
+                whatever string sat in Created_By_Rep, which is why "David West"
+                and "davidgwest17@gmail.com" behaved like two different people
+                and why a setter, who owns no contacts, was not on it at all. */}
+            {role === 'admin' && repOptions.length > 0 && (
               <div>
                 <label className="block text-[11px] mb-1" style={{ color: 'rgba(255,255,255,.7)' }}>
                   Viewing
@@ -114,7 +142,11 @@ const TheBeach = ({ role = 'rep', userEmail = '', onOpenClient = null }) => {
                   style={{ background: 'rgba(0,0,0,.3)', color: '#fff', border: '1px solid rgba(255,255,255,.25)' }}
                 >
                   <option value="">Everyone</option>
-                  {data.reps.map((r) => <option key={r} value={r}>{r}</option>)}
+                  {repOptions.map((r) => (
+                    <option key={r.email} value={r.email}>
+                      {r.name}{r.hasDeals ? '' : ' · no deals yet'}
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
@@ -150,6 +182,19 @@ const TheBeach = ({ role = 'rep', userEmail = '', onOpenClient = null }) => {
         )}
         {loading && (
           <div className="text-center py-10" style={{ color: SURF.textMuted }}>Reading the water…</div>
+        )}
+        {/* A FAILED READ IS NOT AN EMPTY BOOK. They looked identical from here,
+            which is how a query silently hitting a CRM limit passed for "this
+            rep has no deals" until the whole company showed one. */}
+        {!loading && data && data.sourceError && (
+          <div className="rounded-xl p-4 text-[13px]"
+               style={{ background: 'rgba(242,181,94,.12)', border: `1px solid ${SURF.caution}55`,
+                        color: SURF.textBright }}>
+            Some of the CRM could not be read, so this book may be incomplete.
+            <div className="text-[11.5px] mt-1 font-mono" style={{ color: SURF.textMuted }}>
+              {data.sourceError}
+            </div>
+          </div>
         )}
 
         {/* the open panel */}
