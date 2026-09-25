@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { supabase, apiFetch } from './lib/supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -8,18 +8,25 @@ import AdminSettings from './admin/AdminSettings';
 import TheBeach from './beach/TheBeach';
 import SolarCalculator from './SolarCalculator';
 import SharedProposalView from './proposal/SharedProposalView';
-import { ArrowLeft, RefreshCw, AlertCircle, FlaskConical, SlidersHorizontal } from 'lucide-react';
+import {
+  ArrowLeft, RefreshCw, AlertCircle, SlidersHorizontal, Home as HomeIcon, BarChart3,
+  LayoutGrid, Users, FileText
+} from 'lucide-react';
 import { Beach as BeachIcon } from './surf/SurfIcons';
+import AppShell from './surf/AppShell';
+import Dashboard from './home/Dashboard';
 
 /**
  * Top-level router for the Monitoring side.
  *
  *   not authenticated  -> LoginScreen
- *   authenticated      -> ClientDashboard (role-scoped list)
+ *   staff, signed in   -> Home (the dashboard), inside the shell with the rail
+ *   a customer         -> their own record, opened directly, as before
  *   client selected    -> SolarCalculator prefilled from that client's Zoho data
  *
- * The plain audit tool (standalone calculator) is still available to admins
- * via the dashboard, but the default authenticated view is the client list.
+ * Every signed-in page renders inside AppShell: the scene, the rail, the page.
+ * The rail replaced the old top bar of buttons; it offers the same places plus
+ * Home, and the open client's audit whenever there is one.
  */
 /**
  * A shared proposal link (?proposal=<token>) renders BEFORE any auth gate.
@@ -44,7 +51,19 @@ export default function App() {
   const [clientError, setClientError] = useState('');
   const [role, setRole] = useState('client');
   /**
-   * 'clients' | 'audit' | 'sandbox' | 'beach' | 'admin'
+   * Whether `role` is known yet. It starts as 'client' and is only learned
+   * from the first API response, so until then "role === 'client'" is a
+   * default, not a fact — acting on it would bounce staff off Home.
+   */
+  const [roleResolved, setRoleResolved] = useState(false);
+  const learnRole = useCallback((r) => {
+    if (r) { setRole(r); setRoleResolved(true); }
+  }, []);
+  /**
+   * 'home' | 'clients' | 'audit' | 'sandbox' | 'storage' | 'beach' | 'admin'
+   *
+   * 'storage' is the Sandbox opened on its Storage tab — the same screen, so
+   * moving between the two keeps whatever the rep has typed.
    *
    * The open client's audit is a VIEW, not a mode that pre-empts the others.
    * It used to be the latter: `if (selectedId) return <audit>` sat above every
@@ -57,7 +76,25 @@ export default function App() {
    * only works when a client happens to be open reads as broken the first
    * time somebody clicks it from the dashboard.
    */
-  const [view, setView] = useState('clients');
+  const [view, setView] = useState('home');
+
+  /**
+   * Which tab the mounted calculator is showing, reported up by it. Drives two
+   * things: which rail entry is lit (Energy Audit or Design), and the scene —
+   * Storage sits in front of the wave, as in the reference.
+   */
+  const [calcTab, setCalcTab] = useState('audit');
+  /** A tab request for the calculator: bump `n` to move it without remounting. */
+  const [tabRequest, setTabRequest] = useState({ tab: 'audit', n: 0 });
+
+  const navigate = useCallback((target) => {
+    if (target === 'storage' || target === 'sandbox') {
+      setTabRequest((r) => ({ tab: target === 'storage' ? 'battery' : 'audit', n: r.n + 1 }));
+      setView('sandbox');
+      return;
+    }
+    setView(target);
+  }, []);
 
   const openClient = useCallback(async (id) => {
     setSelectedId(id);
@@ -68,13 +105,13 @@ export default function App() {
     try {
       const data = await apiFetch(`/api/client?id=${encodeURIComponent(id)}`);
       setClientData(data);
-      setRole(data.role || 'client');
+      learnRole(data.role || 'client');
     } catch (e) {
       setClientError(e.message);
     } finally {
       setLoadingClient(false);
     }
-  }, []);
+  }, [learnRole]);
 
   const backToDashboard = () => {
     setSelectedId(null);
@@ -93,6 +130,12 @@ export default function App() {
       openClient(list[0].id);
     }
   }, [autoOpened, openClient]);
+
+  // Home is for staff. A customer lands on their own record, as they always
+  // have — but only once the role is actually known, not on the default.
+  useEffect(() => {
+    if (roleResolved && role === 'client' && view === 'home') setView('clients');
+  }, [roleResolved, role, view]);
 
   const signOut = async () => {
     if (supabase) await supabase.auth.signOut();
@@ -115,7 +158,7 @@ export default function App() {
   // ---- Auth gates ----
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a1628] flex items-center justify-center">
+      <div className="min-h-screen bg-abyss flex items-center justify-center">
         <RefreshCw size={28} className="animate-spin text-amber-400" />
       </div>
     );
@@ -123,7 +166,7 @@ export default function App() {
 
   if (!configured) {
     return (
-      <div className="min-h-screen bg-[#0a1628] flex items-center justify-center p-6">
+      <div className="min-h-screen bg-abyss flex items-center justify-center p-6">
         <div className="max-w-md bg-slate-800/60 border border-amber-400/20 rounded-2xl p-8 text-center">
           <AlertCircle size={32} className="text-amber-400 mx-auto mb-4" />
           <h1 className="text-xl font-bold text-amber-300 mb-2">Setup needed</h1>
@@ -141,18 +184,66 @@ export default function App() {
     return <LoginScreen />;
   }
 
-  // ---- Authenticated: client detail (audit) ----
+  // ---- Authenticated: everything below lives inside the shell ----
+  const isStaff = role === 'admin' || role === 'rep';
+  const clientLabel = clientData
+    ? (clientData.contact?.fullName || clientData.contact?.email || '')
+    : '';
+
+  /**
+   * The rail. Only places that exist; a customer gets none of them, because
+   * their app is their own record.
+   */
+  const railItems = isStaff ? [
+    { id: 'home',    label: 'Home',         icon: HomeIcon,          view: 'home' },
+    { id: 'sandbox', label: 'Energy Audit', icon: BarChart3,         view: 'sandbox' },
+    { id: 'storage', label: 'Design',       icon: LayoutGrid,        view: 'storage' },
+    { id: 'clients', label: 'Clients',      icon: Users,             view: 'clients' },
+    ...(clientData ? [{ id: 'audit', label: clientLabel || 'Open client', sub: 'Open audit', icon: FileText, view: 'audit' }] : []),
+    { id: 'beach',   label: 'The Beach',    icon: BeachIcon,         view: 'beach' },
+    ...(role === 'admin' ? [{ id: 'admin', label: 'Defaults', icon: SlidersHorizontal, view: 'admin' }] : [])
+  ] : [];
+
+  // Which entry is lit. The Sandbox is one screen with two entries, so the tab
+  // it is actually showing decides between them.
+  const railView = view === 'sandbox' ? (calcTab === 'battery' ? 'storage' : 'sandbox') : view;
+
+  // Which scene. Storage sits in front of the wave, as the reference draws it,
+  // in the sandbox or in a client's audit alike.
+  const calcScene = calcTab === 'battery' ? 'wave' : 'palms';
+  const scene = view === 'home' ? 'wave'
+    : view === 'beach' ? 'beach'
+    : (view === 'sandbox' || view === 'audit') ? calcScene
+    : 'palms';
+  const mood = view === 'home' || view === 'beach' ? 'vivid' : 'calm';
+
+  const shell = (children) => (
+    <AppShell
+      items={railItems}
+      view={railView}
+      onNavigate={navigate}
+      scene={scene}
+      mood={mood}
+      userEmail={user.email}
+      role={roleResolved ? role : null}
+      onSignOut={signOut}
+    >
+      {children}
+    </AppShell>
+  );
+
+  // ---- client detail (audit) ----
   if (selectedId && view === 'audit') {
     if (loadingClient) {
-      return (
-        <div className="min-h-screen bg-[#0a1628] flex items-center justify-center text-slate-300">
+      return shell(
+        <div className="min-h-[70vh] flex items-center justify-center text-slate-300">
           <RefreshCw size={24} className="animate-spin text-amber-400 mr-3" /> Loading client audit…
         </div>
       );
     }
     if (clientError) {
-      return (
-        <div className="min-h-screen bg-[#0a1628] flex items-center justify-center p-6">
+      return shell(
+        <div className="min-h-[70vh] flex items-center justify-center p-6">
           <div className="max-w-md bg-red-900/20 border border-red-400/40 rounded-xl p-6 text-center">
             <AlertCircle size={28} className="text-red-400 mx-auto mb-3" />
             <p className="text-red-200 text-sm mb-4">{clientError}</p>
@@ -164,11 +255,11 @@ export default function App() {
       );
     }
     if (clientData) {
-      const label = clientData.contact?.fullName || clientData.contact?.email || '';
+      const label = clientLabel;
       const isClientView = role === 'client';
-      return (
+      return shell(
         <div>
-          <div className="bg-[#0a1628] px-6 pt-4 flex items-center justify-between print:hidden">
+          <div className="px-6 pt-4 flex items-center justify-between print:hidden">
             {isClientView ? (
               <>
                 <span className="text-amber-300 font-bold text-sm tracking-wide">Your Energy Best</span>
@@ -189,6 +280,7 @@ export default function App() {
             )}
           </div>
           <SolarCalculator
+            onTabChange={setCalcTab}
             prefilledInputs={clientData.auditInputs}
             clientLabel={label}
             clientContext={clientData.contact ? {
@@ -215,137 +307,46 @@ export default function App() {
     }
   }
 
+  // ---- Home ----
+  if (view === 'home') {
+    return shell(
+      <Dashboard userEmail={user.email} role={role} onNavigate={navigate} onRole={learnRole} />
+    );
+  }
 
-  // ---- Authenticated: The Beach (rep centre) ----
+  // ---- The Beach (rep centre) ----
   if (view === 'beach') {
-    return (
-      <div>
-        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} hasClient={!!clientData} />
-        <TheBeach role={role} userEmail={user.email} onOpenClient={openClient} />
-      </div>
-    );
+    return shell(<TheBeach role={role} userEmail={user.email} onOpenClient={openClient} />);
   }
 
-  // ---- Authenticated: admin defaults ----
+  // ---- admin defaults ----
   if (view === 'admin') {
-    return (
-      <div>
-        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} hasClient={!!clientData} />
-        <AdminSettings role={role} />
-      </div>
-    );
+    return shell(<AdminSettings role={role} />);
   }
 
-  // ---- Authenticated: sandbox (no client attached) ----
+  // ---- sandbox (no client attached), and Storage within it ----
   if (view === 'sandbox') {
-    return (
-      <div>
-        <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} hasClient={!!clientData} />
-        <SolarCalculator onOpenClient={openClient} canSaveClient={role === 'admin' || role === 'rep'} />
-      </div>
+    return shell(
+      <SolarCalculator
+        onOpenClient={openClient}
+        canSaveClient={role === 'admin' || role === 'rep'}
+        tabRequest={tabRequest}
+        onTabChange={setCalcTab}
+      />
     );
   }
 
-  // ---- Authenticated: dashboard ----
-  return (
-    <div>
-      <NavBar view={view} setView={setView} userEmail={user.email} onSignOut={signOut} role={role} hasClient={!!clientData} />
-      <ClientDashboard
-        onOpen={openClient}
-        userEmail={user.email}
-        role={role}
-        onSignOut={signOut}
-        onRole={setRole}
-        onLoaded={handleDashboardLoaded}
-        hideHeader
-      />
-    </div>
+  // ---- client list ----
+  return shell(
+    <ClientDashboard
+      onOpen={openClient}
+      userEmail={user.email}
+      role={role}
+      onSignOut={signOut}
+      onRole={learnRole}
+      onLoaded={handleDashboardLoaded}
+      hideHeader
+    />
   );
 }
 
-/**
- * Top navigation bar: switch between the Clients dashboard and the
- * standalone Sandbox (audit + battery tools with no client data).
- */
-function NavBar({ view, setView, userEmail, onSignOut, role, hasClient = false }) {
-  const isStaff = role === 'admin' || role === 'rep';
-  return (
-    <div className="bg-[#0a1628] border-b border-amber-400/20 px-6 py-3 flex items-center justify-between print:hidden">
-      <div className="flex items-center gap-2">
-        {isStaff ? (
-          <>
-            <button
-              onClick={() => setView('clients')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                view === 'clients'
-                  ? 'bg-amber-400 text-[#0a1628]'
-                  : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
-              }`}
-            >
-              Clients
-            </button>
-            <button
-              onClick={() => setView('sandbox')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
-                view === 'sandbox'
-                  ? 'bg-amber-400 text-[#0a1628]'
-                  : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
-              }`}
-            >
-              <FlaskConical size={15} /> Sandbox
-            </button>
-            {/* Back to the open client's audit. Big Wave is a tab in there
-                rather than a top-level view: it is about one client, and a
-                nav tab that only works when a client happens to be open reads
-                as broken the first time it is clicked from the dashboard. */}
-            {hasClient && (
-              <button
-                onClick={() => setView('audit')}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                  view === 'audit'
-                    ? 'bg-amber-400 text-[#0a1628]'
-                    : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
-                }`}
-              >
-                Audit
-              </button>
-            )}
-            <button
-              onClick={() => setView('beach')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
-                view === 'beach'
-                  ? 'bg-amber-400 text-[#0a1628]'
-                  : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
-              }`}
-            >
-              <BeachIcon size={15} /> The Beach
-            </button>
-            {role === 'admin' && (
-              <button
-                onClick={() => setView('admin')}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
-                  view === 'admin'
-                    ? 'bg-amber-400 text-[#0a1628]'
-                    : 'bg-slate-800/60 text-slate-300 hover:text-amber-300 border border-slate-600'
-                }`}
-              >
-                <SlidersHorizontal size={15} /> Defaults
-              </button>
-            )}
-          </>
-        ) : (
-          <span className="text-amber-300 font-bold text-sm tracking-wide">Your Energy Best</span>
-        )}
-      </div>
-      <div className="flex items-center gap-3">
-        <span className="text-[11px] text-slate-500 hidden sm:inline" title="Your resolved access level">
-          {role}
-        </span>
-        <span className="text-xs text-slate-400 hidden sm:block">{userEmail}</span>
-        <button onClick={onSignOut} className="px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-600 text-slate-300 text-sm hover:text-amber-300">
-          Sign out
-        </button>
-      </div>
-    </div>
-  );
-}

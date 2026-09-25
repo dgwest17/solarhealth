@@ -27,7 +27,7 @@ const ResetPasswordScreen = ({ onDone }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a1628] via-[#0f1e36] to-[#0a1628] flex items-center justify-center p-6">
+    <div className="min-h-screen bg-gradient-to-br from-abyss via-abyss-2 to-abyss flex items-center justify-center p-6">
       <div className="w-full max-w-sm bg-slate-800/60 border border-amber-400/30 rounded-2xl shadow-2xl p-7">
         <h1 className="text-xl font-bold text-amber-300 mb-1">Set a new password</h1>
         <p className="text-sm text-slate-400 mb-5">You followed a password-reset link — choose a new password to finish.</p>
@@ -59,7 +59,7 @@ const ResetPasswordScreen = ({ onDone }) => {
         </div>
 
         <button onClick={submit} disabled={busy || done}
-          className={`w-full py-2.5 rounded-lg font-semibold ${busy || done ? 'bg-slate-600 text-slate-400' : 'bg-amber-500 hover:bg-amber-400 text-[#0a1628]'}`}>
+          className={`w-full py-2.5 rounded-lg font-semibold ${busy || done ? 'bg-slate-600 text-slate-400' : 'bg-amber-500 hover:bg-amber-400 text-abyss'}`}>
           {busy ? 'Saving…' : 'Save new password'}
         </button>
       </div>

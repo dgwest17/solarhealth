@@ -43,7 +43,7 @@ const GuideTour = () => {
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={close}>
-          <div className="bg-[#0f1e36] border border-orange-400/50 rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-abyss-2 border border-orange-400/50 rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <span className="text-[11px] uppercase tracking-widest text-orange-400 font-bold">Audit walkthrough · {step + 1}/{STEPS.length}</span>
               <button onClick={close} className="text-slate-400 hover:text-orange-300"><X size={18} /></button>
@@ -63,7 +63,7 @@ const GuideTour = () => {
                 {step < STEPS.length - 1 ? (
                   <button onClick={() => setStep(step + 1)} className="px-4 py-2 rounded-lg text-sm font-semibold bg-orange-500 hover:bg-orange-400 text-white flex items-center gap-1">Next <ChevronRight size={14} /></button>
                 ) : (
-                  <button onClick={close} className="px-4 py-2 rounded-lg text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-[#0a1628]">Start the audit</button>
+                  <button onClick={close} className="px-4 py-2 rounded-lg text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-abyss">Start the audit</button>
                 )}
               </div>
             </div>

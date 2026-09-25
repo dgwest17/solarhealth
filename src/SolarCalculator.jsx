@@ -26,7 +26,18 @@ import GreenButtonUpload from './greenbutton/GreenButtonUpload';
 import BigWave from './proposal/BigWave';
 import { Swell as SwellIcon } from './surf/SurfIcons';
 
-const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = null, clientContext = null, canSaveClient = false, onOpenClient = null }) => {
+const SolarCalculator = ({
+  prefilledInputs = null, clientLabel = '', onBack = null, clientContext = null,
+  canSaveClient = false, onOpenClient = null,
+  /**
+   * NAVIGATION ONLY. `tabRequest` is { tab, n } — bump `n` to move this screen
+   * to `tab` without remounting it, so a rep jumping to Storage from the rail
+   * keeps every figure they have typed. `onTabChange` reports the tab showing,
+   * so the rail can light the right entry and the scene can follow the story.
+   */
+  tabRequest = null,
+  onTabChange = null
+}) => {
   // Merge Zoho data over defaults, but keep explicit nulls as EMPTY so the UI
   // shows "—" instead of a fabricated default the rep might trust.
   const mergeClient = (base, incoming) => {
@@ -58,7 +69,16 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
   // hand-off, and renaming an internal identifier to match a label is how a
   // half-renamed key ends up leaving one entry point pointing at a tab that no
   // longer exists.
-  const [activeTab, setActiveTab] = useState('audit');
+  const [activeTab, setActiveTab] = useState((tabRequest && tabRequest.tab) || 'audit');
+
+  // Honour a tab request from outside. Keyed on the counter, not the tab name,
+  // so asking for Storage twice in a row still works after the rep has moved.
+  useEffect(() => {
+    if (tabRequest && tabRequest.tab) setActiveTab(tabRequest.tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabRequest && tabRequest.n]);
+
+  useEffect(() => { if (onTabChange) onTabChange(activeTab); }, [activeTab, onTabChange]);
 
   /**
    * The Eligibility tab's verdict, held here so Storage can read it.
@@ -268,7 +288,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
   };
 
   return (
-    <div className="app-root min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
+    <div className="app-root min-h-screen p-4 sm:p-6">
       <GuideTour />
       <div className="max-w-7xl mx-auto">
         {/* Print-only report header */}
@@ -283,53 +303,53 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
         </div>
 
         {/* Tab navigation (hidden in print) */}
-        <div className="print:hidden flex gap-2 mb-6 bg-slate-900/60 p-1.5 rounded-xl border border-slate-700/50 w-fit">
+        <div className="print:hidden flex gap-1.5 mb-6 p-1.5 rounded-2xl w-fit max-w-full overflow-x-auto bg-slate-950/55 border border-aqua-400/20 backdrop-blur-md shadow-[0_18px_40px_-24px_rgba(0,0,0,.9)]">
           <button
             onClick={() => setActiveTab('audit')}
-            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+            className={`px-5 py-2.5 rounded-xl font-semibold text-sm whitespace-nowrap transition-all ${
               activeTab === 'audit'
-                ? 'bg-amber-400 text-slate-900'
-                : 'text-slate-300 hover:bg-slate-800'
+                ? 'bg-amber-400 text-slate-950 shadow-[0_0_22px_-6px_rgba(251,191,36,.8)]'
+                : 'text-slate-200 hover:bg-white/5 hover:text-white'
             }`}
           >
             Financial Audit
           </button>
           <button
             onClick={() => setActiveTab('battery')}
-            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+            className={`px-5 py-2.5 rounded-xl font-semibold text-sm whitespace-nowrap transition-all ${
               activeTab === 'battery'
-                ? 'bg-amber-400 text-slate-900'
-                : 'text-slate-300 hover:bg-slate-800'
+                ? 'bg-amber-400 text-slate-950 shadow-[0_0_22px_-6px_rgba(251,191,36,.8)]'
+                : 'text-slate-200 hover:bg-white/5 hover:text-white'
             }`}
           >
             Storage
           </button>
           <button
             onClick={() => setActiveTab('eligibility')}
-            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+            className={`px-5 py-2.5 rounded-xl font-semibold text-sm whitespace-nowrap transition-all ${
               activeTab === 'eligibility'
-                ? 'bg-amber-400 text-slate-900'
-                : 'text-slate-300 hover:bg-slate-800'
+                ? 'bg-amber-400 text-slate-950 shadow-[0_0_22px_-6px_rgba(251,191,36,.8)]'
+                : 'text-slate-200 hover:bg-white/5 hover:text-white'
             }`}
           >
             Eligibility
           </button>
           <button
             onClick={() => setActiveTab('tide')}
-            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+            className={`px-5 py-2.5 rounded-xl font-semibold text-sm whitespace-nowrap transition-all ${
               activeTab === 'tide'
-                ? 'bg-amber-400 text-slate-900'
-                : 'text-slate-300 hover:bg-slate-800'
+                ? 'bg-amber-400 text-slate-950 shadow-[0_0_22px_-6px_rgba(251,191,36,.8)]'
+                : 'text-slate-200 hover:bg-white/5 hover:text-white'
             }`}
           >
             Tide
           </button>
           <button
             onClick={() => setActiveTab('simulator')}
-            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+            className={`px-5 py-2.5 rounded-xl font-semibold text-sm whitespace-nowrap transition-all ${
               activeTab === 'simulator'
-                ? 'bg-amber-400 text-slate-900'
-                : 'text-slate-300 hover:bg-slate-800'
+                ? 'bg-amber-400 text-slate-950 shadow-[0_0_22px_-6px_rgba(251,191,36,.8)]'
+                : 'text-slate-200 hover:bg-white/5 hover:text-white'
             }`}
           >
             Load Simulator
@@ -341,10 +361,10 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
           {clientContext && clientContext.contactId && (
             <button
               onClick={() => setActiveTab('bigwave')}
-              className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all flex items-center gap-1.5 ${
+              className={`px-5 py-2.5 rounded-xl font-semibold text-sm whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 activeTab === 'bigwave'
-                  ? 'bg-amber-400 text-slate-900'
-                  : 'text-slate-300 hover:bg-slate-800'
+                  ? 'bg-amber-400 text-slate-950 shadow-[0_0_22px_-6px_rgba(251,191,36,.8)]'
+                  : 'text-slate-200 hover:bg-white/5 hover:text-white'
               }`}
             >
               <SwellIcon size={15} /> Big Wave
@@ -508,7 +528,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
           <div className="print:hidden mb-4 flex justify-end">
             <button
               onClick={() => setSaveClientOpen(true)}
-              className="px-5 py-2 rounded-lg font-semibold text-sm bg-emerald-500 hover:bg-emerald-400 text-[#0a1628] flex items-center gap-2"
+              className="px-5 py-2 rounded-lg font-semibold text-sm bg-emerald-500 hover:bg-emerald-400 text-abyss flex items-center gap-2"
               title="Save this sandbox audit as a new client in your CRM"
             >
               + Save Client

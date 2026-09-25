@@ -285,6 +285,38 @@ const CASES = [
     return cases;
   })(),
 
+  // -------------------------------------------------------------------- HOME
+  // Three states, and one rule: none of the reference design's placeholder
+  // figures may ever appear. They are a designer's sample numbers, and a rep
+  // would quote "we've offset 1.8 million pounds" to a customer because the
+  // screen said so.
+  ...[
+    { label: 'admin, populated', role: 'admin', data: 'full' },
+    { label: 'rep, populated', role: 'rep', data: 'full' },
+    { label: 'new rep, nothing yet', role: 'rep', data: 'empty' }
+  ].map(({ label, role, data }) => ({
+    name: `Home (${label})`,
+    mustNotContain: ['142', '1.8M', '$3.4M', '12.6', '$186,400', '18%', '24%', '21%', '28%', '32%'],
+    src: `
+      import React from 'react';
+      import Dashboard from '${ROOT}src/home/Dashboard.jsx';
+      const clients = '${data}' === 'empty' ? [] : [
+        { id: 'a', systemSizeKw: 7, annualProduction: 10000, ptoDate: '2019-05-01', annualSavings: 2100 },
+        { id: 'b', systemSizeKw: 5, annualProduction: 7800, ptoDate: '2023-03-01', annualSavings: 1500 },
+        { id: 'c', systemSizeKw: 0, annualProduction: 0, ptoDate: null, annualSavings: null }
+      ];
+      const deals = '${data}' === 'empty' ? [] : [
+        { id: 1, tide: 'project', contractValue: 21250, soldDate: new Date().toISOString() },
+        { id: 2, tide: 'met', contractValue: 20500 },
+        { id: 3, tide: 'installed', contractValue: 22400, soldDate: '2026-06-02' }
+      ];
+      export default React.createElement(Dashboard, {
+        role: '${role}', userEmail: 'x@example.com', onNavigate: () => {},
+        initialData: { clients, deals }
+      });
+    `
+  })),
+
   // -------------------------------------------------------------- REP PICKER
   // Self-gen and a selected builder. Keyed on the recruit id, so a value that
   // matched no option would silently show as self-gen.
@@ -360,9 +392,25 @@ for (const [i, testCase] of CASES.entries()) {
     const html = renderToString(element);
     if (!html || html.length < 20) throw new Error(`rendered only ${html.length} chars`);
 
-    const leaks = (testCase.mustNotContain || []).filter((needle) => html.includes(needle));
+    /**
+     * Checked against the VISIBLE TEXT, not the markup.
+     *
+     * Markup is full of numbers nobody reads — SVG path coordinates, inline
+     * style values — and a bare-digit search hits them: "142" matched a path
+     * in the Home illustrations, and an earlier "5500" matched
+     * `opacity:0.9550000000000001`. Both were false alarms that would have
+     * trained anyone reading the output to ignore it. Drawings and tags are
+     * stripped first, so only words a person would see are searched.
+     */
+    const visibleText = html
+      .replace(/<svg[\s\S]*?<\/svg>/g, ' ')
+      .replace(/<style[\s\S]*?<\/style>/g, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"')
+      .replace(/\s+/g, ' ');
+    const leaks = (testCase.mustNotContain || []).filter((needle) => visibleText.includes(needle));
     if (leaks.length) {
-      throw new Error(`LEAKED rep-only content into customer output: ${leaks.join(', ')}`);
+      throw new Error(`FORBIDDEN text on the rendered page: ${leaks.join(', ')}`);
     }
     console.log(`  ok    ${testCase.name}  (${html.length.toLocaleString()} chars)`);
   } catch (e) {

@@ -20,7 +20,7 @@ const BatteryConsumptionProduction = ({ inputs, profileKey, setProfileKey, overl
   const surplusEnd = surplusHours.length ? Math.max(...surplusHours) : null;
 
   return (
-    <div className="bg-gradient-to-br from-[#0a1628] to-[#13243f] border border-amber-400/40 rounded-xl shadow-2xl p-6 md:p-8 mb-6">
+    <div className="bg-gradient-to-br from-abyss to-[#13243f] border border-amber-400/40 rounded-xl shadow-2xl p-6 md:p-8 mb-6">
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
         <div>
           <h2 className="text-2xl font-bold text-amber-300 flex items-center gap-2">

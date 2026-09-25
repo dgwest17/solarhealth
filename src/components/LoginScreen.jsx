@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, Mail, ShieldCheck, AlertCircle } from 'lucide-react';
 import { supabase, supabaseConfigured } from '../lib/supabaseClient';
+import { Backdrop } from '../surf/AppShell';
 
 /**
  * Login gate. Uses Supabase email/password auth.
@@ -71,11 +72,14 @@ const LoginScreen = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a1628] via-[#0f1e36] to-[#0a1628] flex items-center justify-center p-6">
+    <div className="skin isolate relative min-h-screen flex items-center justify-center p-6">
+      {/* The same barrel as Home: the first screen anyone sees should look like
+          the place the app is. The form sits on glass over it. */}
+      <Backdrop scene="wave" mood="calm" />
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-500 mb-4 shadow-lg shadow-amber-500/30">
-            <ShieldCheck size={32} className="text-[#0a1628]" />
+            <ShieldCheck size={32} className="text-abyss" />
           </div>
           <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-amber-500">
             SolarHealth Monitoring
@@ -146,7 +150,7 @@ const LoginScreen = () => {
             className={`w-full py-3 rounded-lg font-bold transition-all ${
               busy
                 ? 'bg-slate-600 text-slate-300'
-                : 'bg-gradient-to-r from-amber-400 to-amber-500 text-[#0a1628] hover:shadow-lg hover:shadow-amber-500/30'
+                : 'bg-gradient-to-r from-amber-400 to-amber-500 text-abyss hover:shadow-lg hover:shadow-amber-500/30'
             }`}
           >
             {busy ? 'Signing in…' : 'Sign In'}

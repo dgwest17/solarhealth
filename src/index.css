@@ -3,6 +3,73 @@
 @tailwind utilities;
 
 /* ============================================================
+   THE SKIN — screen only. Everything here is inside @media screen
+   so the print rules below keep producing plain white paper.
+   ============================================================ */
+@media screen {
+  html, body {
+    background: #061b22;
+    color: #cae4e7;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection { background: rgba(63, 224, 212, .35); color: #fff; }
+
+  /* Headlines use the display face everywhere without touching the markup. */
+  .skin h1, .skin h2 { font-family: 'Outfit', 'Inter', system-ui, sans-serif; letter-spacing: -0.01em; }
+
+  /* GLASS. The existing screens draw their panels as translucent slate; over a
+     scene that needs a blur behind it or the picture shows through as noise.
+     Limited to the rounded containers, which are the panels — applying it to
+     every translucent element would blur buttons and chips as well, and each
+     backdrop filter is a compositing cost. */
+  .skin .rounded-2xl[class*="bg-slate-8"],
+  .skin .rounded-2xl[class*="bg-slate-9"],
+  .skin .rounded-xl[class*="bg-slate-8"],
+  .skin .rounded-xl[class*="bg-slate-9"] {
+    -webkit-backdrop-filter: blur(14px) saturate(1.15);
+    backdrop-filter: blur(14px) saturate(1.15);
+  }
+
+  /* Scrollbars that belong to the scene rather than to the operating system. */
+  .skin ::-webkit-scrollbar { width: 10px; height: 10px; }
+  .skin ::-webkit-scrollbar-track { background: transparent; }
+  .skin ::-webkit-scrollbar-thumb {
+    background: rgba(130, 171, 178, .28);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .skin ::-webkit-scrollbar-thumb:hover { background-color: rgba(130, 171, 178, .45); }
+
+  /* Respect people who have asked for less motion. The scenes drift slowly;
+     for some readers that is enough to feel sick. */
+  @media (prefers-reduced-motion: reduce) {
+    .skin *, .skin *::before, .skin *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+@keyframes skin-drift {
+  0%   { transform: translate3d(0, 0, 0); }
+  50%  { transform: translate3d(-1.2%, 0.6%, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+@keyframes skin-twinkle {
+  0%, 100% { opacity: .25; }
+  50%      { opacity: .9; }
+}
+@keyframes skin-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.skin-rise { animation: skin-rise .5s cubic-bezier(.2, .7, .2, 1) both; }
+
+/* ============================================================
    PRINT STYLES — "Generate PDF" prints the live dashboard
    ============================================================ */
 
@@ -29,7 +96,9 @@
   [class*="bg-slate-8"],
   [class*="bg-slate-9"],
   [class*="from-slate-9"],
-  [class*="from-\[#0a1628\]"] {
+  [class*="from-\[#0a1628\]"],
+  [class*="from-abyss"],
+  [class*="bg-abyss"] {
     background: #ffffff !important;
     border-color: #e2e8f0 !important;
     box-shadow: none !important;

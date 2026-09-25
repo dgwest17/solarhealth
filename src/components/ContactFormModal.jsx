@@ -53,7 +53,7 @@ const ContactFormModal = ({ mode = 'edit', initial = null, auditInputs = null, o
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="bg-[#0f1e36] border border-amber-400/40 rounded-2xl shadow-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-abyss-2 border border-amber-400/40 rounded-2xl shadow-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-amber-300 flex items-center gap-2">
             {mode === 'create' ? <UserPlus size={19} /> : <UserCog size={19} />}
@@ -93,7 +93,7 @@ const ContactFormModal = ({ mode = 'edit', initial = null, auditInputs = null, o
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-300 border border-slate-600 hover:text-amber-300">Cancel</button>
           <button onClick={save} disabled={saving}
-            className={`px-5 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 ${saving ? 'bg-slate-700 text-slate-400' : 'bg-amber-400 hover:bg-amber-300 text-[#0a1628]'}`}>
+            className={`px-5 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 ${saving ? 'bg-slate-700 text-slate-400' : 'bg-amber-400 hover:bg-amber-300 text-abyss'}`}>
             {saving ? <RefreshCw size={15} className="animate-spin" /> : mode === 'create' ? <UserPlus size={15} /> : <Save size={15} />}
             {saving ? 'Saving…' : mode === 'create' ? 'Save Client' : 'Save'}
           </button>

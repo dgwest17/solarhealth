@@ -330,7 +330,7 @@ inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null , co
           Horizontally scrollable rather than wrapped. Seven labels wrap to
           three ragged rows on a laptop, and a rep cannot tell at a glance
           where they are in a shape that keeps changing height. */}
-      <div className="mb-1 overflow-x-auto -mx-1 px-1">
+      <div className="mb-1 overflow-x-auto rounded-2xl p-1.5 bg-slate-950/60 border border-aqua-400/15 backdrop-blur-md">
         <div className="flex gap-1 min-w-max">
           {SLIDES.map((s, i) => {
             const active = i === slide;

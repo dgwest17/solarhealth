@@ -227,7 +227,7 @@ const LoadSimulator = ({
   else if (owedForRec > 1000) recommendation = { text: 'Battery + Solar Recommended', level: 'both' };
 
   return (
-    <div className="bg-gradient-to-br from-[#0e1f38] to-[#0a1628] border border-cyan-400/30 rounded-xl shadow-2xl p-6 md:p-8 mb-6">
+    <div className="bg-gradient-to-br from-[#0e1f38] to-abyss border border-cyan-400/30 rounded-xl shadow-2xl p-6 md:p-8 mb-6">
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-2xl font-bold text-cyan-300 flex items-center gap-2">
           <Home size={24} className="text-cyan-400" /> Load Simulator

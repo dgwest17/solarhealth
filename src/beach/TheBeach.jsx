@@ -25,7 +25,8 @@
  * Rendered by: src/App.jsx (view === 'beach')
  */
 import React, { useState, useMemo, useEffect } from 'react';
-import { SURF, GRADIENTS, FACET_TEXTURE } from '../surf/theme';
+import { SURF } from '../surf/theme';
+import { CardArt } from '../surf/Scenes';
 import { Beach as BeachIcon, Treasure as TreasureIcon, Swell as SwellIcon, Quiver as QuiverIcon, Buoy as BuoyIcon } from '../surf/SurfIcons';
 import { apiFetch } from '../lib/supabaseClient';
 import TreasurePanel from './Treasure';
@@ -50,6 +51,9 @@ const PANELS = [
   { id: 'swell',    label: 'Swell',    Icon: SwellIcon,    blurb: 'How you are trending' },
   { id: 'quiver',   label: 'Quiver',   Icon: QuiverIcon,   blurb: 'Sharpen your tools' }
 ];
+// Each tile's picture shares its id with CardArt's kinds, so a new panel needs
+// a drawing before it gets one rather than silently reusing another's.
+
 
 const TheBeach = ({ role = 'rep', userEmail = '', onOpenClient = null }) => {
   const [data, setData] = useState(null);
@@ -106,18 +110,20 @@ const TheBeach = ({ role = 'rep', userEmail = '', onOpenClient = null }) => {
   const active = byTide[tide] || [];
 
   return (
-    <div style={{ background: SURF.abyss, minHeight: '100vh', color: SURF.text }}>
-      {/* ---------------------------- the shore ---------------------------- */}
-      <header className="relative overflow-hidden" style={{ background: GRADIENTS.barrel }}>
-        <div className="absolute inset-0" style={{ backgroundImage: FACET_TEXTURE, opacity: .85 }} />
-        <div className="relative max-w-6xl mx-auto px-6 py-8">
+    <div style={{ minHeight: '100vh', color: SURF.text }}>
+      {/* ---------------------------- the shore ----------------------------
+          No background of its own: the beach-hut scene behind the whole page
+          is the header now. */}
+      <header className="relative">
+        <div className="relative max-w-6xl mx-auto px-6 pt-10 pb-6">
           <div className="flex items-end justify-between gap-6 flex-wrap">
             <div>
-              <h1 className="text-4xl font-extrabold tracking-tight flex items-center gap-3"
-                  style={{ color: '#fff' }}>
-                <BeachIcon size={34} style={{ color: SURF.sunGlow }} /> The Beach
+              <h1 className="font-display font-bold flex items-center gap-3"
+                  style={{ fontSize: 'clamp(38px, 5vw, 56px)', color: '#fff', textShadow: '0 4px 30px rgba(0,0,0,.45)' }}>
+                <BeachIcon size={46} style={{ color: SURF.sun, filter: 'drop-shadow(0 0 12px rgba(247,201,92,.5))' }} />
+                <span>The <span style={{ color: '#3fe0d4' }}>Beach</span></span>
               </h1>
-              <p className="text-[13px] mt-1" style={{ color: 'rgba(255,255,255,.75)' }}>
+              <p className="text-[15px] mt-1" style={{ color: 'rgba(255,255,255,.85)', textShadow: '0 2px 12px rgba(0,0,0,.5)' }}>
                 {viewingLabel} · {deals.length} deal{deals.length === 1 ? '' : 's'}
               </p>
             </div>
@@ -132,14 +138,16 @@ const TheBeach = ({ role = 'rep', userEmail = '', onOpenClient = null }) => {
                 and "davidgwest17@gmail.com" behaved like two different people
                 and why a setter, who owns no contacts, was not on it at all. */}
             {role === 'admin' && repOptions.length > 0 && (
-              <div>
-                <label className="block text-[11px] mb-1" style={{ color: 'rgba(255,255,255,.7)' }}>
+              <div className="rounded-2xl px-3 pt-2 pb-3"
+                   style={{ background: 'rgba(6,27,34,.55)', border: '1px solid rgba(127,240,230,.2)',
+                            backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)' }}>
+                <label className="block text-[12px] mb-1.5 px-0.5" style={{ color: 'rgba(255,255,255,.75)' }}>
                   Viewing
                 </label>
                 <select
                   value={repFilter} onChange={(e) => setRepFilter(e.target.value)}
-                  className="px-3 py-2 rounded-lg text-sm"
-                  style={{ background: 'rgba(0,0,0,.3)', color: '#fff', border: '1px solid rgba(255,255,255,.25)' }}
+                  className="px-3 py-2 rounded-lg text-[14px] min-w-[220px]"
+                  style={{ background: 'rgba(0,0,0,.35)', color: '#fff', border: '1px solid rgba(255,255,255,.22)' }}
                 >
                   <option value="">Everyone</option>
                   {repOptions.map((r) => (
@@ -152,23 +160,43 @@ const TheBeach = ({ role = 'rep', userEmail = '', onOpenClient = null }) => {
             )}
           </div>
 
-          {/* the three buttons */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-7">
-            {PANELS.map(({ id, label, Icon, blurb }) => (
-              <button
-                key={id}
-                onClick={() => setPanel(panel === id ? null : id)}
-                className="rounded-2xl p-4 text-left transition-transform hover:-translate-y-0.5"
-                style={{
-                  background: panel === id ? 'rgba(255,255,255,.18)' : 'rgba(0,0,0,.26)',
-                  border: `1px solid ${panel === id ? SURF.sunGlow : 'rgba(255,255,255,.18)'}`
-                }}
-              >
-                <Icon size={24} style={{ color: panel === id ? SURF.sunGlow : '#fff' }} />
-                <div className="font-bold mt-2" style={{ color: '#fff' }}>{label}</div>
-                <div className="text-[11.5px]" style={{ color: 'rgba(255,255,255,.7)' }}>{blurb}</div>
-              </button>
-            ))}
+          {/* THE FIVE DOORS — illustrated tiles, three across, as in the
+              reference. Same buttons, same toggle behaviour: pressing an open
+              tile closes it. */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mt-8 max-w-[900px]">
+            {PANELS.map(({ id, label, Icon, blurb }) => {
+              const on = panel === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => setPanel(on ? null : id)}
+                  aria-pressed={on}
+                  className="group relative overflow-hidden rounded-2xl text-left transition-all duration-200 hover:-translate-y-1"
+                  style={{
+                    minHeight: 124,
+                    border: `1px solid ${on ? 'rgba(247,201,92,.8)' : 'rgba(127,240,230,.28)'}`,
+                    boxShadow: on
+                      ? '0 0 0 1px rgba(247,201,92,.35), 0 0 34px -6px rgba(247,201,92,.55)'
+                      : '0 18px 40px -22px rgba(0,0,0,.9)'
+                  }}
+                >
+                  <span className="absolute inset-0 transition-transform duration-500 group-hover:scale-105">
+                    <CardArt kind={id} className="w-full h-full" />
+                  </span>
+                  <span className="absolute inset-0"
+                        style={{ background: 'linear-gradient(90deg, rgba(4,20,26,.88) 0%, rgba(4,20,26,.55) 55%, rgba(4,20,26,.15) 100%)' }} />
+                  <span className="relative flex flex-col justify-end h-full p-4" style={{ minHeight: 124 }}>
+                    <Icon size={30} style={{ color: on ? SURF.sun : '#fff', filter: 'drop-shadow(0 0 8px rgba(0,0,0,.5))' }} />
+                    <span className="block font-display font-bold text-[19px] mt-2" style={{ color: '#fff' }}>{label}</span>
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="block text-[12.5px]" style={{ color: 'rgba(255,255,255,.78)' }}>{blurb}</span>
+                      <span className="text-[17px] transition-transform group-hover:translate-x-0.5"
+                            style={{ color: on ? SURF.sun : '#fff' }} aria-hidden>{on ? '×' : '→'}</span>
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </header>

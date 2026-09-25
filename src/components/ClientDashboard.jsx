@@ -187,7 +187,7 @@ const ClientDashboard = ({
       createdByFilter, sortBy, sortDir, notReportReady, readiness]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a1628] via-[#0f1e36] to-[#0a1628] p-6">
+    <div className="min-h-screen p-4 sm:p-6">
       <div className="max-w-[1400px] mx-auto">
         {/* Header */}
         {!hideHeader ? (
@@ -272,7 +272,7 @@ const ClientDashboard = ({
                 Columns
               </button>
               {colMenuOpen && (
-                <div className="absolute right-0 mt-1 z-20 w-52 rounded-lg border border-slate-600 bg-[#0d1b2f] shadow-xl p-2">
+                <div className="absolute right-0 mt-1 z-20 w-52 rounded-lg border border-slate-600 bg-abyss-2 shadow-xl p-2">
                   <div className="text-[10px] uppercase tracking-wider text-slate-500 px-1 pb-1">Optional columns</div>
                   {[['savings', 'Savings / yr'], ['finance', 'Finance provider'], ['kw', 'System size (kW)'], ['status', 'Project status']].map(([k, label]) => (
                     <label key={k} className="flex items-center gap-2 px-1 py-1.5 text-sm text-slate-200 cursor-pointer hover:text-amber-300">

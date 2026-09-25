@@ -146,7 +146,7 @@ const SaveToCRM = ({ inputs, clientContext, clientLabel, onSendAudit, plannedLoa
         onClick={sendAudit}
         disabled={sending}
         className={`px-4 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 transition-all ${
-          sending ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-400 text-[#0a1628]'
+          sending ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-400 text-abyss'
         }`}
         title="Opens the Consultation Report for delivery and stamps Last Report Sent in Zoho"
       >
@@ -159,7 +159,7 @@ const SaveToCRM = ({ inputs, clientContext, clientLabel, onSendAudit, plannedLoa
         className={`px-5 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 transition-all ${
           saving || !dirty
             ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-            : 'bg-amber-400 hover:bg-amber-300 text-[#0a1628]'
+            : 'bg-amber-400 hover:bg-amber-300 text-abyss'
         }`}
       >
         {saving ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}

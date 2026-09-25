@@ -114,7 +114,7 @@ const BatteryRecovery = ({
   const totalRecovered = totalRecoveredPerYear != null ? totalRecoveredPerYear : arbRecovered;
 
   return (
-    <div className="bg-gradient-to-br from-[#102a1a] to-[#0a1628] border border-green-400/40 rounded-xl shadow-2xl p-6 md:p-8 mb-6">
+    <div className="bg-gradient-to-br from-[#102a1a] to-abyss border border-green-400/40 rounded-xl shadow-2xl p-6 md:p-8 mb-6">
       <p className="text-slate-300 text-sm mb-6">
         With the utility, your solar energy earns <strong className="text-amber-300">credits — monopoly money</strong> you
         can only spend in their system. You bank credits selling power by <strong className="text-amber-300">day</strong>, then
@@ -207,7 +207,7 @@ const BatteryRecovery = ({
       </div>
 
       {/* 2. THE GRID IS GETTING WORSE — large feature block with graphic */}
-      <div className="bg-gradient-to-br from-[#2a1410] to-[#0a1628] border-2 border-red-500/40 rounded-2xl p-6 md:p-8 mb-6">
+      <div className="bg-gradient-to-br from-[#2a1410] to-abyss border-2 border-red-500/40 rounded-2xl p-6 md:p-8 mb-6">
         <h3 className="text-2xl md:text-3xl font-extrabold text-red-300 flex items-center gap-2 mb-2">
           <TrendingDown size={28} className="text-red-400" /> The Grid Is Getting Worse
         </h3>

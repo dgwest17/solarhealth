@@ -55,7 +55,7 @@ const AINarrative = ({ inputs, calculations, narrative, onNarrativeGenerated }) 
     : [];
 
   return (
-    <div className="bg-gradient-to-br from-[#0a1628] to-[#13243f] border border-amber-400/40 rounded-xl shadow-2xl p-8 mb-6">
+    <div className="bg-gradient-to-br from-abyss to-[#13243f] border border-amber-400/40 rounded-xl shadow-2xl p-8 mb-6">
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
           <h2 className="text-2xl font-bold text-amber-300 flex items-center gap-2">
@@ -70,7 +70,7 @@ const AINarrative = ({ inputs, calculations, narrative, onNarrativeGenerated }) 
         {status !== 'loading' && (
           <button
             onClick={generate}
-            className="print:hidden shrink-0 bg-amber-400 hover:bg-amber-300 text-[#0a1628] font-semibold px-5 py-2.5 rounded-lg transition-colors flex items-center gap-2"
+            className="print:hidden shrink-0 bg-amber-400 hover:bg-amber-300 text-abyss font-semibold px-5 py-2.5 rounded-lg transition-colors flex items-center gap-2"
           >
             {status === 'done' ? <RefreshCw size={16} /> : <Sparkles size={16} />}
             {status === 'done' ? 'Regenerate' : 'Generate report'}
@@ -138,7 +138,7 @@ const AINarrative = ({ inputs, calculations, narrative, onNarrativeGenerated }) 
             <ol className="space-y-2">
               {narrative.actionItems.map((item) => (
                 <li key={item.priority} className="flex items-start gap-3 bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
-                  <span className="shrink-0 w-6 h-6 rounded-full bg-amber-400 text-[#0a1628] text-sm font-bold flex items-center justify-center">
+                  <span className="shrink-0 w-6 h-6 rounded-full bg-amber-400 text-abyss text-sm font-bold flex items-center justify-center">
                     {item.priority}
                   </span>
                   <div>
