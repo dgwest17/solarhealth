@@ -141,7 +141,11 @@ const CASES = [
         { id: '2', contactId: 'c2', name: 'Solar Add On', tide: 'project', contractValue: 48000,
           battery: 'Tesla Powerwall 3', batteryKwh: 13.5, solarKw: 4, addedKw: 8.8,
           addedKwhPerYear: 13640, lastContact: null, commission: 5200,
-          commissionRows: [], summary: 'Loan · 25 yr' }
+          commissionRows: [], summary: 'Loan · 25 yr',
+          // A deal with a builder on it, which the row must carry through to the
+          // editor. It did not, and saving the row silently cleared the builder.
+          builderRecruitId: '123', builderName: 'Kenson Manassero',
+          builderEmail: 'kenson@example.com' }
       ];
       export default React.createElement(Pipeline, { deals, role: 'admin' });
     `
@@ -167,6 +171,21 @@ const CASES = [
           ? `{ nemVersion: '${nem}' }`
           : `{ nemVersion: '${nem}', systemSize: 6, annualProduction: 9600 }`}
       });
+    `
+  })),
+
+  // -------------------------------------------------------------- REP PICKER
+  // Self-gen and a selected builder. Keyed on the recruit id, so a value that
+  // matched no option would silently show as self-gen.
+  ...[
+    { label: 'self-gen', value: "''" },
+    { label: 'a builder selected', value: "'123'" }
+  ].map(({ label, value }) => ({
+    name: `Rep picker (${label})`,
+    src: `
+      import React from 'react';
+      import RepPicker from '${ROOT}src/proposal/RepPicker.jsx';
+      export default React.createElement(RepPicker, { value: ${value}, onChange: () => {} });
     `
   })),
 

@@ -413,8 +413,26 @@ const EditRow = ({ deal, isAdmin, onSaved, onCancel, onOpenClient }) => {
   const [commission, setCommission] = useState(
     deal.commissionTotal != null ? String(Math.round(deal.commissionTotal)) : ''
   );
-  const [setByRep, setSetByRep] = useState(deal.builderName || '');
-  const [setByRepEmail, setSetByRepEmail] = useState(deal.builderEmail || '');
+  /**
+   * Who set it — one value, or null for self-gen.
+   *
+   * Seeded from whatever the row carries. A deal saved before recruit ids
+   * existed has a name and an email but no id: the picker then shows self-gen,
+   * because it has no option to select, while `builder` still holds the real
+   * person. Editing the row and saving without touching this field must
+   * therefore leave the builder alone rather than clearing it — see `save`.
+   */
+  const [builder, setBuilder] = useState(
+    (deal.builderRecruitId || deal.builderEmail || deal.builderName)
+      ? {
+          id: deal.builderRecruitId || null,
+          name: deal.builderName || '',
+          email: deal.builderEmail || ''
+        }
+      : null
+  );
+  /** Has the user actually changed who set it? Untouched means do not send it. */
+  const [builderTouched, setBuilderTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
 
@@ -425,10 +443,17 @@ const EditRow = ({ deal, isAdmin, onSaved, onCancel, onOpenClient }) => {
         contactId: deal.contactId,
         projectId: String(deal.id).startsWith('prop_') ? null : deal.id,
         stage,
-        installDate: installDate || '',
-        setByRep: setByRep || '',
-        setByRepEmail: setByRepEmail || ''
+        installDate: installDate || ''
       };
+      /**
+       * Only sent when it was edited.
+       *
+       * Sending it unconditionally would clear the builder on any legacy row
+       * whose recruit id predates this field — the picker cannot show a person
+       * it has no id for, so saving an install date would quietly un-attribute
+       * somebody's commission.
+       */
+      if (builderTouched) body.builder = builder;
       if (isAdmin && commission !== '') body.commission = Number(commission) || 0;
 
       const r = await apiFetch('/api/update-deal', { method: 'POST', body: JSON.stringify(body) });
@@ -439,8 +464,11 @@ const EditRow = ({ deal, isAdmin, onSaved, onCancel, onOpenClient }) => {
         tide: stage === SALES_STAGE.INSTALLED ? 'installed'
           : stage === SALES_STAGE.CONVERTED ? 'project' : 'met',
         installDate: installDate || null,
-        builderName: setByRep || null,
-        builderEmail: setByRepEmail || null,
+        ...(builderTouched ? {
+          builderRecruitId: builder ? builder.id : null,
+          builderName: builder ? builder.name : null,
+          builderEmail: builder ? builder.email : null
+        } : {}),
         ...(isAdmin && commission !== '' ? { commissionTotal: Number(commission) || 0 } : {})
       });
     } catch (e) {
@@ -463,11 +491,11 @@ const EditRow = ({ deal, isAdmin, onSaved, onCancel, onOpenClient }) => {
                  style={{ background: SURF.surface, border: `1px solid ${SURF.line}`, color: SURF.textBright }} />
         </Field>
         <Field label="Set by">
-          {/* One control, not two. Selecting the person carries their email, so
-              a name and an email can never disagree about who gets paid. */}
+          {/* One control, not two. Selecting the person carries their id and
+              their email, so nothing here can disagree about who gets paid. */}
           <RepPicker
-            value={setByRepEmail}
-            onChange={({ name, email }) => { setSetByRep(name); setSetByRepEmail(email); }}
+            value={builder ? builder.id : ''}
+            onChange={(rep) => { setBuilder(rep); setBuilderTouched(true); }}
             className="w-full px-2.5 py-2 rounded-lg text-[13px] focus:outline-none"
             style={{ background: SURF.surface, border: `1px solid ${SURF.line}`, color: SURF.textBright }}
           />

@@ -24,6 +24,7 @@
 import { randomBytes } from 'crypto';
 import { zohoFetch } from '../_zoho.js';
 import { requireUser, sendError } from '../_auth.js';
+import { builderOf } from '../../src/proposal/proposalModel.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -51,8 +52,9 @@ async function assertCanShare(user, contactId, proposal) {
   }
   const me = (user.email || '').toLowerCase();
 
-  const int = (proposal && proposal.internal) || {};
-  if ((int.builderEmail || '').toLowerCase() === me) return;
+  // One reader of the stored builder, shared with everything else.
+  const builder = builderOf((proposal && proposal.internal) || null);
+  if (builder && builder.email && builder.email === me) return;
 
   const r = await zohoFetch(`/crm/v2/Contacts/${encodeURIComponent(contactId)}?fields=Created_By_Rep`);
   const c = (r.data && r.data[0]) || null;

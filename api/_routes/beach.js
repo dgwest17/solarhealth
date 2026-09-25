@@ -23,7 +23,7 @@
  */
 import { zohoFetch } from '../_zoho.js';
 import { requireUser, sendError } from '../_auth.js';
-import { SALES_STAGE } from '../../src/proposal/proposalModel.js';
+import { SALES_STAGE, builderOf } from '../../src/proposal/proposalModel.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -90,15 +90,23 @@ const commissionFor = (proposal, viewerEmail, isManager) => {
   }
 
   const me = (viewerEmail || '').toLowerCase();
-  const builderEmail = (int.builderEmail || '').toLowerCase();
+  // ONE reader of the stored shape, shared with the browser. It also understands
+  // proposals saved before the recruit id existed, so an older deal still finds
+  // its builder.
+  const builder = builderOf(int);
+  const builderEmail = (builder && builder.email) || '';
 
   // WHICH SEAT IS THIS VIEWER IN? The builder sees the builder's half; anyone
   // else looking at their own book is the engineer who closed it. Decided by
   // email rather than by who saved the proposal, because the builder did not
   // save it and would otherwise see nothing.
+  //
+  // Self-gen is the ABSENCE of a builder, derived rather than read from a stored
+  // flag — a deal whose flag disagreed with its builder used to be possible, and
+  // then nobody could say who should have been paid.
   const seat = (builderEmail && me && builderEmail === me)
     ? 'builder'
-    : (int.selfGen ? 'self' : 'engineer');
+    : (builder ? 'engineer' : 'self');
 
   const seatRow = rows.find((r) => r.key === seat);
   const mine = seatRow ? Number(seatRow.amount) || 0 : 0;
@@ -109,9 +117,10 @@ const commissionFor = (proposal, viewerEmail, isManager) => {
     rows,
     legacy: false,
     seat,
-    selfGen: !!int.selfGen,
-    builderName: int.builderName || null,
-    builderEmail: int.builderEmail || null,
+    selfGen: !builder,
+    builderRecruitId: (builder && builder.recruitId) || null,
+    builderName: (builder && builder.name) || null,
+    builderEmail: (builder && builder.email) || null,
     // Manager buckets: what the override seats earned across the book.
     captain: (rows.find((r) => r.key === 'captain') || {}).amount || 0,
     recruiter: (rows.find((r) => r.key === 'recruiter') || {}).amount || 0
@@ -340,6 +349,20 @@ export default async function handler(req, res) {
         commissionRows: comm.rows,
         commissionSeat: comm.seat,
         selfGen: comm.selfGen,
+        /**
+         * WHO SET IT, sent to the row so the Pipeline editor can show it.
+         *
+         * These were missing, and their absence was a money bug rather than a
+         * cosmetic one. EditRow seeded its "Set by" control from
+         * `deal.builderName`, which was always undefined, so every deal opened
+         * showing "No setter — self-gen" however it was actually saved — and
+         * saving the row then sent that empty value on, clearing the builder and
+         * flipping the deal to self-gen. Correcting an install date silently
+         * took a builder's half of the commission away.
+         */
+        builderRecruitId: comm.builderRecruitId || null,
+        builderName: comm.builderName || null,
+        builderEmail: comm.builderEmail || null,
         proposalDate: (proposal && proposal.createdAt) || project.Proposal_Date || null,
         projectStatus: project.Project_Status || null,
         rep: (contact && contact.Created_By_Rep) || null,
@@ -397,6 +420,20 @@ export default async function handler(req, res) {
         commissionRows: comm.rows,
         commissionSeat: comm.seat,
         selfGen: comm.selfGen,
+        /**
+         * WHO SET IT, sent to the row so the Pipeline editor can show it.
+         *
+         * These were missing, and their absence was a money bug rather than a
+         * cosmetic one. EditRow seeded its "Set by" control from
+         * `deal.builderName`, which was always undefined, so every deal opened
+         * showing "No setter — self-gen" however it was actually saved — and
+         * saving the row then sent that empty value on, clearing the builder and
+         * flipping the deal to self-gen. Correcting an install date silently
+         * took a builder's half of the commission away.
+         */
+        builderRecruitId: comm.builderRecruitId || null,
+        builderName: comm.builderName || null,
+        builderEmail: comm.builderEmail || null,
         proposalDate: proposal.createdAt || null,
         projectStatus: null,
         rep: byId[contactId].Created_By_Rep || null,

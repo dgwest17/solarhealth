@@ -15,9 +15,10 @@
  *   installDate    the date everyone else asks about.
  *   commission     the total pool, for a deal priced outside the tool or
  *                  corrected after the fact. ADMIN ONLY.
- *   setByRep       who set it, and their email — the field that routes a
- *                  builder's half into their Beach, and the one most likely to
- *                  have been left blank in the room.
+ *   builder        who set it: { id, name, email } or null for self-gen. The
+ *                  field that routes a builder's half into their Beach, and the
+ *                  one most likely to have been left blank in the room. Omit it
+ *                  entirely to leave the stored builder untouched.
  *   note           free text onto the project.
  *
  * Nothing that would change the customer's PRICE is editable here. Changing a
@@ -45,7 +46,7 @@
  */
 import { zohoFetch } from '../_zoho.js';
 import { requireUser, sendError } from '../_auth.js';
-import { SALES_STAGE } from '../../src/proposal/proposalModel.js';
+import { SALES_STAGE, builderOf } from '../../src/proposal/proposalModel.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -93,7 +94,8 @@ async function assertCanEdit(user, contactId) {
         `/client_data?contact_id=eq.${encodeURIComponent(contactId)}&select=proposal`
       );
       const int = rows && rows[0] && rows[0].proposal && rows[0].proposal.internal;
-      if (int && (int.builderEmail || '').toLowerCase() === me) return { isAdmin: false };
+      const b = builderOf(int);
+      if (b && b.email && b.email === me) return { isAdmin: false };
     } catch { /* fall through to the refusal */ }
   }
 
@@ -108,7 +110,38 @@ export default async function handler(req, res) {
     }
     const user = await requireUser(req);
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-    const { contactId, projectId, stage, installDate, commission, setByRep, setByRepEmail, note } = body;
+    const { contactId, projectId, stage, installDate, commission, builder, note } = body;
+
+    /**
+     * WHO SET IT — one value, validated here.
+     *
+     * `builder` is { id, name, email } or null; absent means "do not touch it".
+     * The three-way distinction matters: null clears the builder (self-gen),
+     * absent leaves whatever is stored alone, and an object replaces it. Sending
+     * a name and an email as two separate parameters, as this used to, made
+     * "clear it" and "leave it" indistinguishable.
+     *
+     * Normalised into ONE shape before anything downstream reads it, so neither
+     * the CRM write nor the stored proposal has to think about it again.
+     */
+    const touchesBuilder = Object.prototype.hasOwnProperty.call(body, 'builder');
+    let nextBuilder = null;
+    if (touchesBuilder && builder) {
+      if (typeof builder !== 'object') {
+        return res.status(400).json({ error: 'builder must be an object or null.' });
+      }
+      const email = String(builder.email || '').trim().toLowerCase();
+      // A lookup id from Zoho is a long digit string. Rejecting anything else
+      // keeps a junk value out of the CRM write, where it would fail the whole
+      // update rather than just this field.
+      const id = builder.id != null && /^\d{1,25}$/.test(String(builder.id))
+        ? String(builder.id) : null;
+      const name = String(builder.name || '').trim();
+      if (!id && !email && !name) {
+        return res.status(400).json({ error: 'A builder needs an id, an email or a name.' });
+      }
+      nextBuilder = { id, name, email };
+    }
 
     if (!contactId) return res.status(400).json({ error: 'contactId required' });
     const { isAdmin } = await assertCanEdit(user, contactId);
@@ -130,8 +163,19 @@ export default async function handler(req, res) {
     if (stage != null) payload.Sales_Stage = stage;
     if (installDate != null) payload.Install_Date = installDate || null;
     if (commission != null) payload.Rep_Commission = Math.max(0, Number(commission) || 0);
-    if (setByRep != null) payload.Set_By_Rep = setByRep || null;
-    if (setByRepEmail != null) payload.Set_By_Rep_Email = (setByRepEmail || '').trim().toLowerCase() || null;
+    /**
+     * ONE lookup field at the Recruit record, replacing the old name+email pair.
+     *
+     * Written as null when the builder is cleared — an explicit null is how a
+     * Zoho lookup is emptied, and a deal pointing at a rep who did not earn it
+     * has to be clearable. A builder with no recruit id (typed in while the
+     * roster was down) cannot be pointed at, so the CRM link is left absent
+     * while the email in the stored proposal still routes the money.
+     */
+    if (touchesBuilder) {
+      if (!nextBuilder) payload.Set_By = null;
+      else if (nextBuilder.id) payload.Set_By = { id: nextBuilder.id };
+    }
     if (note) payload.Description = note;
 
     let zoho = { ok: false, missing: [] };
@@ -185,13 +229,19 @@ export default async function handler(req, res) {
             int.editedAt = new Date().toISOString();
             int.editedBy = user.email || null;
           }
-          if (setByRep != null) int.builderName = setByRep || null;
-          if (setByRepEmail != null) {
-            int.builderEmail = (setByRepEmail || '').trim().toLowerCase() || null;
-            // Naming a builder ends self-gen; clearing one restores it. The two
-            // cannot be set independently, or a deal ends up self-gen with a
-            // builder on it and nobody can say who should have been paid.
-            int.selfGen = !int.builderEmail && !int.builderName;
+          /**
+           * The stored snapshot, set as one unit.
+           *
+           * All four properties move together or not at all. They used to be
+           * settable independently, which allowed a deal to end up marked
+           * self-gen with a builder's name still on it — and then nobody could
+           * say who should have been paid. selfGen is derived here, never sent.
+           */
+          if (touchesBuilder) {
+            int.builderRecruitId = nextBuilder ? nextBuilder.id : null;
+            int.builderName = nextBuilder ? (nextBuilder.name || null) : null;
+            int.builderEmail = nextBuilder ? (nextBuilder.email || null) : null;
+            int.selfGen = !nextBuilder;
           }
           next.internal = int;
 

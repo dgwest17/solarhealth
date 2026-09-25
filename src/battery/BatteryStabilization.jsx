@@ -199,10 +199,17 @@ const BatteryStabilization = ({
 
   /** Typed-in commission, which back-solves the net sale. Empty = use slider. */
   const [commissionInput, setCommissionInput] = useState('');
-  const [hasBuilder, setHasBuilder] = useState(false);
-  const [builderName, setBuilderName] = useState('');
-  const [builderEmail, setBuilderEmail] = useState('');
-  const selfGen = !hasBuilder;
+  /**
+   * WHO SET THE DEAL — one value, or null for self-gen.
+   *
+   * Was three: a `hasBuilder` checkbox plus a name and an email. Three
+   * variables for one fact, and they could disagree — tick the box, pick
+   * somebody, untick it, and the name was still sitting in state. Now the
+   * picker's own blank option ("No setter — self-gen") is the control, so there
+   * is nothing to keep in step.
+   */
+  const [builder, setBuilder] = useState(null);   // { id, name, email } | null
+  const selfGen = !builder;
   const seat = 'engineer';
 
   /** Admin sees the pool and the override seats; a rep sees their own money. */
@@ -515,15 +522,16 @@ const BatteryStabilization = ({
         customerContract: comm.customerContract,
         selfGen,
         seat,
-        builderName: hasBuilder ? (builderName || null) : null,
-        builderEmail: hasBuilder ? (builderEmail || '').trim().toLowerCase() || null : null,
+        builderRecruitId: builder ? (builder.id || null) : null,
+        builderName: builder ? (builder.name || null) : null,
+        builderEmail: builder ? (builder.email || '').trim().toLowerCase() || null : null,
         rows: comm.rows.map((r) => ({ key: r.key, label: r.label, pct: r.pct, amount: r.amount }))
       }
     });
   }, [
     clientContext, price, proj, inputs, batteryModelId, batteryModel, baseKwh, rebateEligible,
     comm, dealKind, solarPanels, solarNonExport, panelWatts,
-    selfGen, seat, hasBuilder, builderName, builderEmail,
+    selfGen, seat, builder,
     mode, lender, termYears, activeTermCard, escalator, leasePayment,
     monthlyBill, connectionFee, monthlySavings, escalation, clientLabel, savedProposal
   ]);
@@ -1409,14 +1417,14 @@ const BatteryStabilization = ({
                           money or their business. The pool is on the admin
                           views, where somebody is actually accountable for it. */}
                       <div className="text-[11px] uppercase tracking-widest text-violet-300">
-                        {hasBuilder ? 'Your half' : 'You make'}
+                        {builder ? 'Your half' : 'You make'}
                       </div>
                       <div className={`text-4xl font-extrabold mt-1 ${
                         comm.belowRedline ? 'text-red-400' : 'text-violet-200'
                       }`}>{money(mySplit.amount)}</div>
                       <div className="text-[11.5px] text-slate-400 mt-0.5">
-                        {hasBuilder
-                          ? <>Split with {builderName || 'the builder'} — they get the same.</>
+                        {builder
+                          ? <>Split with {builder.name || 'the builder'} — they get the same.</>
                           : <>Self-gen, so you keep the whole rep share.</>}
                       </div>
                     </div>
@@ -1596,40 +1604,36 @@ const BatteryStabilization = ({
                   )}
 
                   {/* WAS IT SET? The only question a rep answers. Everything
-                      else about the split follows from it. */}
+                      else about the split follows from it.
+
+                      ONE CONTROL. This was a checkbox plus a dropdown that the
+                      checkbox revealed — two controls for one question, with a
+                      state where the box was ticked and nobody was picked. The
+                      picker's blank option says "self-gen", so it answers the
+                      whole question on its own and that in-between state no
+                      longer exists. */}
                   <div className="mt-4 pt-3 border-t border-violet-400/20">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={hasBuilder}
-                        onChange={(e) => setHasBuilder(e.target.checked)}
-                        className="w-4 h-4 accent-violet-400" />
-                      <span className="text-[13px] text-slate-200">A builder set this deal</span>
-                    </label>
-                    <p className="text-[11px] text-slate-500 mt-1 ml-6">
-                      {hasBuilder
+                    <span className="block text-[10.5px] uppercase tracking-wider text-slate-500 mb-1">
+                      Who set it
+                    </span>
+                    {/* Picked from Recruits, so the id and the email come with
+                        the person. Typed names were the first version: a
+                        misspelling makes them unfindable in a report, and a
+                        mistyped email means their half never reaches them. */}
+                    <RepPicker
+                      value={builder ? builder.id : ''}
+                      onChange={setBuilder}
+                      className="w-full max-w-sm px-2 py-1.5 rounded bg-slate-900/70 border border-slate-600 text-slate-100 text-[12.5px]"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1.5">
+                      {builder
                         ? `You split the rep share 50/50 — ${money(comm.total * 0.42)} each.`
                         : `Self-gen: you keep the combined ${commSelfGenPct}% — ${money(mySplit.amount)}.`}
                     </p>
-
-                    {hasBuilder && (
-                      <div className="mt-3 ml-6">
-                        <span className="block text-[10.5px] uppercase tracking-wider text-slate-500 mb-1">
-                          Who set it
-                        </span>
-                        {/* Picked from Recruits, so the email comes with the
-                            person. Typed names were the first version: a
-                            misspelling makes them unfindable in a report, and a
-                            mistyped email means their half never reaches them. */}
-                        <RepPicker
-                          value={builderEmail}
-                          allowNone={false}
-                          onChange={({ name, email }) => { setBuilderName(name); setBuilderEmail(email); }}
-                          className="w-full max-w-sm px-2 py-1.5 rounded bg-slate-900/70 border border-slate-600 text-slate-100 text-[12.5px]"
-                        />
-                      </div>
-                    )}
-                    {hasBuilder && !builderEmail && (
-                      <p className="text-[11px] text-amber-300 mt-2 ml-6">
-                        Pick who set it, or their {money(comm.total * 0.42)} has nowhere to go.
+                    {builder && !builder.email && (
+                      <p className="text-[11px] text-amber-300 mt-2">
+                        {builder.name || 'They'} have no email on file, so their
+                        {' '}{money(comm.total * 0.42)} has nowhere to go. Add one in the CRM.
                       </p>
                     )}
 
@@ -1642,7 +1646,7 @@ const BatteryStabilization = ({
                         off deliberately — a rep who knows their own figure does
                         not need to be told it is 42% of something they are not
                         being shown. */}
-                    {hasBuilder && (
+                    {builder && (
                       <div className="rounded-lg overflow-hidden border border-slate-700 mt-3">
                         {comm.rows
                           .filter((r) => r.key === 'engineer' || r.key === 'builder')
@@ -1652,7 +1656,7 @@ const BatteryStabilization = ({
                                    r.key === 'engineer' ? 'bg-violet-500/10' : ''
                                  }`}>
                               <span className="text-[12.5px] text-slate-200">
-                                {r.key === 'builder' ? (builderName || 'Builder') : 'You (closed it)'}
+                                {r.key === 'builder' ? (builder.name || 'Builder') : 'You (closed it)'}
                               </span>
                               <span className="text-[12.5px] font-mono text-slate-100">{money(r.amount)}</span>
                             </div>

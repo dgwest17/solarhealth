@@ -34,8 +34,22 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const OPTIONAL_ZOHO_FIELDS = [
   'Sales_Stage', 'Proposal_Date', 'Net_Investment', 'Storage_Rebate',
   'Est_Monthly_Savings', 'Rep_Commission',
-  'Lender_Qualification', 'Documents_Step', 'Intake_Step'
+  'Lender_Qualification', 'Documents_Step', 'Intake_Step',
+  // Add-on tracking and the setter lookup. Listed so a save still lands with a
+  // clear "these fields do not exist yet" report on an org where they have not
+  // been created, instead of failing outright the first time one is written.
+  'Proposal_Scope', 'Added_Solar_kW', 'Added_Annual_Production_kWh', 'Set_By'
 ];
+
+/**
+ * Fields where an explicit null means "clear it", not "not applicable".
+ *
+ * Everything else is stripped when null, because a null in this payload usually
+ * just means the deal has no such figure and writing it would blank a column
+ * somebody filled in by hand. Set_By is the exception: a deal attributed to the
+ * wrong rep has to be clearable, and for a Zoho lookup that takes a real null.
+ */
+const CLEARABLE_ZOHO_FIELDS = new Set(['Set_By']);
 
 async function sbFetch(path, options = {}) {
   const resp = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
@@ -67,7 +81,9 @@ async function writeZohoSummary(projectId, summary) {
   // Nulls are meaningful to Zoho (they clear a field) but here a null just
   // means "not applicable to this deal", so they are stripped.
   for (const k of Object.keys(payload)) {
-    if (payload[k] === null || payload[k] === undefined || payload[k] === '') delete payload[k];
+    if (payload[k] === undefined) { delete payload[k]; continue; }
+    if (CLEARABLE_ZOHO_FIELDS.has(k)) continue;
+    if (payload[k] === null || payload[k] === '') delete payload[k];
   }
 
   for (let attempt = 0; attempt < OPTIONAL_ZOHO_FIELDS.length + 1; attempt++) {

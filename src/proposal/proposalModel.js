@@ -230,6 +230,40 @@ export const allStepsComplete = (purchaseType, stepStatus = {}) => {
 };
 
 /**
+ * WHO SET THE DEAL — the one function that answers it.
+ *
+ * Reads a proposal's `internal` block and returns { recruitId, name, email } or
+ * null for self-gen. Everything that needs to know — the Beach, Treasure, the
+ * Pipeline, the CRM write — goes through here rather than reaching for
+ * `internal.builderEmail` itself, so there is exactly one interpretation of the
+ * stored shape.
+ *
+ * IT READS BOTH SHAPES ON PURPOSE. Proposals saved before the recruit id
+ * existed have `builderName` and `builderEmail` and nothing else. Those are real
+ * deals with real money attached, so the reader accommodates them instead of a
+ * migration: a one-off backfill that missed a row would make somebody's
+ * commission disappear, and nobody would find out until payday.
+ */
+export function builderOf(internal) {
+  if (!internal) return null;
+  const email = String(internal.builderEmail || '').trim().toLowerCase();
+  const name = String(internal.builderName || '').trim();
+  const recruitId = internal.builderRecruitId ? String(internal.builderRecruitId) : null;
+  if (!email && !name && !recruitId) return null;
+  return { recruitId, name, email: email || '' };
+}
+
+/**
+ * Did one rep both set and close it?
+ *
+ * DERIVED, NEVER STORED AS AN INPUT. `selfGen` used to be passed in alongside
+ * the builder, which meant a deal could arrive claiming to be self-gen while
+ * carrying a builder — and then nobody could say who should have been paid.
+ * The absence of a builder IS the flag, exactly as it is in the CRM.
+ */
+export const isSelfGen = (internal) => builderOf(internal) === null;
+
+/**
  * Typical Southern California specific yield, kWh per kW of DC per year.
  *
  * Only used when the client has no existing system to measure against.
@@ -476,13 +510,32 @@ export function buildProposal({
       dealerFeePct: commission.dealerFeePct,
       dealerFee: commission.dealerFee,
       customerContract: commission.customerContract,
-      selfGen: !!commission.selfGen,
       seat: commission.seat || null,
-      // The builder's email is what routes their half into their own Beach.
-      // A name cannot do that job: two Kensons, or a typo, and the money is
-      // invisible to the person who earned it.
+
+      /**
+       * WHO SET IT — three properties describing one person, which is a record
+       * rather than a duplication. Each does a job the others cannot:
+       *
+       *   builderRecruitId  points at the Recruit record. This is what the CRM's
+       *                     Set_By lookup field is written from.
+       *   builderEmail      routes the money. The Beach finds a builder's deals
+       *                     with a jsonb filter on this exact path, so it is
+       *                     load-bearing and cannot move.
+       *   builderName       renders the split without a round-trip to Zoho, and
+       *                     survives the person being deleted from the roster.
+       *
+       * All three are a SNAPSHOT, like the percentages beside them. A rep who
+       * changes their email next year does not retroactively change who this
+       * deal paid.
+       */
+      builderRecruitId: commission.builderRecruitId
+        ? String(commission.builderRecruitId) : null,
       builderName: commission.builderName || null,
-      builderEmail: commission.builderEmail || null,
+      builderEmail: (commission.builderEmail || '').trim().toLowerCase() || null,
+      // Derived from the builder, never taken from the caller. See isSelfGen.
+      selfGen: !(commission.builderEmail || commission.builderName
+        || commission.builderRecruitId),
+
       rows: commission.rows || []
     } : (price && price.commission ? {
       // Legacy shape, for proposals saved before the split model existed.
@@ -607,8 +660,35 @@ export function toZohoSummary(proposal) {
     // There is deliberately no Self_Gen field alongside this: two fields
     // encoding one fact is how they end up disagreeing, and then nobody can
     // say who should have been paid. Emptiness IS the flag.
-    Set_By_Rep: proposal.internal ? (proposal.internal.builderName || null) : null,
-    Set_By_Rep_Email: proposal.internal ? (proposal.internal.builderEmail || null) : null,
+    /**
+     * WHO SET IT — ONE FIELD, a lookup at the Recruit record.
+     *
+     * This was two fields, Set_By_Rep (text name) and Set_By_Rep_Email. The
+     * justification written here for that was already stale when it was
+     * written: it said a lookup needs a record id we do not have, but RepPicker
+     * reads the roster from Recruits and has had the id all along. So the CRM was
+     * storing a name and an email that the Recruit record already holds, with
+     * nothing keeping the copies in step.
+     *
+     * A lookup is strictly better than either text field. It points at the
+     * person rather than describing them, so a rep who changes their email or
+     * whose name was misspelt is still the same record; the CRM shows their
+     * details on hover; and Set_By becomes usable in a related list on the
+     * Recruit — every deal a builder set, without a report.
+     *
+     * NULL WHEN THERE IS NO BUILDER, and it must survive the null-strip in
+     * save-proposal for that reason: a deal wrongly attributed to somebody has
+     * to be clearable, or it keeps pointing at a rep who did not earn it.
+     * Emptiness is still the self-gen flag; there is no Self_Gen field.
+     */
+    Set_By: (() => {
+      const b = builderOf(proposal.internal);
+      // Only an id can be written to a lookup. A builder recorded before the id
+      // existed, or typed in while the roster was down, has no record to point
+      // at — the split still routes on the email in Supabase, so the money is
+      // fine and only the CRM link is absent.
+      return b && b.recruitId ? { id: b.recruitId } : null;
+    })(),
     Lender_Qualification: proposal.steps.qualification || null,
     Documents_Step: proposal.steps.paperwork || null,
     Intake_Step: proposal.steps.site_inspection || null
@@ -626,6 +706,15 @@ export const ZOHO_FIELDS = {
    * these describe the loan the customer already has, and the audit is built
    * entirely on them. Nothing in this app writes to them.
    */
+  /**
+   * Fields this app used to write and no longer does. Safe to delete in Zoho.
+   * Listed rather than forgotten so a stale column does not sit on the layout
+   * half-populated, looking authoritative.
+   */
+  retired: [
+    { api: 'Set_By_Rep',       replacedBy: 'Set_By' },
+    { api: 'Set_By_Rep_Email', replacedBy: 'Set_By' }
+  ],
   existingSystemReadOnly: [
     'Purchase_Type', 'Contract_Value', 'Term',
     'Escalator_or_Interest', 'Monthly_Payment', 'Finance_Provider'
@@ -686,10 +775,16 @@ export const ZOHO_FIELDS = {
      * proposal in Supabase. Swap it for a lookup later if CRM reporting wants
      * the relation; nothing downstream reads these.
      */
-    { api: 'Set_By_Rep', type: 'text',
-      note: 'The builder who set it. EMPTY MEANS SELF-GEN.' },
-    { api: 'Set_By_Rep_Email', type: 'email',
-      note: 'How the split finds its way into that builder\u2019s Beach.' },
+    { api: 'Set_By', type: 'lookup', lookupModule: 'Recruits',
+      replaces: ['Set_By_Rep', 'Set_By_Rep_Email'],
+      note: 'Lookup to Recruits. EMPTY MEANS SELF-GEN. Replaces the two text '
+          + 'fields: the Recruit record already holds the name and the email, so '
+          + 'copying them onto the project stored the same fact three times with '
+          + 'nothing keeping the copies in step. Named Set_By rather than '
+          + 'Set_By_Rep because a field\u2019s type cannot be changed in Zoho — '
+          + 'the old text field has to be deleted, and its API name stays '
+          + 'reserved until the recycle bin is purged, so reusing it yields '
+          + 'Set_By_Rep1 and the write silently goes nowhere.' },
     { api: 'Rep_Commission', type: 'currency',
       note: 'Rep-facing. Restrict field permissions if reps should not see each other’s.' },
     { api: 'Lender_Qualification', type: 'picklist',
