@@ -88,7 +88,15 @@ const COLUMNS = [
   { id: 'name',        label: 'Client',       sort: (d) => (d.name || '').toLowerCase() },
   { id: 'tide',        label: 'Stage',        sort: (d) => ['met', 'project', 'installed'].indexOf(d.tide) },
   { id: 'battery',     label: 'Battery',      sort: (d) => (d.battery || '~').toLowerCase() },
-  { id: 'solar',       label: 'Solar',        sort: (d) => Number(d.solarKw) || 0 },
+  /**
+   * TWO SOLAR COLUMNS, because they answer different questions.
+   *
+   * "On roof" is the existing array — an audit input, the thing the savings are
+   * measured against. "Adding" is what this deal puts up. One column carrying
+   * both is how a 4 kW client with 8.8 kW being added showed as a 4 kW job.
+   */
+  { id: 'solar',       label: 'On roof',      sort: (d) => Number(d.solarKw) || 0 },
+  { id: 'adding',      label: 'Adding',       sort: (d) => Number(d.addedKw) || 0 },
   { id: 'value',       label: 'Value',        sort: (d) => Number(d.contractValue) || 0, align: 'right' },
   { id: 'lastContact', label: 'Last contact', sort: (d) => (daysSince(d.lastContact) ?? 1e9) },
   { id: 'sold',        label: 'Sold',         sort: (d) => (daysSince(d.soldDate) ?? 1e9) },
@@ -153,7 +161,10 @@ const Pipeline = ({ deals = [], onOpenClient = null, role = 'rep' }) => {
     let out = deals.map((d) => (patches[d.id] ? { ...d, ...patches[d.id] } : d));
     if (tideFilter !== 'all') out = out.filter((d) => d.tide === tideFilter);
     if (batteryFilter !== 'all') out = out.filter((d) => d.battery === batteryFilter);
-    if (hasSolar) out = out.filter((d) => Number(d.solarKw) > 0 || Number(d.panels) > 0);
+    // "Adding solar" means THIS DEAL adds panels. Filtering on solarKw instead
+    // matched every client with a roof array, which in a solar audit tool is
+    // nearly all of them — a filter that removes nothing.
+    if (hasSolar) out = out.filter((d) => Number(d.addedKw) > 0 || Number(d.panels) > 0);
     if (staleOnly) out = out.filter((d) => (daysSince(d.lastContact) ?? 1e9) >= 14);
     if (q.trim()) {
       const needle = q.trim().toLowerCase();
@@ -213,7 +224,7 @@ const Pipeline = ({ deals = [], onOpenClient = null, role = 'rep' }) => {
             ['all', 'Any battery'], ...batteryOptions.map((b) => [b, b])
           ]} />
         )}
-        <Toggle on={hasSolar} onClick={() => setHasSolar((v) => !v)}>Has solar</Toggle>
+        <Toggle on={hasSolar} onClick={() => setHasSolar((v) => !v)}>Adding solar</Toggle>
         <Toggle on={staleOnly} onClick={() => setStaleOnly((v) => !v)}>Needs a call</Toggle>
         {(tideFilter !== 'all' || batteryFilter !== 'all' || hasSolar || staleOnly || q) && (
           <button
@@ -296,12 +307,29 @@ const Pipeline = ({ deals = [], onOpenClient = null, role = 'rep' }) => {
                       <div className="text-[10.5px] font-mono" style={{ color: SURF.textFaint }}>{d.batteryKwh} kWh</div>
                     )}
                   </td>
+                  {/* what is already up there */}
                   <td className="px-3 py-2.5 text-[12.5px]" style={{ color: SURF.textBright }}>
                     {Number(d.solarKw) > 0
-                      ? <>{d.solarKw} kW{d.panels ? <div className="text-[10.5px]" style={{ color: SURF.textFaint }}>{d.panels} panels</div> : null}</>
-                      : d.panels
-                        ? <>{d.panels} panels</>
-                        : <span style={{ color: SURF.textFaint }}>—</span>}
+                      ? <>{d.solarKw} kW</>
+                      : <span style={{ color: SURF.textFaint }}>—</span>}
+                  </td>
+                  {/* what this deal adds — in the warm colour, because an add-on
+                      is the thing a manager is scanning this column for */}
+                  <td className="px-3 py-2.5 text-[12.5px]">
+                    {Number(d.addedKw) > 0 ? (
+                      <>
+                        <span className="font-mono font-semibold" style={{ color: SURF.sun }}>
+                          +{d.addedKw} kW
+                        </span>
+                        <div className="text-[10.5px] font-mono" style={{ color: SURF.textFaint }}>
+                          {Number(d.addedKwhPerYear) > 0
+                            ? `+${Number(d.addedKwhPerYear).toLocaleString()} kWh/yr`
+                            : `${d.panels || 0} panels`}
+                        </div>
+                      </>
+                    ) : (
+                      <span style={{ color: SURF.textFaint }}>—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 text-[13px] font-mono text-right" style={{ color: SURF.textBright }}>
                     {d.contractValue ? money(d.contractValue) : '—'}

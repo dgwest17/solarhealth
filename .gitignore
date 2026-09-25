@@ -5,3 +5,6 @@ dist
 .env.local
 *.log
 .vercel
+
+# scratch bundles from scripts/render-check.mjs
+.render-check-*/

@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 /**
- * Collapsible section wrapper for the Battery Analysis tab.
+ * Collapsible section wrapper, dark theme.
+ *
+ * Storage itself no longer stacks accordions — it is a slide deck now — but
+ * individual slides still use this for sub-sections inside them.
  * Consistent chevron header + smooth-ish open/close. Controlled or uncontrolled.
  */
 const Accordion = ({

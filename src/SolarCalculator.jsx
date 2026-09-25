@@ -52,10 +52,16 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
   const [repName, setRepName] = useState('');
 
   // Tab switcher: 'audit' | 'battery' | 'eligibility' | 'tide' | 'simulator'
+  //
+  // The 'battery' key drives the tab LABELLED "Storage". The key is deliberately
+  // left alone: it is referenced by every setActiveTab call and by the Big Wave
+  // hand-off, and renaming an internal identifier to match a label is how a
+  // half-renamed key ends up leaving one entry point pointing at a tab that no
+  // longer exists.
   const [activeTab, setActiveTab] = useState('audit');
 
   /**
-   * The Eligibility tab's verdict, held here so Battery Analysis can read it.
+   * The Eligibility tab's verdict, held here so Storage can read it.
    *
    * Lifted rather than recomputed: two assessments of the same question would
    * eventually disagree, and the one a rep has actually looked at is the one
@@ -296,7 +302,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
                 : 'text-slate-300 hover:bg-slate-800'
             }`}
           >
-            Battery Analysis
+            Storage
           </button>
           <button
             onClick={() => setActiveTab('eligibility')}
@@ -362,7 +368,7 @@ const SolarCalculator = ({ prefilledInputs = null, clientLabel = '', onBack = nu
           </div>
         )}
 
-        {/* BATTERY ANALYSIS TAB */}
+        {/* STORAGE TAB — the battery story as a seven-slide presentation */}
         {activeTab === 'battery' && (
           <div className="print:hidden">
             <BatteryAnalysis inputs={inputs} nemImpact={calculations.currentNEMImpact} extraUsage={extraUsage} measured={gbApplied ? gbProfile : null} calculations={calculations} rateOverride={batteryRateOverride} onRateOverrideChange={persistBatteryRateOverride} clientLabel={clientLabel} eligibility={eligibility}

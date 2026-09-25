@@ -1,10 +1,48 @@
 /**
  * FILE: src/battery/BatteryAnalysis.jsx
  *
- * Battery tab shell — owns shared math, stacks every battery section in accordions.
+ * STORAGE — the battery story, told in order.
+ *
+ * Owns the shared math for every section below and presents them as a
+ * sequence rather than a stack.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY A SEQUENCE AND NOT ACCORDIONS
+ *
+ * This screen is used in front of a customer. As a stack of eight accordions
+ * it had two failure modes, and the second is the expensive one:
+ *
+ *   The rep hunted. Opening and closing sections mid-appointment, scrolling
+ *   past the part they already covered to find the part they had not.
+ *
+ *   The order was invisible. An accordion stack says "here are eight topics";
+ *   it does not say "this one follows from that one". The argument these
+ *   sections make only works in order — you cannot explain why time-of-use
+ *   matters before establishing that the house exports at noon and imports at
+ *   seven. A customer who reads them in the wrong order gets facts and no case.
+ *
+ * So: tabs across the top, one panel at a time, numbered, with Back/Next at
+ * the bottom. The numbering is the point — it is the difference between a
+ * reference screen and a presentation.
+ *
+ * NOTHING ABOUT THE CONTENT CHANGED. Every section renders the same component
+ * with the same props it had as an accordion. The only content that moved is
+ * the NEM grandfathering countdown, which now sits under Net Metering where
+ * the customer is already thinking about net metering, instead of floating
+ * between two unrelated sections.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT STAYS OUTSIDE THE TABS
+ *
+ * The measured-data banner. It governs `exportKwh` / `importKwh`, which three
+ * different slides read, so hiding it inside one of them would mean a rep
+ * changing the basis of slides 3, 4 and 5 from inside slide 1 with no sign of
+ * it anywhere else.
+ *
+ * Rendered by: src/SolarCalculator.jsx (activeTab === 'battery')
  */
-import React, { useState, useEffect } from 'react';
-import { Battery } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Battery, ChevronLeft, ChevronRight } from 'lucide-react';
 import { buildOverlayWithAddedLoad, calculateTotalRecoveredValue } from './BatteryModel';
 import { TOU_RATES } from '../utils/rateData';
 import { calculateNEMImpact, getUtilityRate } from '../utils/calculations';
@@ -14,28 +52,126 @@ import BatteryExportInefficiencies from './BatteryExportInefficiencies';
 import BatteryRecovery from './BatteryRecovery';
 import BatteryStabilization from './BatteryStabilization';
 import BatteryDispatchPanel from './BatteryDispatchPanel';
-import Accordion from './Accordion';
 import LimitedIncentives from './LimitedIncentives';
 import NemCountdown from './NemCountdown';
 import Nem3ValuePanel from './Nem3ValuePanel';
 
 /**
- * Battery Analysis tab — four stacked sections:
- *   1. Production / Consumption overlay (profile dropdown)
- *   2. Energy Loss day/night graphic
- *   3. Export Inefficiencies (economics + grid demand)
- *   4. Battery Recovery (value recovered + backup)
+ * The story, in the order it has to be told.
  *
- * The overlay (built from the selected profile + the client's system data)
- * is computed once here and shared, so every section stays in sync.
+ * `accent` keeps each slide's heading the colour its accordion had, so a rep
+ * who knew the old screen still recognises the section.
  */
-const BatteryAnalysis = ({ 
+const SLIDES = [
+  { id: 'usage',     label: 'Consumption vs Production',
+    title: 'Consumption vs Production',
+    subtitle: 'Your energy through a typical day', accent: 'amber' },
+  { id: 'nem',       label: 'Net Metering',
+    title: 'Net Metering — where the energy is lost',
+    subtitle: 'How NEM credits your exports, and how long yours lasts', accent: 'amber' },
+  { id: 'tou',       label: 'Time of Use Changes',
+    title: 'Time of Use is changing (not for the better)',
+    subtitle: 'What you give up exporting instead of storing', accent: 'amber' },
+  { id: 'spiral',    label: 'Utility Death Spiral',
+    title: 'The Utility Death Spiral',
+    subtitle: 'Why the grid squeeze costs you more every year', accent: 'emerald' },
+  { id: 'economics', label: 'Economics',
+    title: 'The economics of a battery',
+    subtitle: 'Hour-by-hour dispatch, hardware and rate comparison', accent: 'purple' },
+  { id: 'timeline',  label: 'Timeline',
+    title: 'Timeline — the money on the table',
+    subtitle: 'Funding runs out; the incentives do not wait', accent: 'amber' },
+  { id: 'home',      label: 'Your Home',
+    title: 'Your home',
+    subtitle: 'What this looks like on your roof, and on your bill', accent: 'cyan' }
+];
+
+const ACCENT_TEXT = {
+  amber: 'text-amber-300', cyan: 'text-cyan-300',
+  emerald: 'text-emerald-300', purple: 'text-purple-300'
+};
+const ACCENT_RING = {
+  amber: 'border-amber-400/25', cyan: 'border-cyan-400/25',
+  emerald: 'border-emerald-400/25', purple: 'border-purple-400/25'
+};
+const ACCENT_BG = {
+  amber: 'bg-amber-400', cyan: 'bg-cyan-400',
+  emerald: 'bg-emerald-400', purple: 'bg-purple-400'
+};
+
+/**
+ * One panel of the presentation.
+ *
+ * Always open. It is the only thing on screen, so a collapse control would do
+ * nothing but let a rep hide the slide they just navigated to.
+ */
+const Slide = ({ title, subtitle, accent = 'amber', index, total, children }) => (
+  <div className={`rounded-xl border ${ACCENT_RING[accent] || ACCENT_RING.amber} bg-slate-900/30 overflow-hidden`}>
+    <div className="px-4 py-3 border-b border-slate-700/50 flex items-baseline gap-2.5">
+      <span className="text-[11px] font-mono text-slate-500 shrink-0">
+        {index + 1}/{total}
+      </span>
+      <span className="min-w-0">
+        <span className={`block font-bold text-sm ${ACCENT_TEXT[accent] || ACCENT_TEXT.amber}`}>
+          {title}
+        </span>
+        {subtitle && <span className="block text-[11px] text-slate-400">{subtitle}</span>}
+      </span>
+    </div>
+    <div className="px-4 pb-4 pt-4">{children}</div>
+  </div>
+);
+
+const BatteryAnalysis = ({
   /** Verdict from the Eligibility tab; drives the rebate Auto in Stabilize. */
   eligibility = null,
+  /**
+   * Which slide the deck opens on, by index.
+   *
+   * A prop rather than internal-only state for one reason: a deck whose
+   * position can only be reached by clicking cannot be tested. Rendering slide
+   * one and calling the whole deck checked is how a broken panel ships — and it
+   * nearly did here. The first version of the render harness reached slide 7 by
+   * stubbing React.useState, which this file's destructured `useState` import
+   * ignores, so all seven cases silently rendered slide one and all seven
+   * passed with byte-identical output.
+   *
+   * Nothing in the app passes it today; scripts/render-check.mjs does.
+   */
+  initialSlide = 0,
 inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null , consumptionProfile = null, onConsumptionProfileChange = null, calculations = null, rateOverride = null, onRateOverrideChange = null, clientContext = null, clientLabel = '' }) => {
   const [profileKeyInternal, setProfileKeyInternal] = useState('evening_heavy');
   const profileKey = consumptionProfile || profileKeyInternal;
   const setProfileKey = (k) => { setProfileKeyInternal(k); if (onConsumptionProfileChange) onConsumptionProfileChange(k); };
+
+  /**
+   * Which slide is showing.
+   *
+   * Local, not lifted. A rep's position in the presentation is not a fact
+   * about the client, and persisting it would mean reopening a client onto
+   * whatever slide somebody happened to leave it on.
+   */
+  const [slide, setSlide] = useState(
+    Math.max(0, Math.min(SLIDES.length - 1, Number(initialSlide) || 0))
+  );
+  const topRef = useRef(null);
+  const current = SLIDES[slide] || SLIDES[0];
+
+  /**
+   * Scroll to the top of the deck on every move.
+   *
+   * Without this, moving from a long slide to a short one leaves the viewport
+   * halfway down a panel that has already ended — in front of a customer it
+   * looks like the tool broke. Skipped on first render so opening the tab does
+   * not yank the page.
+   */
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) { firstRender.current = false; return; }
+    if (topRef.current && topRef.current.scrollIntoView) {
+      topRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [slide]);
 
   // AUTHORITATIVE true-up / annual-check — from full annual usage vs production
   // at the real utility rate. Prefer the value computed by the audit tool
@@ -66,9 +202,9 @@ inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null , co
     addedDaytimePct
   );
 
-  // Shared export/import figures — lifted here so §3 (Export Inefficiencies)
-  // and §4 (Your Energy, Your Credits) always compute from the SAME numbers.
-  // Default to the overlay; §3's manual toggle updates these for both sections.
+  // Shared export/import figures — lifted here so Time of Use Changes and the
+  // Utility Death Spiral always compute from the SAME numbers. Default to the
+  // overlay; the manual toggle updates these for both slides.
   const [manualMode, setManualMode] = useState(false);
   const [exportKwh, setExportKwh] = useState(overlay.annualDaytimeOverproduction);
   const [importKwh, setImportKwh] = useState(overlay.annualNighttimeImport);
@@ -83,7 +219,7 @@ inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null , co
 
   // MEASURED DATA: when a Green Button profile has been applied, its real
   // annual import/export replace the overlay estimates. Manual mode is
-  // switched on so both §3 and §4 run off the measured numbers.
+  // switched on so both slides run off the measured numbers.
   const [useMeasured, setUseMeasured] = useState(false);
   useEffect(() => {
     if (measured && measured.ok) {
@@ -150,8 +286,10 @@ inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null , co
   const avoidedTrueUp = recovery.avoidedTrueUp;
   const totalRecoveredPerYear = recovery.totalRecoveredPerYear;
 
+  const go = (n) => setSlide(Math.max(0, Math.min(SLIDES.length - 1, n)));
+
   return (
-    <div>
+    <div ref={topRef}>
       {measured && measured.ok && (
         <div className={`mb-4 rounded-xl border-2 p-4 flex items-start justify-between gap-3 ${
           useMeasured ? 'bg-emerald-500/10 border-emerald-400/50' : 'bg-slate-800/60 border-slate-600/60'
@@ -177,94 +315,177 @@ inputs, nemImpact: nemImpactProp = null, extraUsage = null, measured = null , co
           </label>
         </div>
       )}
-      <div className="mb-6">
+
+      <div className="mb-5">
         <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-amber-500 flex items-center gap-2">
           <Battery size={30} className="text-amber-400" />
-          Battery Analysis
+          Storage
         </h1>
         <p className="text-slate-300 text-sm mt-1">
           See how your system behaves over a day — and what a battery would recover.
         </p>
       </div>
 
-      <Accordion title="Consumption vs Production" subtitle="Your energy through a typical day" accent="amber" defaultOpen icon={<Battery size={16} className="text-amber-400" />}>
-        <BatteryConsumptionProduction
-          inputs={inputs}
-          profileKey={profileKey}
-          setProfileKey={setProfileKey}
-          overlay={overlay}
-          extraUsage={extraUsage}
+      {/* ------------------------------- the tabs -------------------------------
+          Horizontally scrollable rather than wrapped. Seven labels wrap to
+          three ragged rows on a laptop, and a rep cannot tell at a glance
+          where they are in a shape that keeps changing height. */}
+      <div className="mb-1 overflow-x-auto -mx-1 px-1">
+        <div className="flex gap-1 min-w-max">
+          {SLIDES.map((s, i) => {
+            const active = i === slide;
+            return (
+              <button
+                key={s.id}
+                onClick={() => go(i)}
+                className={`px-3 py-2 rounded-lg text-[12.5px] font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                  active
+                    ? 'bg-slate-800 text-white border border-slate-600'
+                    : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                }`}
+              >
+                <span className={`text-[10px] font-mono ${active ? 'text-amber-400' : 'text-slate-600'}`}>
+                  {i + 1}
+                </span>
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* How far through the story we are. One bar beats seven dots: it reads
+          as progress rather than as another set of controls to click. */}
+      <div className="h-[3px] rounded-full bg-slate-800 mb-5 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-300 ${ACCENT_BG[current.accent] || ACCENT_BG.amber}`}
+          style={{ width: `${((slide + 1) / SLIDES.length) * 100}%` }}
         />
-      </Accordion>
+      </div>
 
-      <Accordion title="Where Energy Is Lost (Net Energy Metering)" subtitle="How NEM credits your exports" accent="amber">
-        <BatteryEnergyLoss />
-      </Accordion>
+      {/* ------------------------------- the deck ------------------------------ */}
+      <Slide {...current} index={slide} total={SLIDES.length}>
+        {current.id === 'usage' && (
+          <BatteryConsumptionProduction
+            inputs={inputs}
+            profileKey={profileKey}
+            setProfileKey={setProfileKey}
+            overlay={overlay}
+            extraUsage={extraUsage}
+          />
+        )}
 
-      <Accordion title="Time of Use is Changing (Not for the better)" subtitle="What you give up exporting instead of storing" accent="amber">
-        <BatteryExportInefficiencies
-          inputs={inputs}
-          overlay={overlay}
-          manualMode={manualMode}
-          setManualMode={setManualMode}
-          exportKwh={exportKwh}
-          setExportKwh={setExportKwh}
-          importKwh={importKwh}
-          setImportKwh={setImportKwh}
-          effExport={effExport}
-          effImport={effImport}
-          annualTrueUp={annualTrueUp}
-          annualCheck={annualCheck}
-          owesUtility={owesUtility}
-          extraUsage={extraUsage}
-        />
-      </Accordion>
+        {/* NET METERING — how exports get credited, and how long this client's
+            version of that deal has left to run. The countdown lived between
+            two unrelated sections before; it belongs to this subject. */}
+        {current.id === 'nem' && (
+          <>
+            <BatteryEnergyLoss />
+            {/* NEM 1.0/2.0 get the grandfathering countdown. NEM 3.0 clients
+                have nothing to count down — they are already on the successor
+                tariff — so they get the forward-looking value story instead. */}
+            <div className="mt-5">
+              <NemCountdown nemExpiry={calculations && calculations.nemExpiry} nemVersion={inputs.nemVersion} />
+              <Nem3ValuePanel inputs={inputs} calculations={calculations} />
+            </div>
+          </>
+        )}
 
-      {/* NEM 1.0/2.0 get the grandfathering countdown here. NEM 3.0 clients have
-          nothing to count down — they're already on the successor tariff — so they
-          get the forward-looking value story instead. */}
-      <NemCountdown nemExpiry={calculations && calculations.nemExpiry} nemVersion={inputs.nemVersion} />
-      <Nem3ValuePanel inputs={inputs} calculations={calculations} />
+        {current.id === 'tou' && (
+          <BatteryExportInefficiencies
+            inputs={inputs}
+            overlay={overlay}
+            manualMode={manualMode}
+            setManualMode={setManualMode}
+            exportKwh={exportKwh}
+            setExportKwh={setExportKwh}
+            importKwh={importKwh}
+            setImportKwh={setImportKwh}
+            effExport={effExport}
+            effImport={effImport}
+            annualTrueUp={annualTrueUp}
+            annualCheck={annualCheck}
+            owesUtility={owesUtility}
+            extraUsage={extraUsage}
+          />
+        )}
 
-      <Accordion title="The Looming Grid Problem" subtitle="Why the grid squeeze costs you more every year" accent="emerald" defaultOpen>
-        <BatteryRecovery
-          inputs={inputs}
-          overlay={overlay}
-          effExport={effExport}
-          effImport={effImport}
-          effExportWithAdded={effExportWithAdded}
-          effImportWithAdded={effImportWithAdded}
-          annualTrueUp={annualTrueUp}
-          annualCheck={annualCheck}
-          owesUtility={owesUtility}
-          avoidedTrueUp={avoidedTrueUp}
-          arbitrageRecovered={arbitrageRecovered}
-          totalRecoveredPerYear={totalRecoveredPerYear}
-          extraUsage={extraUsage}
-        />
-      </Accordion>
+        {current.id === 'spiral' && (
+          <BatteryRecovery
+            inputs={inputs}
+            overlay={overlay}
+            effExport={effExport}
+            effImport={effImport}
+            effExportWithAdded={effExportWithAdded}
+            effImportWithAdded={effImportWithAdded}
+            annualTrueUp={annualTrueUp}
+            annualCheck={annualCheck}
+            owesUtility={owesUtility}
+            avoidedTrueUp={avoidedTrueUp}
+            arbitrageRecovered={arbitrageRecovered}
+            totalRecoveredPerYear={totalRecoveredPerYear}
+            extraUsage={extraUsage}
+          />
+        )}
 
-      {/* Limited-time incentives — reserve before the funding runs out */}
-      <LimitedIncentives />
+        {current.id === 'economics' && (
+          <BatteryDispatchPanel
+            inputs={inputs}
+            calculations={calculations}
+            extraUsage={extraUsage}
+            rateOverride={rateOverride}
+            onRateOverrideChange={onRateOverrideChange}
+          />
+        )}
 
-      {/* Hour-by-hour dispatch economics — the accurate version */}
-      <Accordion title="How Does a Battery Recover Credits?" subtitle="Hour-by-hour dispatch, hardware & rate comparison" accent="purple" defaultOpen icon={<Battery size={16} className="text-purple-400" />}>
-        <BatteryDispatchPanel inputs={inputs} calculations={calculations} extraUsage={extraUsage} rateOverride={rateOverride} onRateOverrideChange={onRateOverrideChange} />
-      </Accordion>
+        {current.id === 'timeline' && <LimitedIncentives />}
 
-      <Accordion title="Stabilize Your Bill With Storage" subtitle="Smoothing your load and your bill" accent="cyan">
-        <BatteryStabilization
-          eligibility={eligibility}
-          recoveredValuePerYear={totalRecoveredPerYear}
-          overlay={overlay}
-          inputs={inputs}
-          annualTrueUp={annualTrueUp}
-          calculations={calculations}
-          annualExportKwh={effExport}
-          clientContext={clientContext}
-          clientLabel={clientLabel}
-        />
-      </Accordion>
+        {current.id === 'home' && (
+          <BatteryStabilization
+            eligibility={eligibility}
+            recoveredValuePerYear={totalRecoveredPerYear}
+            overlay={overlay}
+            inputs={inputs}
+            annualTrueUp={annualTrueUp}
+            calculations={calculations}
+            annualExportKwh={effExport}
+            clientContext={clientContext}
+            clientLabel={clientLabel}
+          />
+        )}
+      </Slide>
+
+      {/* ------------------------------ back / next -----------------------------
+          The presentation control. Named rather than arrows alone, because the
+          next slide's title is the sentence the rep is about to say. */}
+      <div className="flex items-stretch justify-between gap-3 mt-4">
+        <button
+          onClick={() => go(slide - 1)}
+          disabled={slide === 0}
+          className="px-4 py-2.5 rounded-lg border border-slate-700 text-left text-slate-300 hover:border-slate-500 disabled:opacity-30 disabled:hover:border-slate-700 flex items-center gap-2 min-w-0"
+        >
+          <ChevronLeft size={16} className="shrink-0" />
+          <span className="min-w-0">
+            <span className="block text-[10px] uppercase tracking-wider text-slate-500">Back</span>
+            <span className="block text-[12.5px] font-semibold truncate">
+              {slide > 0 ? SLIDES[slide - 1].label : '—'}
+            </span>
+          </span>
+        </button>
+        <button
+          onClick={() => go(slide + 1)}
+          disabled={slide === SLIDES.length - 1}
+          className="px-4 py-2.5 rounded-lg border border-amber-400/40 text-right text-amber-200 hover:border-amber-400 disabled:opacity-30 disabled:hover:border-amber-400/40 flex items-center gap-2 min-w-0"
+        >
+          <span className="min-w-0">
+            <span className="block text-[10px] uppercase tracking-wider text-slate-500">Next</span>
+            <span className="block text-[12.5px] font-semibold truncate">
+              {slide < SLIDES.length - 1 ? SLIDES[slide + 1].label : '—'}
+            </span>
+          </span>
+          <ChevronRight size={16} className="shrink-0" />
+        </button>
+      </div>
     </div>
   );
 };

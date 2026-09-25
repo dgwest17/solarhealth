@@ -128,7 +128,7 @@ const BigWave = ({ clientData = null, role = 'client', userEmail = '', onBackToC
             </p>
           ) : (
             <p className="text-[12.5px] mt-1" style={{ color: SURF.textFaint }}>
-              Nothing saved yet — price this client in Battery Analysis and save the proposal.
+              Nothing saved yet — price this client under Storage → Your Home and save the proposal.
             </p>
           )}
         </div>

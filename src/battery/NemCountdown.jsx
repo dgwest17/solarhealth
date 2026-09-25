@@ -1,7 +1,8 @@
 /**
  * FILE: src/battery/NemCountdown.jsx
  *
- * NEM grandfathering countdown, styled for the Battery Analysis tab (dark theme).
+ * NEM grandfathering countdown, styled for the Storage tab (dark theme).
+ * Renders inside the Net Metering slide, next to how NEM credits exports.
  * The Audit tab shows the full NEM position card (src/components/NEMStatusCard.jsx);
  * this is the storage-relevant slice of it: how long the client's favorable export
  * rate has left, and why that clock argues for a battery.

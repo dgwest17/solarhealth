@@ -77,6 +77,25 @@ const CustomerProposal = ({
     view === 'daily' ? (monthly * 12) / 365 : view === 'yearly' ? monthly * 12 : monthly;
   const unit = view === 'daily' ? '/day' : view === 'yearly' ? '/yr' : '/mo';
 
+  /**
+   * WHAT THIS DEAL IS CALLED, decided once.
+   *
+   * A battery-only sale is "your home battery". Add solar and it stops being a
+   * battery purchase — the customer is buying a change to how their house makes
+   * and stores power, so it is "your home energy upgrade". Calling that a
+   * battery on the page the customer keeps makes the panels read as an
+   * afterthought on a battery quote, and every line below that said "battery"
+   * said the wrong thing.
+   *
+   * Two derived labels rather than `solar ? ... : ...` scattered through the
+   * markup: the headline and the line items have to agree, and eight
+   * independent ternaries is how they stop agreeing.
+   */
+  const addingSolar = !!(solar && solar.adding !== false);
+  const dealTitle = addingSolar ? 'home energy upgrade' : 'home battery';
+  // What the thing is called in a sentence: "what the SYSTEM saves you".
+  const dealNoun = addingSolar ? 'system' : 'battery';
+
   const isFinanced = f.purchaseType !== 'cash';
   const headlineNumber = isFinanced ? f.monthlyPayment : p.netInvestment;
   const headlineUnit = isFinanced ? '/month' : 'total';
@@ -144,7 +163,7 @@ const CustomerProposal = ({
           {/* the one number */}
           <p className="text-[13px] uppercase tracking-[0.2em] mb-2" style={{ color: 'rgba(255,255,255,.75)' }}>
             {proposal.client && proposal.client.name ? `${proposal.client.name}, your` : 'Your'}{' '}
-            {solar ? 'solar + battery system' : 'home battery'}
+            {dealTitle}
           </p>
           <div className="flex items-end gap-4 flex-wrap">
             <span
@@ -182,12 +201,12 @@ const CustomerProposal = ({
             style={{ background: SURF.deep, border: `1px solid ${SURF.line}` }}
           >
             <Line label="Your utility bill today" value={money2(s.monthlyBillToday) + '/mo'} />
-            <Line label="What the battery saves you" value={'− ' + money2(s.estMonthlySavings) + '/mo'} tone="good" />
+            <Line label={`What the ${dealNoun} saves you`} value={'− ' + money2(s.estMonthlySavings) + '/mo'} tone="good" />
             <Line
               label="What's left — your connection charge"
               value={money2(Math.max(s.connectionFee, s.monthlyBillToday - s.estMonthlySavings)) + '/mo'}
             />
-            {isFinanced && <Line label="Your battery payment" value={'+ ' + money2(f.monthlyPayment) + '/mo'} />}
+            {isFinanced && <Line label={`Your ${dealNoun} payment`} value={'+ ' + money2(f.monthlyPayment) + '/mo'} />}
             <div
               className="flex justify-between items-baseline mt-4 pt-4"
               style={{ borderTop: `1px solid ${SURF.lineStrong}` }}
@@ -199,7 +218,7 @@ const CustomerProposal = ({
             </div>
             <p className="text-[12px] mt-3" style={{ color: SURF.textMuted }}>
               Your utility bill keeps climbing — we've assumed {s.rateEscalationPct}% a year, which is
-              roughly what it has done. Your battery payment does not move.
+              roughly what it has done. Your {dealNoun} payment does not move.
             </p>
           </div>
 

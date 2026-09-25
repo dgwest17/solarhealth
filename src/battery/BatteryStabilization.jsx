@@ -47,7 +47,10 @@ import { getConnectionFeeForYear } from '../utils/rateData';
 import { NEM3_EXPORT_MIDDAY } from './BatteryDispatch';
 import { useSettings } from '../admin/SettingsContext';
 import { DeepSeas, Shell } from '../surf/SurfIcons';
-import { buildProposal, toZohoSummary, proposalSummaryLine, ZOHO_FIELDS } from '../proposal/proposalModel';
+import {
+  buildProposal, toZohoSummary, proposalSummaryLine, ZOHO_FIELDS
+} from '../proposal/proposalModel';
+import SolarAddOnSummary from './SolarAddOnSummary';
 import { apiFetch } from '../lib/supabaseClient';
 import ProposalBar from '../proposal/ProposalBar';
 import RepPicker from '../proposal/RepPicker';
@@ -181,6 +184,18 @@ const BatteryStabilization = ({
   const [dealKind, setDealKind] = useState('battery');   // battery | solar
   const [solarPanels, setSolarPanels] = useState(20);
   const [solarIncludesBattery, setSolarIncludesBattery] = useState(true);
+  /**
+   * Is the new array designed not to export?
+   *
+   * The most consequential switch on a solar add-on, and it is not a pricing
+   * question — which is why it lives next to the panel count rather than in the
+   * adders. On a NEM 1.0 or 2.0 client, an exporting array restarts the
+   * grandfathering clock and moves them onto today's export rates, typically
+   * worth far more than the extra production. Recorded on the proposal so the
+   * customer's page states which design they were quoted, rather than leaving
+   * the rep to remember to mention it.
+   */
+  const [solarNonExport, setSolarNonExport] = useState(false);
 
   /** Typed-in commission, which back-solves the net sale. Empty = use slider. */
   const [commissionInput, setCommissionInput] = useState('');
@@ -194,6 +209,9 @@ const BatteryStabilization = ({
   const isAdminView = (clientContext && clientContext.viewerRole) === 'admin';
 
   const commissionCfg = settings.commission || {};
+  /** Watts per panel. One place, because the redline and the proposal's
+   *  added-kW figure must not be able to disagree about panel size. */
+  const panelWatts = commissionCfg.panelWatts || PANEL_WATTS;
   const commRoles = (commissionCfg.roles && commissionCfg.roles.length)
     ? commissionCfg.roles : COMMISSION_ROLES;
   const commSelfGenPct = commissionCfg.selfGenPct != null ? commissionCfg.selfGenPct : SELF_GEN_PCT;
@@ -396,7 +414,7 @@ const BatteryStabilization = ({
       return calcSolarCommission({
         ...shared,
         panels: Number(solarPanels) || 0,
-        panelWatts: commissionCfg.panelWatts || PANEL_WATTS,
+        panelWatts,
         includesBattery: solarIncludesBattery,
         firstBatteryCarveOut: commissionCfg.solarFirstBatteryCarveOut != null
           ? commissionCfg.solarFirstBatteryCarveOut : SOLAR_FIRST_BATTERY_CARVE_OUT,
@@ -451,6 +469,32 @@ const BatteryStabilization = ({
         prepaymentPenalty: lender ? !!lender.prepaymentPenalty : false
       },
       bill: { monthlyBill, connectionFee, monthlySavings, escalation },
+      /**
+       * WHAT IS BEING ADDED TO THE ROOF.
+       *
+       * This argument was missing. `buildProposal` has always had a solar
+       * branch, CustomerProposal has always had a section to render it, and
+       * neither had ever run: with no `solar` passed, `proposal.solar` was null
+       * on every deal ever saved. A solar-plus-battery sale produced a proposal
+       * that said "your home battery", listed no panels and no added
+       * production, and never raised the NEM-restart question — which on a
+       * grandfathered client is the single most consequential fact about the
+       * deal. The pipeline's panel count read from the same null and was always
+       * zero.
+       *
+       * Only sent when solar is actually part of the deal. A battery-only sale
+       * gets no solar block at all, rather than one full of zeroes, so the
+       * proposal never raises a subject that is not on the table.
+       */
+      solar: dealKind === 'solar' ? {
+        adding: true,
+        panels: Number(solarPanels) || 0,
+        wattsPerPanel: panelWatts,
+        // Left unset on purpose: buildProposal derives it from this roof's own
+        // measured yield, which beats anything that could be typed here.
+        annualProductionKwh: 0,
+        nonExport: solarNonExport
+      } : null,
       meta: {
         contactId,
         projectId: clientContext.projectId || null,
@@ -478,7 +522,8 @@ const BatteryStabilization = ({
     });
   }, [
     clientContext, price, proj, inputs, batteryModelId, batteryModel, baseKwh, rebateEligible,
-    comm, dealKind, solarPanels, selfGen, seat, hasBuilder, builderName, builderEmail,
+    comm, dealKind, solarPanels, solarNonExport, panelWatts,
+    selfGen, seat, hasBuilder, builderName, builderEmail,
     mode, lender, termYears, activeTermCard, escalator, leasePayment,
     monthlyBill, connectionFee, monthlySavings, escalation, clientLabel, savedProposal
   ]);
@@ -1426,6 +1471,18 @@ const BatteryStabilization = ({
                             Includes a battery
                           </label>
                         </div>
+
+                        {/* Added kW, added kWh/yr, and the non-export decision.
+                            Its own component so the render check can reach it —
+                            inline here it sat inside two closed accordions and
+                            could not be rendered at all. */}
+                        <SolarAddOnSummary
+                          panels={solarPanels}
+                          panelWatts={panelWatts}
+                          inputs={inputs}
+                          nonExport={solarNonExport}
+                          onNonExportChange={setSolarNonExport}
+                        />
 
                         {/* The redline, itemised. On a solar deal it is built up
                             rather than being one figure, and a rep who cannot

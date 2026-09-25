@@ -359,8 +359,22 @@ export default async function handler(req, res) {
         battery: batteryLabel(proposal, project),
         batteryKwh: (proposal && proposal.system && proposal.system.usableKwh)
           || project.Battery_Capacity_kWh || 0,
+        /**
+         * TWO DIFFERENT SOLAR FIGURES, kept apart.
+         *
+         * `solarKw` is the array already on the roof — a Solar_Project field,
+         * and the basis of the whole audit. `addedKw` is what THIS DEAL puts
+         * up, which only the saved proposal knows. Collapsing them into one
+         * number is what made an 8.8 kW add-on onto a 4 kW roof show in the
+         * pipeline as a 4 kW job.
+         */
         solarKw: project.System_Size_kW || 0,
-        panels: project.Number_of_Modules || 0,
+        addedKw: (proposal && proposal.solar && proposal.solar.addedKw) || 0,
+        addedKwhPerYear:
+          (proposal && proposal.solar && proposal.solar.annualProductionKwh) || 0,
+        // Panels being ADDED where the proposal says so, else what is installed.
+        panels: (proposal && proposal.solar && proposal.solar.panels)
+          || project.Number_of_Modules || 0,
         panelModel: project.Panel_Model || null,
         utility: project.Utility_Provider || null,
         nemVersion: project.NEM_Version || null
@@ -392,7 +406,10 @@ export default async function handler(req, res) {
         lastContact: byId[contactId].Last_Activity_Time || null,
         battery: batteryLabel(proposal, null),
         batteryKwh: (proposal.system && proposal.system.usableKwh) || 0,
+        // No project row, so nothing is known about the existing roof.
         solarKw: 0,
+        addedKw: (proposal.solar && proposal.solar.addedKw) || 0,
+        addedKwhPerYear: (proposal.solar && proposal.solar.annualProductionKwh) || 0,
         panels: (proposal.solar && proposal.solar.panels) || 0,
         panelModel: (proposal.solar && proposal.solar.panelModel) || null,
         utility: null,

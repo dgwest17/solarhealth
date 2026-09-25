@@ -230,6 +230,52 @@ export const allStepsComplete = (purchaseType, stepStatus = {}) => {
 };
 
 /**
+ * Typical Southern California specific yield, kWh per kW of DC per year.
+ *
+ * Only used when the client has no existing system to measure against.
+ */
+export const DEFAULT_SPECIFIC_YIELD = 1550;
+
+/**
+ * How much a new array will make in a year, in kWh.
+ *
+ * DERIVED FROM THE CLIENT'S OWN ROOF WHERE POSSIBLE. Their existing system's
+ * production per kW already contains everything a generic constant cannot know
+ * about this address: the azimuth, the pitch, the shading from the neighbour's
+ * eucalyptus, the marine layer. New panels on the same roof will behave far
+ * more like the old ones than like a state average.
+ *
+ * CLAMPED, because the input it divides is not trustworthy at the edges.
+ * `annualProduction` on a Solar_Project may be the original nameplate estimate
+ * or a current, degraded figure — the field is used both ways — and a client
+ * who typed their monthly average into an annual box produces a yield of 130.
+ * Multiplying an added array by that gives a production figure the customer
+ * will compare against their own bill and disbelieve, which costs more than an
+ * approximation does. Outside the plausible band the site's own number is
+ * discarded for the default.
+ *
+ * Returns whole kWh — a decimal place on an annual production estimate implies
+ * a precision that is not there.
+ */
+export function estimateAddedProduction({
+  addedKw = 0,
+  existingKw = 0,
+  existingAnnualKwh = 0
+} = {}) {
+  const kw = Number(addedKw) || 0;
+  if (kw <= 0) return 0;
+
+  const exKw = Number(existingKw) || 0;
+  const exKwh = Number(existingAnnualKwh) || 0;
+  const measured = exKw > 0 && exKwh > 0 ? exKwh / exKw : 0;
+  // 1,250 is about as low as a working California array gets; 1,900 is about as
+  // high as one gets. Anything outside that is a data-entry artefact.
+  const yieldPerKw = measured >= 1250 && measured <= 1900 ? measured : DEFAULT_SPECIFIC_YIELD;
+
+  return Math.round(kw * yieldPerKw);
+}
+
+/**
  * Build a proposal from the live pricing state.
  *
  * Takes the objects the pricing UI already has rather than a long argument
@@ -359,12 +405,23 @@ export function buildProposal({
       const watts = Number(solar.wattsPerPanel) || 0;
       const nonExport = !!solar.nonExport;
       const grandfathered = inputs.nemVersion === 'NEM1' || inputs.nemVersion === 'NEM2';
+      const addedKw = Number(((panels * watts) / 1000).toFixed(2));
+      // An explicit figure wins — a rep with a real design from the engineering
+      // team should not have it overwritten by an estimate. Otherwise derive it
+      // from this roof's own measured yield.
+      const annualProductionKwh = Number(solar.annualProductionKwh) > 0
+        ? Math.round(Number(solar.annualProductionKwh))
+        : estimateAddedProduction({
+            addedKw,
+            existingKw: Number(inputs.systemSize) || 0,
+            existingAnnualKwh: Number(inputs.annualProduction) || 0
+          });
       return {
         adding: true,
         panels,
         wattsPerPanel: watts,
-        addedKw: Number(((panels * watts) / 1000).toFixed(2)),
-        annualProductionKwh: Number(solar.annualProductionKwh) || 0,
+        addedKw,
+        annualProductionKwh,
         nonExport,
         // The honest verdict, computed rather than asserted.
         keepsNemStatus: !grandfathered || nonExport,
@@ -471,11 +528,30 @@ export function buildProposal({
  * proposal path. If the existing-system figures need correcting, that is an
  * audit edit and belongs on its own path, where it is visible as one.
  */
+/**
+ * What this deal adds, in one word the CRM can group by.
+ *
+ * Derived, never stored as a separate flag the rep sets. The deal's contents
+ * already say what it is; a field somebody ticks is a field that ends up
+ * disagreeing with the panels and the kWh sitting next to it.
+ */
+export function proposalScope(proposal) {
+  if (!proposal) return null;
+  const addingSolar = !!(proposal.solar && proposal.solar.adding !== false);
+  const hasBattery = Number(
+    (proposal.system && (proposal.system.usableKwh || proposal.system.baseKwh)) || 0
+  ) > 0;
+  if (addingSolar && hasBattery) return 'Solar + Battery';
+  if (addingSolar) return 'Solar';
+  return 'Battery';
+}
+
 export function toZohoSummary(proposal) {
   if (!proposal) return null;
   const f = proposal.financing || {};
   const p = proposal.pricing || {};
   const s = proposal.savings || {};
+  const solar = proposal.solar || null;
 
   return {
     // --- the proposal's own finance terms ---
@@ -503,6 +579,26 @@ export function toZohoSummary(proposal) {
     Net_Investment: p.netInvestment ?? null,
     Storage_Rebate: p.storageRebate ?? null,
     Est_Monthly_Savings: s.estMonthlySavings ?? null,
+
+    /**
+     * WHAT IS BEING ADDED, beyond a battery.
+     *
+     * Three fields for one purpose: telling an add-on deal apart from a battery
+     * sale in a report, and by how much. Before these, a solar-plus-battery deal
+     * was indistinguishable in the CRM from a battery — System_Size_kW describes
+     * what is ALREADY on the roof, so a 4 kW client having 8.8 kW added still
+     * read as a 4 kW job, and the pipeline's Solar column showed the old array.
+     *
+     * Zero rather than null on a battery-only deal. A summed report over a null
+     * column and a summed report over zeroes give the same answer, but a filter
+     * for "added nothing" only works if the value is there.
+     */
+    Proposal_Scope: proposalScope(proposal),
+    Added_Solar_kW: solar && solar.adding !== false ? (solar.addedKw ?? 0) : 0,
+    Added_Annual_Production_kWh: solar && solar.adding !== false
+      ? (solar.annualProductionKwh ?? 0)
+      : 0,
+
     // The TOTAL pool, not any one rep's share. A manager reading this field
     // sees what the deal paid out altogether; who got what comes from the
     // seat fields below and the snapshot in Supabase.
@@ -554,6 +650,27 @@ export const ZOHO_FIELDS = {
     { api: 'Net_Investment', type: 'currency' },
     { api: 'Storage_Rebate', type: 'currency' },
     { api: 'Est_Monthly_Savings', type: 'currency' },
+
+    /**
+     * ADD-ON TRACKING. See toZohoSummary for why these three exist.
+     *
+     * Deliberately NOT written into System_Size_kW or Annual_Production: those
+     * describe the system already on the roof and the entire audit reads from
+     * them. Adding the new array into them would make the audit compare the
+     * client's bill against production they do not have yet — the same class of
+     * mistake as writing the proposal's loan over the existing loan.
+     */
+    { api: 'Proposal_Scope', type: 'picklist',
+      values: ['Battery', 'Solar + Battery', 'Solar'],
+      note: 'Derived from the deal contents, not set by hand. Filter on this to '
+          + 'find add-on deals.' },
+    { api: 'Added_Solar_kW', type: 'decimal', decimals: 2,
+      note: 'NEW DC kW only — not the existing System_Size_kW.' },
+    { api: 'Added_Annual_Production_kWh', type: 'number',
+      note: 'Estimated annual kWh the new array adds. Derived from the existing '
+          + 'system’s own measured yield per kW where there is one, so it '
+          + 'reflects this roof rather than a state average.' },
+
     /**
      * ONE seat field, not four.
      *
